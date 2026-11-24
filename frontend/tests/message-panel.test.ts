@@ -22,7 +22,11 @@ describe('message panel', () => {
     const el = await mount('sheet');
     const root = el.shadowRoot!;
     expect(root.querySelector('.sheet')).not.toBeNull();
-    expect(root.querySelector('.head')!.textContent).toContain('2 hops · SNR 12');
+    const info = [...root.querySelectorAll('.info')].map((e) => e.textContent!.trim());
+    expect(info[0]).toMatch(/^Received /);
+    expect(info[1]).toBe('2 hops · SNR 12 · RSSI -87');
+    expect(root.querySelector('.toggle')).toBeNull();
+    expect(root.querySelector('.reacts')).toBeNull();
     let closed = false;
     el.addEventListener('panel-close', () => { closed = true; });
     (root.querySelector('.backdrop') as HTMLElement).click();
@@ -41,12 +45,11 @@ describe('message panel', () => {
     el.remove();
   });
 
-  it('side panel shows signal and time under the message, no route text', async () => {
+  it('side panel shows the same info lines, no route text', async () => {
     const el = await mount('side');
     const root = el.shadowRoot!;
     expect(root.querySelector('aside.side')).not.toBeNull();
-    const signal = root.querySelector('.signal')!.textContent!;
-    expect(signal).toContain('SNR 12 · RSSI -87 · Received');
+    expect(root.textContent).toContain('2 hops · SNR 12 · RSSI -87');
     expect(root.textContent).not.toContain('60AA › 06BB');
     expect(root.querySelector('.toggle')).toBeNull();
     el.remove();

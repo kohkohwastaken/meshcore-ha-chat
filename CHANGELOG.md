@@ -5,9 +5,12 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 ## 0.4.11
 
 ### Message menu
-- Tapping a message now opens a bottom sheet on phones and a panel beside the chat on desktop, instead of the old dialog.
-- Both show who sent it, when, its hop count and SNR, the message, reactions, and Reply / Copy / Route / Message (opens a DM with the sender when they're a contact). Resend shows for your own unheard or failed messages.
-- Phone: the route map opens with Route; the full route and received time are under Details. Desktop: the route map, who reacted and the details are always shown. The open message is outlined in the chat.
+- Tapping a message opens a bottom sheet on phones and a panel beside the chat on desktop, with the same layout:
+  - who sent it and the message;
+  - Received date and time, then hops · SNR · RSSI (and, for your own messages, how many repeaters responded);
+  - Reply / React / Copy / Message (and Route on phones). React opens the reaction buttons, so a stray tap can't send a reaction;
+  - the message's reactions, Resend for your own unheard or failed messages, and the route map.
+- No "time since" in the panel and no Details section: everything is shown.
 
 ### Added
 - Route map: a "Larger map" button opens it big over the page (Esc or tap outside to close). The old ⤢ button is now a re-centre icon, as that's what it does.
@@ -18,9 +21,6 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 ### Fixed
 - Tapping the route no longer closes the message menu.
 - Hovering the route map (markers and the dots on the line) shows the repeater name ("Tea-913") instead of a time.
-- Phone message sheet: Details shows SNR, RSSI and the received time; the plain route text is gone, as the route map's list covers it.
-- Desktop message panel: the header shows just the hop count (the full received time is under the message).
-- Desktop message panel: SNR, RSSI and the received time sit right under the message, then Reply / React / Copy / Message (React opens the reaction buttons), then its reactions. The plain route text is gone; the map's numbered list covers it.
 
 ## 0.4.10
 

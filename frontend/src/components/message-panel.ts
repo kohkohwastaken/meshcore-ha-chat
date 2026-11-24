@@ -33,7 +33,6 @@ export class MeshCoreMessagePanel extends LitElement {
   /** Desktop: the reaction buttons open from the React button. */
   @state() private _reactRow = false;
   @state() private _showMap = false;
-  @state() private _details = false;
   @state() private _copied = false;
   @state() private _confirmResend = false;
   @state() private _reactOpen: string | null = null;
@@ -68,6 +67,10 @@ export class MeshCoreMessagePanel extends LitElement {
     .actions { display: flex; justify-content: space-around; border-top: 1px solid var(--divider-color, #3a3a3a);
       border-bottom: 1px solid var(--divider-color, #3a3a3a); margin-top: 12px; }
     .side .actions { justify-content: flex-start; flex-wrap: wrap; gap: 8px; border: none; margin: 0; }
+    .reacts { margin-top: 10px; }
+    .side .reacts { margin-top: 0; }
+    .reactions-block { margin-top: 10px; }
+    .side .reactions-block { margin-top: 0; }
     .act { background: none; border: none; color: var(--primary-text-color); font: inherit; font-size: 12px; cursor: pointer;
       display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; min-width: 64px; min-height: 56px; }
     .side .act { flex-direction: row; min-height: 0; min-width: 0; font-size: 13px; padding: 7px 10px; border-radius: 8px;
@@ -78,7 +81,8 @@ export class MeshCoreMessagePanel extends LitElement {
     .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--secondary-text-color); margin-bottom: 6px; }
     .map { margin-top: 10px; }
     .side .map { margin-top: 0; }
-    .signal { margin: -4px 0 0; }
+    .info { margin-top: 2px; }
+    .preview + .info { margin-top: -4px; }
     .toggle { background: none; border: none; color: var(--secondary-text-color); font: inherit; font-size: 12px; cursor: pointer; padding: 10px 0 0; }
     .details { font-size: 12px; color: var(--secondary-text-color); line-height: 1.7; word-break: break-word; }
     .resend { margin-top: 10px; font-size: 13px; }
@@ -105,7 +109,6 @@ export class MeshCoreMessagePanel extends LitElement {
       this._picker = false;
       this._reactRow = false;
       this._showMap = this.mode === 'side';
-      this._details = false;
       this._copied = false;
       this._confirmResend = false;
       this._reactOpen = null;
@@ -172,23 +175,15 @@ export class MeshCoreMessagePanel extends LitElement {
     this._close();
   }
 
-  /** First rx-log entry: hops and signal, for the header. */
-  private _signal(m: ChatMessage): string {
+  /** Hops, SNR and RSSI from the first heard copy ("7 hops · SNR 12 · RSSI -87"). */
+  private _radioLine(m: ChatMessage): string {
     const e = m.rxLogData?.[0];
     if (!e) return '';
     const nodes = e.path_nodes as string[] | undefined;
     const hops = (e.hop_count as number | undefined) ?? nodes?.length ?? 0;
-    const snr = e.snr as number | undefined;
-    return `${hops} hop${hops === 1 ? '' : 's'}${snr !== undefined ? ` · SNR ${snr}` : ''}`;
-  }
-
-  /** SNR, RSSI and when, for the line under the message in the side panel. */
-  private _signalLine(m: ChatMessage, when: string): string {
-    const e = m.rxLogData?.[0];
-    const parts: string[] = [];
-    if (e?.snr !== undefined) parts.push(`SNR ${e.snr}`);
-    if (e?.rssi !== undefined) parts.push(`RSSI ${e.rssi}`);
-    parts.push(`${m.isOutgoing ? 'Sent' : 'Received'} ${when}`);
+    const parts = [`${hops} hop${hops === 1 ? '' : 's'}`];
+    if (e.snr !== undefined) parts.push(`SNR ${e.snr}`);
+    if (e.rssi !== undefined) parts.push(`RSSI ${e.rssi}`);
     return parts.join(' · ');
   }
 
@@ -241,57 +236,38 @@ export class MeshCoreMessagePanel extends LitElement {
   private _renderBody(m: ChatMessage) {
     const side = this.mode === 'side';
     const mapAvailable = !!this.getHass && hasMapPath(m);
-    const when = formatFullDateTime(m.timestamp);
     const ds = m.deliveryStatus;
     const delivery = m.isOutgoing && ds
       ? `${(ds.repeaterCount ?? 0) > 0 ? `${ds.repeaterCount} repeater${ds.repeaterCount === 1 ? '' : 's'} responded` : 'No repeaters responded'}${ds.ackReceived ? ' · ACK received' : ''}${ds.roundTripMs ? ` · ${ds.roundTripMs}ms RTT` : ''}`
       : '';
-    // The side panel lists SNR under the message, so its header leaves it out.
-    const signal = this._signal(m);
-    // Desktop shows SNR and the full received time under the message, so its
-    // header keeps only the hop count.
-    const summary = side ? signal.split(' · ')[0] : [formatTimestamp(m.timestamp, this.timestampFormat), signal].filter(Boolean).join(' · ');
-    const detailLines = html`
-      ${this._signalLine(m, when)}
-      ${delivery ? html`<br>${delivery}` : ''}`;
+    const radio = this._radioLine(m);
+    const reactIcon = 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z';
 
-    const actions = html`<div class="actions">
-        ${!m.isOutgoing ? html`<button class="act" @click=${this._reply}>${this._icon('M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z')}Reply</button>` : ''}
-        ${side ? html`<button class="act ${this._reactRow ? 'on' : ''}" aria-expanded=${this._reactRow} @click=${() => { this._reactRow = !this._reactRow; this._picker = false; }}>${this._icon('M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z')}React</button>` : ''}
-        <button class="act" @click=${this._copy}>${this._icon('M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z')}${this._copied ? 'Copied' : 'Copy'}</button>
-        ${mapAvailable && !side ? html`<button class="act ${this._showMap ? 'on' : ''}" aria-expanded=${this._showMap} @click=${() => { this._showMap = !this._showMap; }}>${this._icon('M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z')}Route</button>` : ''}
-        ${!m.isOutgoing && this.senderConversation ? html`<button class="act" @click=${() => { this._emit('open-conversation', { id: this.senderConversation }); this._close(); }}>${this._icon('M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z')}Message</button>` : ''}
-      </div>`;
     return html`
       ${side ? html`<div class="side-head">Message<button class="x" aria-label="Close" @click=${this._close}>✕</button></div>` : html`<div class="grab"></div>`}
       <div>
-        <div class="head"><span class="sender">${m.isOutgoing ? 'You' : m.sender}</span><span class="meta">${summary}</span></div>
+        <div class="sender">${m.isOutgoing ? 'You' : m.sender}</div>
         <div class="preview">${m.text}</div>
-        ${side ? html`<div class="meta signal">${this._signalLine(m, when)}</div>` : ''}
+        <div class="meta info">${m.isOutgoing ? 'Sent' : 'Received'} ${formatFullDateTime(m.timestamp)}</div>
+        ${radio ? html`<div class="meta info">${radio}</div>` : ''}
+        ${delivery ? html`<div class="meta info">${delivery}</div>` : ''}
       </div>
-      ${side ? actions : ''}
-      ${side && this._reactRow ? html`<div class="reacts" role="group" aria-label="React">
+      <div class="actions">
+        ${!m.isOutgoing ? html`<button class="act" @click=${this._reply}>${this._icon('M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z')}Reply</button>` : ''}
+        <button class="act ${this._reactRow ? 'on' : ''}" aria-expanded=${this._reactRow} @click=${() => { this._reactRow = !this._reactRow; this._picker = false; }}>${this._icon(reactIcon)}React</button>
+        <button class="act" @click=${this._copy}>${this._icon('M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z')}${this._copied ? 'Copied' : 'Copy'}</button>
+        ${mapAvailable && !side ? html`<button class="act ${this._showMap ? 'on' : ''}" aria-expanded=${this._showMap} @click=${() => { this._showMap = !this._showMap; }}>${this._icon('M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z')}Route</button>` : ''}
+        ${!m.isOutgoing && this.senderConversation ? html`<button class="act" @click=${() => { this._emit('open-conversation', { id: this.senderConversation }); this._close(); }}>${this._icon('M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z')}Message</button>` : ''}
+      </div>
+      ${this._reactRow ? html`<div class="reacts" role="group" aria-label="React">
         ${QUICK_REACTIONS.map((e) => html`<button class="em" aria-label="React ${e}" @click=${() => this._react(e)}>${e}</button>`)}
         <button class="em more ${this._picker ? 'on' : ''}" aria-label="More emoji" aria-expanded=${this._picker}
           @click=${() => { this._picker = !this._picker; }}>＋</button>
       </div>
       ${this._picker ? html`<div class="picker" @emoji-picked=${(e: CustomEvent) => { e.stopPropagation(); this._react((e.detail as { emoji: string }).emoji); }}><meshcore-emoji-picker></meshcore-emoji-picker></div>` : ''}` : ''}
-      ${side ? html`<div>${this._renderReactions()}</div>` : this.reactions.length ? this._renderReactions() : ''}
-      ${side ? '' : html`<div class="reacts" role="group" aria-label="React">
-        ${QUICK_REACTIONS.map((e) => html`<button class="em" aria-label="React ${e}" @click=${() => this._react(e)}>${e}</button>`)}
-        <button class="em more ${this._picker ? 'on' : ''}" aria-label="More emoji" aria-expanded=${this._picker}
-          @click=${() => { this._picker = !this._picker; }}>＋</button>
-      </div>
-      ${this._picker ? html`<div class="picker" @emoji-picked=${(e: CustomEvent) => { e.stopPropagation(); this._react((e.detail as { emoji: string }).emoji); }}><meshcore-emoji-picker></meshcore-emoji-picker></div>` : ''}`}
-      ${side ? '' : actions}
+      ${this.reactions.length ? html`<div class="reactions-block">${this._renderReactions()}</div>` : ''}
       ${this._renderResend(m)}
       ${mapAvailable && this._showMap ? html`<div class="map">${side ? html`<div class="lbl">Route</div>` : ''}<meshcore-path-map .getHass=${this.getHass} .message=${m} .entryId=${this.entryId}></meshcore-path-map></div>` : ''}
-      ${side ? html`
-        ${delivery ? html`<div class="details">${delivery}</div>` : ''}
-      ` : html`
-        <button class="toggle" aria-expanded=${this._details} @click=${() => { this._details = !this._details; }}>Details ${this._details ? '▴' : '▾'}</button>
-        ${this._details ? html`<div class="details">${detailLines}</div>` : ''}
-      `}
     `;
   }
 
