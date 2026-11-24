@@ -40,4 +40,15 @@ describe('message byte budget', () => {
     // Never for direct messages.
     expect(messageBudget('x'.repeat(160), null).echoUndetectable).toBe(false);
   });
+
+  it('holds channels to 155 when trackable, so there is no Unheard warning', () => {
+    const b = messageBudget('', 'wiki', true);
+    expect(b.limit).toBe(149);
+    expect(b.trackable).toBe(true);
+    expect(messageBudget('x'.repeat(149), 'wiki', true).over).toBe(false);
+    expect(messageBudget('x'.repeat(150), 'wiki', true).over).toBe(true);
+    expect(messageBudget('x'.repeat(149), 'wiki', true).echoUndetectable).toBe(false);
+    // Direct messages keep 160 either way.
+    expect(messageBudget('', null, true).limit).toBe(160);
+  });
 });

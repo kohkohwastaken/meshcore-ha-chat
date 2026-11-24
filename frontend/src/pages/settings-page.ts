@@ -17,6 +17,7 @@ import { attachDialogA11y } from '../utils/dialog-a11y';
 import type { CompanionDeviceDescriptor } from '../components/node-summary';
 import { panelStyles } from '../styles';
 import { loadMeshcoreEntityRegistry, type EntityInfo } from '../utils/classify-entity';
+import { setTrackableChannelLimit, trackableChannelLimit } from '../utils/message-limit';
 
 interface ConfirmAction {
   title: string;
@@ -217,6 +218,30 @@ export class SettingsPage extends LitElement {
       .settings-container::-webkit-scrollbar-thumb {
         background: var(--scrollbar-thumb, var(--scrollbar-thumb-color, #c1c1c1));
         border-radius: 3px;
+      }
+
+      .message-setting {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        cursor: pointer;
+        padding: 4px 0;
+      }
+      .message-setting input {
+        margin-top: 3px;
+        flex-shrink: 0;
+      }
+      .message-setting-title {
+        display: block;
+        font-size: 14px;
+        color: var(--primary-text-color);
+      }
+      .message-setting-help {
+        display: block;
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        margin-top: 2px;
+        line-height: 1.4;
       }
 
       .section-row {
@@ -746,6 +771,24 @@ export class SettingsPage extends LitElement {
     }
   }
 
+  @state() private _trackableLimit = trackableChannelLimit();
+
+  private _renderMessageSettings() {
+    return html`
+      <label class="message-setting">
+        <input type="checkbox" .checked=${this._trackableLimit}
+          @change=${(e: Event) => {
+            this._trackableLimit = (e.target as HTMLInputElement).checked;
+            setTrackableChannelLimit(this._trackableLimit);
+          }} />
+        <span>
+          <span class="message-setting-title">Keep channel messages trackable</span>
+          <span class="message-setting-help">Limits channel messages to 155 bytes including your radio's name, so repeats of every message you send can be detected. Off allows the full 160 bytes, but messages over 155 always show as Unheard. Saved in this browser.</span>
+        </span>
+      </label>
+    `;
+  }
+
   render() {
     if (this._loading) {
       return html`
@@ -798,6 +841,12 @@ export class SettingsPage extends LitElement {
             <div class="device-section">
               <div class="card-title">Location</div>
               ${this._renderLocation()}
+            </div>
+
+            <!-- Messages (per browser) -->
+            <div class="device-section">
+              <div class="card-title">Messages</div>
+              ${this._renderMessageSettings()}
             </div>
 
 

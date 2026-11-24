@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## [0.4.3] - 2026-11-24
+
+### Added
+
+- **"Keep channel messages trackable" setting** (Settings → Messages, on by default, saved per browser). Channel messages are limited to 155 bytes including your radio's name, as in MeshCore Chattx, so the repeats of every message you send can be detected. Turn it off to allow the firmware's full 160 bytes; messages over 155 then still show the "will show as Unheard" note. Direct messages keep 160 bytes either way.
+
 ## [0.4.2] - 2026-11-24
 
 ### Changed

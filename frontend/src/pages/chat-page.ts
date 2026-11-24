@@ -14,7 +14,7 @@ import '../components/conversation-list';
 import '../components/manage-dialog';
 import '../components/message-bubble';
 import '../components/message-search';
-import { LOW_BYTES, messageBudget, type MessageBudget } from '../utils/message-limit';
+import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
 
 @customElement('meshcore-chat-page')
 export class ChatPage extends LitElement {
@@ -538,6 +538,7 @@ export class ChatPage extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
     if (this.config && !this._messageStore) {
       this._messageStore = new MessageStore(this.config);
       this._messageStore.setOnChange(() => this.requestUpdate());
@@ -579,6 +580,7 @@ export class ChatPage extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
     if (this._messageStore) {
       this._messageStore.destroy();
       this._messageStore = null;
@@ -954,15 +956,23 @@ export class ChatPage extends LitElement {
 
   /** Bytes used and left for the text in the send box, as it would be sent. */
   private _budget(): MessageBudget {
-    return messageBudget(this._inputText, this._isChannelSelected() ? (this.config?.node_name ?? '') : null);
+    return messageBudget(
+      this._inputText,
+      this._isChannelSelected() ? (this.config?.node_name ?? '') : null,
+      trackableChannelLimit(),
+    );
   }
+
+  private _onLimitSettingChanged = () => this.requestUpdate();
 
   private _renderByteCounter(budget: MessageBudget) {
     if (!this.selectedId) return html``;
     const level = budget.over ? 'over' : budget.left < LOW_BYTES ? 'low' : '';
     let note = html``;
     if (budget.over) {
-      note = html`<span class="byte-note over">${-budget.left} ${-budget.left === 1 ? 'byte' : 'bytes'} too long. Shorten it to send.</span>`;
+      note = budget.trackable
+        ? html`<span class="byte-note over">${-budget.left} ${-budget.left === 1 ? 'byte' : 'bytes'} over the trackable limit. Shorten it to send, or allow longer channel messages in Settings.</span>`
+        : html`<span class="byte-note over">${-budget.left} ${-budget.left === 1 ? 'byte' : 'bytes'} too long. Shorten it to send.</span>`;
     } else if (budget.echoUndetectable) {
       note = html`<span class="byte-note low">Long message: repeats can't be detected, so it'll show as Unheard.</span>`;
     }

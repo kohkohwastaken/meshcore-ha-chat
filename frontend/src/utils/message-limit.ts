@@ -28,6 +28,32 @@ export function utf8Bytes(text: string): number {
   return encoder.encode(text).length;
 }
 
+const TRACKABLE_KEY = 'meshcore-channel-trackable-limit';
+/** Fired on window when the trackable-limit setting changes. */
+export const LIMIT_SETTING_EVENT = 'meshcore-message-limit-changed';
+
+/**
+ * Whether channel messages are held to CHANNEL_ECHO_MAX_BYTES, so their
+ * repeats can always be detected (as MeshCore Chattx did). On by default;
+ * off allows the firmware's full 160 bytes. Per browser.
+ */
+export function trackableChannelLimit(): boolean {
+  try {
+    return localStorage.getItem(TRACKABLE_KEY) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+export function setTrackableChannelLimit(on: boolean): void {
+  try {
+    localStorage.setItem(TRACKABLE_KEY, on ? 'on' : 'off');
+  } catch {
+    // localStorage full or unavailable
+  }
+  window.dispatchEvent(new Event(LIMIT_SETTING_EVENT));
+}
+
 export interface MessageBudget {
   /** Bytes the text uses, as typed. */
   used: number;
@@ -39,6 +65,8 @@ export interface MessageBudget {
   over: boolean;
   /** A channel message that sends, but whose repeats can't be detected. */
   echoUndetectable: boolean;
+  /** The channel limit is the trackable one (155), not the firmware's 160. */
+  trackable: boolean;
 }
 
 /**
@@ -46,16 +74,23 @@ export interface MessageBudget {
  * ends before sending, so this can over-count by a trailing space or two,
  * but every key typed visibly changes the count.
  */
-export function messageBudget(text: string, channelSender: string | null): MessageBudget {
+export function messageBudget(
+  text: string,
+  channelSender: string | null,
+  trackable = false,
+): MessageBudget {
   const used = utf8Bytes(text);
-  const prefix = channelSender === null ? 0 : utf8Bytes(`${channelSender}: `);
-  const limit = Math.max(0, TEXT_MAX_BYTES - prefix);
+  const isChannel = channelSender !== null;
+  const prefix = isChannel ? utf8Bytes(`${channelSender}: `) : 0;
+  const strict = isChannel && trackable;
+  const limit = Math.max(0, (strict ? CHANNEL_ECHO_MAX_BYTES : TEXT_MAX_BYTES) - prefix);
   const left = limit - used;
   return {
     used,
     limit,
     left,
     over: left < 0,
-    echoUndetectable: channelSender !== null && left >= 0 && prefix + used > CHANNEL_ECHO_MAX_BYTES,
+    echoUndetectable: isChannel && !strict && left >= 0 && prefix + used > CHANNEL_ECHO_MAX_BYTES,
+    trackable: strict,
   };
 }
