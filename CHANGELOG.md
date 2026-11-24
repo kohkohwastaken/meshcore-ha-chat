@@ -2,23 +2,20 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
-## 0.4.12
-
-- Emoji picker: search by name or keyword ("thumbs", "radio", "red heart"), and the full Unicode set in its usual groups. Enter picks the first result.
-- React with any emoji: ＋ at the end of the quick reactions opens the picker.
-- Message dialog: reactions show as a row of counts (👍 8 · 🔥 3 · 12 reactions). Tap one to see who sent it and when, newest first. Long lists show 5 until "Show all". Your own reaction is outlined.
-
-Emoji names from unicode-emoji-json and keywords from emojilib (both MIT).
-
-## 0.4.11
-
-- Reactions you send now leave a small line in the chat ("You reacted 👍 to Dave: “Test”"). Tap it to jump to the message. Other people's reactions don't add lines, to keep busy channels tidy.
-- Tapping a message shows who reacted, with what and when.
-
 ## 0.4.10
 
+### Contacts
 - Share contact no longer sends straight away. The contact is attached to the box, like a location, so you can add a message and send when ready.
 - Contacts sent with a message show as the message plus a contact card. A note explains that the MeshCore phone apps only show a card for a contact sent on its own.
+
+### Reactions
+- React with any emoji: ＋ after the quick reactions opens the emoji picker.
+- Reactions you send leave a small line in the chat ("You reacted 👍 to Dave: “Test”"). Tap it to jump to the message. Other people's reactions don't add lines, to keep busy channels tidy.
+- Message dialog: reactions show as a row of counts (👍 8 · 🔥 3 · 12 reactions). Tap one to see who sent it and when, newest first; long lists show 5 until "Show all". Your own reaction is outlined.
+
+### Emoji picker
+- Search by name or keyword ("thumbs", "radio", "red heart"); Enter picks the first result.
+- The full Unicode set in its usual groups, after your recent emoji. Names from unicode-emoji-json and keywords from emojilib (both MIT).
 
 ## 0.4.9
 
