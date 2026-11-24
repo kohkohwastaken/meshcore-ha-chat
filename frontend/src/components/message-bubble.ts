@@ -5,6 +5,7 @@ import { formatTimestamp } from '../chat/message-parser';
 import { attachDialogA11y } from '../utils/dialog-a11y';
 import { hasMapPath } from './path-map';
 import './path-map';
+import type { QuotedMessage } from '../utils/reply-links';
 
 /**
  * Generate a deterministic color from a string (e.g., pubkey prefix).
@@ -31,6 +32,8 @@ export class MessageBubble extends LitElement {
   @property({ type: String }) entryId?: string;
   /** The conversation is a channel: resending asks for confirmation (others may already have it). */
   @property({ type: Boolean }) isChannel = false;
+  /** Finds the message a reply answers (supplied by the chat page). */
+  @property({ attribute: false }) quoteFor?: (msg: ChatMessage) => QuotedMessage | null;
 
   @state() private _selectedMessage: ChatMessage | null = null;
   @state() private _showRouteMap = false;
@@ -154,6 +157,26 @@ export class MessageBubble extends LitElement {
       white-space: pre-wrap;
     }
 
+    .quote {
+      border-left: 3px solid var(--primary-color, #03a9f4);
+      background: rgba(127, 127, 127, 0.15);
+      border-radius: 6px;
+      padding: 4px 8px;
+      margin-bottom: 4px;
+      font-size: 0.85em;
+      max-width: 100%;
+    }
+    .quote.linked { cursor: pointer; }
+    .bubble.outgoing .quote { border-left-color: rgba(255, 255, 255, 0.85); background: rgba(0, 0, 0, 0.15); }
+    .quote-name { font-weight: 600; opacity: 0.9; }
+    .quote-text {
+      opacity: 0.85;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      word-break: break-word;
+    }
     .message-text .mention {
       background: var(--mention-bg, rgba(3, 169, 244, 0.15));
       color: var(--mention-text, var(--primary-color, #03a9f4));
@@ -380,6 +403,7 @@ export class MessageBubble extends LitElement {
 
     return html`
       <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this._selectedMessage = msg; this._showRouteMap = false; this._confirmResend = false; }}>
+        ${this._renderQuote(msg)}
         <div class="message-text">${this._renderTextWithMentions(msg.text, msg.mentions)}</div>
         <div class="timestamp">${statusLabel ? html`<span class="delivery-status">${statusLabel}</span> · ` : ''}${ts}${scopeLabel ? html` · <span class="flood-scope">${scopeLabel}</span>` : ''}</div>
       </div>
@@ -456,6 +480,19 @@ export class MessageBubble extends LitElement {
       default:
         return 'Sent';
     }
+  }
+
+  private _renderQuote(msg: ChatMessage) {
+    const q = this.quoteFor?.(msg);
+    if (!q) return '';
+    const jump = (e: Event) => {
+      e.stopPropagation();
+      if (q.id) this.dispatchEvent(new CustomEvent('jump-to-message', { detail: { id: q.id }, bubbles: true, composed: true }));
+    };
+    return html`<div class="quote ${q.id ? 'linked' : ''}" @click=${jump} title=${q.id ? 'Show the original message' : ''}>
+      <div class="quote-name">${q.sender}</div>
+      <div class="quote-text">${q.text}</div>
+    </div>`;
   }
 
   private _renderTextWithMentions(text: string, mentions: string[]) {

@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.5
+
+- Replies now show the message they answer, as a quote at the top of the bubble. Tap it to jump to the original.
+- Your own replies show the @mention highlighted straight away.
+
 ## [0.4.4] - 2026-11-24
 
 ### Added

@@ -1,6 +1,6 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { HomeAssistant, PanelConfig, Contact, Channel } from '../types';
+import type { HomeAssistant, PanelConfig, Contact, Channel, ChatMessage } from '../types';
 import { MessageStore } from '../chat/message-store';
 import { UnreadController, markReadTailKey, pillLabel } from '../chat/unread-controller';
 import { buildRenderItems } from '../chat/message-parser';
@@ -14,6 +14,7 @@ import '../components/conversation-list';
 import '../components/manage-dialog';
 import '../components/message-bubble';
 import '../components/message-search';
+import { findQuoted, rememberReply } from '../utils/reply-links';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
 
 @customElement('meshcore-chat-page')
@@ -21,6 +22,9 @@ export class ChatPage extends LitElement {
   @property({ type: Object }) hass?: HomeAssistant;
   /** Stable getter for children that need hass without re-rendering on every state change. */
   private _getHass = () => this.hass;
+  /** The message a bubble replies to, if any. */
+  private _quoteFor = (msg: ChatMessage) =>
+    this.selectedId && this._messageStore ? findQuoted(msg, this.selectedId, this._messageStore.messages) : null;
   @property({ type: Object }) config?: PanelConfig;
   @property({ type: Array }) conversations: Array<Contact | Channel> = [];
   @property({ type: String }) selectedId: string | null = null;
@@ -935,7 +939,8 @@ export class ChatPage extends LitElement {
 
     const budget = this._budget();
     return html`
-      <div class="chat-container" @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @scroll=${this._onChatScroll}>
+      <div class="chat-container" @jump-to-message=${(e: CustomEvent) => this._findAndHighlightBubble(e.detail.id)}
+          @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @scroll=${this._onChatScroll}>
         ${this._messageStore.loadingOlder
           ? html`<div class="loading-older"><div class="loading-spinner"></div></div>`
           : html``}
@@ -1088,6 +1093,7 @@ export class ChatPage extends LitElement {
         <meshcore-message-bubble
           .group=${item.group}
           .getHass=${this._getHass}
+          .quoteFor=${this._quoteFor}
           .entryId=${this.config?.entry_id}
           ?isChannel=${isChannel}
           .timestampFormat=${this.config?.timestamp_format ?? 'relative'}></meshcore-message-bubble>
@@ -1278,6 +1284,7 @@ export class ChatPage extends LitElement {
       return;
     }
     const text = this._replyPrefix() + this._inputText.trim();
+    if (this._replyTo) rememberReply(this.selectedId, text, this._replyTo);
     this._inputText = '';
     this._replyTo = null;
     await this._sendText(text, true);

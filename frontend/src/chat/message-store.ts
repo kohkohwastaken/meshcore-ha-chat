@@ -261,7 +261,7 @@ export class MessageStore {
       isOutgoing: true,
       isSystem: false,
       raw: `${sender}: ${text}`,
-      mentions: [],
+      mentions: extractMentions(text),
     };
 
     this._messages = [...this._messages, msg];
