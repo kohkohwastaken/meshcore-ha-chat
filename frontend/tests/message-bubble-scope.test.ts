@@ -3,14 +3,14 @@
 import { describe, expect, it } from 'vitest';
 import { html, render } from 'lit';
 import '../src/components/message-bubble';
+import { deliveryLabel } from '../src/utils/delivery-label';
 import type { ChatMessage, MessageGroup } from '../src/types';
 
 it('distinguishes waiting, unobservable and observed zero-repeat sends', () => {
-  const bubble = document.createElement('meshcore-message-bubble') as any;
-  expect(bubble._getStatusLabel({ status: 'sent', collecting: true, repeaterCount: 0 })).toBe('Waiting...');
-  expect(bubble._getStatusLabel({ status: 'sent', repeatsObservable: false, collecting: false, repeaterCount: 0 })).toBe('Unconfirmed');
-  expect(bubble._getStatusLabel({ status: 'sent', repeatsObservable: true, collecting: false, repeaterCount: 0 })).toBe('Unheard');
-  expect(bubble._getStatusLabel({ status: 'failed', repeatsObservable: false })).toBe('Failed');
+  expect(deliveryLabel({ status: 'sent', collecting: true, repeaterCount: 0 })).toBe('Waiting...');
+  expect(deliveryLabel({ status: 'sent', repeatsObservable: false, collecting: false, repeaterCount: 0 })).toBe('Unconfirmed');
+  expect(deliveryLabel({ status: 'sent', repeatsObservable: true, collecting: false, repeaterCount: 0 })).toBe('Unheard');
+  expect(deliveryLabel({ status: 'failed', repeatsObservable: false })).toBe('Failed');
 });
 
 // Change 6 — inbound region scope in the bubble timestamp line.
@@ -79,4 +79,12 @@ describe('message-bubble inbound scope label', () => {
     const bubble = await mountBubble(makeGroup({ floodScope: '*', isOutgoing: true }));
     expect(bubble.shadowRoot!.querySelector('.flood-scope')).toBeNull();
   });
+});
+
+it('only unheard or failed own messages can be resent', async () => {
+  const { canResend } = await import('../src/utils/delivery-label');
+  expect(canResend(true, { status: 'sent', repeatsObservable: true, collecting: false, repeaterCount: 0 } as never)).toBe(true);
+  expect(canResend(true, { status: 'failed' } as never)).toBe(true);
+  expect(canResend(true, { status: 'sent', repeaterCount: 2 } as never)).toBe(false);
+  expect(canResend(false, { status: 'failed' } as never)).toBe(false);
 });

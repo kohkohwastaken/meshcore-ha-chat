@@ -19,6 +19,7 @@ import { collectReactions, distanceMetres, formatContact, formatLocation, format
 import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
+import '../components/message-panel';
 import type { PickedLocation } from '../components/share-pickers';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
 
@@ -37,6 +38,8 @@ export class ChatPage extends LitElement {
   /** A contact attached to the message being written. */
   @state() private _contact: { publicKey: string; type: number; name: string } | null = null;
   @state() private _ownContact?: { publicKey: string; name: string };
+  /** The message open in the message panel (sheet on phones, side panel on desktop). */
+  @state() private _selMsgId: string | null = null;
   /** The message a bubble replies to, if any. */
   private _quoteFor = (msg: ChatMessage) =>
     this.selectedId && this._messageStore ? findQuoted(msg, this.selectedId, this._messageStore.messages) : null;
@@ -775,7 +778,7 @@ export class ChatPage extends LitElement {
     }
     if (changedProperties.has('selectedId')) {
       this._onConversationSelected();
-      if (changedProperties.get('selectedId') !== undefined) { this._replyTo = null; this._location = null; this._contact = null; this._popup = null; }
+      if (changedProperties.get('selectedId') !== undefined) { this._replyTo = null; this._location = null; this._contact = null; this._popup = null; this._selMsgId = null; }
     }
     // Late-arriving `lastRead` re-anchor. Handles the fresh-panel-load
     // / entry-switch-immediate-click race where the user picks a
@@ -874,6 +877,7 @@ export class ChatPage extends LitElement {
               </div>
               ${this._renderChatArea()}
             </div>
+            ${this._renderMessagePanel('sheet')}
           </div>
         `;
       } else {
@@ -944,6 +948,7 @@ export class ChatPage extends LitElement {
           ` : ''}
           ${this._renderChatArea()}
         </div>
+        ${this._renderMessagePanel('side')}
         ${this._searchOpen ? html`
           <div class="search-panel">
             <meshcore-message-search
@@ -969,6 +974,31 @@ export class ChatPage extends LitElement {
         ` : html``}
       </div>
     `;
+  }
+
+  /** The tapped message's panel: a bottom sheet on phones, a column beside the chat on desktop. */
+  private _renderMessagePanel(mode: 'sheet' | 'side') {
+    if (!this._selMsgId || !this._messageStore) return html``;
+    const msg = this._messageStore.messages.find((m) => m.id === this._selMsgId);
+    if (!msg) return html``;
+    const contact = msg.isOutgoing
+      ? undefined
+      : (this.conversations.find((c) => 'pubkey_prefix' in c && (c as Contact).adv_name === msg.sender) as Contact | undefined);
+    return html`<meshcore-message-panel
+      .message=${msg}
+      .mode=${mode}
+      .reactions=${this._reactions.get(msg.id) ?? []}
+      .getHass=${this._getHass}
+      .entryId=${this.config?.entry_id}
+      ?isChannel=${this._isChannelSelected()}
+      .timestampFormat=${this.config?.timestamp_format ?? 'relative'}
+      .senderConversation=${contact && contact.pubkey_prefix !== this.selectedId ? contact.pubkey_prefix : undefined}
+      @panel-close=${() => { this._selMsgId = null; }}
+      @react-to-message=${(e: CustomEvent) => { e.stopPropagation(); this._onReact(e); }}
+      @reply-to-sender=${(e: CustomEvent) => { e.stopPropagation(); this._onReplyToSender(e); }}
+      @resend-message=${(e: CustomEvent) => { e.stopPropagation(); this._onResendMessage(e); }}
+      @open-conversation=${(e: CustomEvent) => { e.stopPropagation(); this.selectedId = (e.detail as { id: string }).id; }}
+    ></meshcore-message-panel>`;
   }
 
   private _renderChatArea() {
@@ -1002,7 +1032,7 @@ export class ChatPage extends LitElement {
 
     const budget = this._budget();
     return html`
-      <div class="chat-container" @jump-to-message=${(e: CustomEvent) => this._findAndHighlightBubble(e.detail.id)}
+      <div class="chat-container" @message-selected=${(e: CustomEvent) => { this._selMsgId = (e.detail as { msg: ChatMessage }).msg.id; }} @jump-to-message=${(e: CustomEvent) => this._findAndHighlightBubble(e.detail.id)}
           @react-to-message=${this._onReact} @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @scroll=${this._onChatScroll}>
         ${this._messageStore.loadingOlder
           ? html`<div class="loading-older"><div class="loading-spinner"></div></div>`
@@ -1298,6 +1328,7 @@ export class ChatPage extends LitElement {
           .group=${item.group}
           .getHass=${this._getHass}
           .quoteFor=${this._quoteFor}
+          .selectedId=${this._selMsgId ?? undefined}
           .reactionsFor=${this._reactionsFor}
           .entryId=${this.config?.entry_id}
           ?isChannel=${isChannel}

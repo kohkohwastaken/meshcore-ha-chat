@@ -1,14 +1,11 @@
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
-import type { ChatMessage, MessageGroup, DeliveryStatus, HomeAssistant } from '../types';
+import type { ChatMessage, MessageGroup, HomeAssistant } from '../types';
 import { formatTimestamp } from '../chat/message-parser';
-import { attachDialogA11y } from '../utils/dialog-a11y';
-import { hasMapPath } from './path-map';
-import './path-map';
+import { deliveryLabel } from '../utils/delivery-label';
 import type { QuotedMessage } from '../utils/reply-links';
-import { QUICK_REACTIONS, NODE_TYPE_NAMES, parseContact, parseLocation, type ReactionChip } from '../utils/rich-messages';
+import { NODE_TYPE_NAMES, parseContact, parseLocation, type ReactionChip } from '../utils/rich-messages';
 import { addContact } from '../api';
-import './emoji-picker';
 
 /**
  * Generate a deterministic color from a string (e.g., pubkey prefix).
@@ -39,25 +36,10 @@ export class MessageBubble extends LitElement {
   /** Reactions on a message (supplied by the chat page). */
   @property({ attribute: false }) reactionsFor?: (id: string) => ReactionChip[];
   @state() private _contactAdded = '';
-  @state() private _reactOpen: string | null = null;
-  @state() private _reactAll = false;
-  @state() private _reactPicker = false;
   @property({ attribute: false }) quoteFor?: (msg: ChatMessage) => QuotedMessage | null;
 
-  @state() private _selectedMessage: ChatMessage | null = null;
-  @state() private _showRouteMap = false;
-  /** Resend tapped on a channel message: waiting for the confirm tap. */
-  @state() private _confirmResend = false;
-
-  constructor() {
-    super();
-    // Focus trap + Escape closes the message-action sheet.
-    attachDialogA11y(this, {
-      isOpen: () => this._selectedMessage !== null,
-      onEscape: () => { this._selectedMessage = null; this._showRouteMap = false; this._confirmResend = false; },
-      getScope: () => this.shadowRoot?.querySelector('.message-dialog'),
-    });
-  }
+  /** The message open in the message panel, outlined in the chat. */
+  @property({ type: String }) selectedId?: string;
 
   static styles = css`
     :host {
@@ -175,6 +157,7 @@ export class MessageBubble extends LitElement {
     .card-link:disabled { text-decoration: none; opacity: 0.7; cursor: default; }
     .reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .reaction { background: rgba(127, 127, 127, 0.25); border-radius: 10px; padding: 1px 6px; font-size: 0.85em; }
+    .bubble.selected { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 1px; }
     .bubble.system.activity { cursor: pointer; font-size: 12px; }
     .bubble.system.activity:hover { text-decoration: underline; }
     .reaction-summary { padding: 8px 16px 6px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
@@ -396,7 +379,6 @@ export class MessageBubble extends LitElement {
     if (this.group) {
       return html`
         ${this._renderGroup()}
-        ${this._selectedMessage ? this._renderMessageDialog(this._selectedMessage) : html``}
       `;
     }
     return html``;
@@ -443,9 +425,10 @@ export class MessageBubble extends LitElement {
       incoming: !msg.isOutgoing && !msg.isSystem,
       outgoing: msg.isOutgoing,
       system: msg.isSystem,
+      selected: msg.id === this.selectedId,
     };
 
-    const statusLabel = msg.isOutgoing && msg.deliveryStatus ? this._getStatusLabel(msg.deliveryStatus) : '';
+    const statusLabel = msg.isOutgoing && msg.deliveryStatus ? deliveryLabel(msg.deliveryStatus) : '';
     const ts = formatTimestamp(msg.timestamp, this.timestampFormat);
     // Inbound region scope — incoming bubbles only. "*" → "🌐 all regions",
     // a region name renders verbatim, absent renders nothing. The outbound
@@ -458,7 +441,7 @@ export class MessageBubble extends LitElement {
         : '';
 
     return html`
-      <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this._selectedMessage = msg; this._showRouteMap = false; this._confirmResend = false; this._reactOpen = null; this._reactAll = false; this._reactPicker = false; }}>
+      <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this.dispatchEvent(new CustomEvent('message-selected', { detail: { msg }, bubbles: true, composed: true })); }}>
         ${this._renderQuote(msg)}
         ${this._renderBody(msg)}
         ${this._renderReactions(msg)}
@@ -472,73 +455,6 @@ export class MessageBubble extends LitElement {
    * Shows "Repeated" for messages heard by repeaters, "No repeats" otherwise.
    * Full details (repeater count, RTT) are in the click-to-open dialog.
    */
-  /** Own messages no repeater was heard passing on, or that failed, can be resent. */
-  private _canResend(msg: ChatMessage): boolean {
-    if (!msg.isOutgoing || !msg.deliveryStatus) return false;
-    const label = this._getStatusLabel(msg.deliveryStatus);
-    return label === 'Unheard' || label === 'Failed';
-  }
-
-  private _renderResend(msg: ChatMessage) {
-    if (!this._canResend(msg)) return html``;
-    const failed = msg.deliveryStatus?.status === 'failed';
-    const note = failed
-      ? 'No reply came back, so it most likely didn\'t arrive.'
-      : 'No repeat was heard. It may still have been delivered, out of your radio\'s range.';
-    if (this._confirmResend) {
-      return html`
-        <div class="message-dialog-resend">
-          <div class="resend-note">Resend to this channel? Others may already have it, and they'd see it twice.</div>
-          <div class="resend-actions">
-            <button class="message-dialog-action secondary" @click=${() => { this._confirmResend = false; }}>Cancel</button>
-            <button class="message-dialog-action" @click=${() => this._resend(msg)}>Resend</button>
-          </div>
-        </div>
-      `;
-    }
-    return html`
-      <div class="message-dialog-resend">
-        <div class="resend-note">${note}</div>
-        <button class="message-dialog-action"
-          @click=${() => { if (this.isChannel && !failed) { this._confirmResend = true; } else { this._resend(msg); } }}>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M17.65 6.35A7.958 7.958 0 0012 4a8 8 0 108 8h-2a6 6 0 11-1.76-4.24L13 11h7V4l-2.35 2.35z"/></svg>Resend
-        </button>
-      </div>
-    `;
-  }
-
-  private _resend(msg: ChatMessage) {
-    this.dispatchEvent(new CustomEvent('resend-message', {
-      detail: { text: msg.text },
-      bubbles: true,
-      composed: true,
-    }));
-    this._confirmResend = false;
-    this._selectedMessage = null;
-  }
-
-  private _getStatusLabel(deliveryStatus: DeliveryStatus): string {
-    const status = deliveryStatus.status;
-    const repeats = deliveryStatus.repeaterCount ?? 0;
-    if (status !== 'failed' && deliveryStatus.repeatsObservable === false) return 'Unconfirmed';
-    if (status !== 'failed' && deliveryStatus.collecting && repeats === 0) return 'Waiting...';
-
-    switch (status) {
-      case 'pending':
-      case 'waiting':
-        return 'Waiting...';
-      case 'sent':
-        return repeats > 0 ? 'Repeated' : 'Unheard';
-      case 'delivered':
-        return 'Delivered';
-      case 'failed':
-        return 'Failed';
-      case 'unconfirmed':
-      default:
-        return 'Sent';
-    }
-  }
-
   private _renderBody(msg: ChatMessage) {
     const loc = msg.isSystem ? null : parseLocation(msg.text);
     if (loc) {
@@ -577,43 +493,6 @@ export class MessageBubble extends LitElement {
     const chips = this.reactionsFor?.(msg.id) ?? [];
     if (chips.length === 0) return '';
     return html`<div class="reactions">${chips.map((c) => html`<span class="reaction" title=${c.senders.join(', ')}>${c.emoji}${c.senders.length > 1 ? html` <b>${c.senders.length}</b>` : ''}</span>`)}</div>`;
-  }
-
-  /**
-   * Reaction counts in the message dialog. Tapping a count lists who sent
-   * it and when (newest first, 5 until "Show all"); "N reactions" lists all.
-   */
-  private _renderReactionList(msg: ChatMessage) {
-    const chips = this.reactionsFor?.(msg.id) ?? [];
-    if (chips.length === 0) return '';
-    const total = chips.reduce((n, c) => n + c.who.length, 0);
-    const mine = new Set(chips.filter((c) => c.senders.includes('You')).map((c) => c.emoji));
-    const open = this._reactOpen;
-    const chip = (key: string, label: string, isMine = false) => html`<button
-      class="rs-chip ${open === key ? 'on' : ''} ${isMine ? 'mine' : ''}" aria-expanded=${open === key}
-      @click=${() => { this._reactOpen = open === key ? null : key; this._reactAll = false; }}>${label}</button>`;
-    let rows = open
-      ? chips.filter((c) => open === '*' || c.emoji === open)
-        .flatMap((c) => c.who.map((w) => ({ emoji: c.emoji, ...w })))
-        .sort((x, y) => y.time.getTime() - x.time.getTime())
-      : [];
-    const hidden = rows.length - 5;
-    if (!this._reactAll && hidden > 0) rows = rows.slice(0, 5);
-    return html`<div class="reaction-summary">
-      <div class="rs-chips">
-        ${[...chips].sort((x, y) => y.who.length - x.who.length).map((c) => chip(c.emoji, `${c.emoji} ${c.who.length}`, mine.has(c.emoji)))}
-        ${chip('*', `${total} ${total === 1 ? 'reaction' : 'reactions'}`)}
-      </div>
-      ${open ? html`<div class="reaction-list">
-        ${rows.map((r) => html`<div class="reaction-entry"><span class="re-emoji">${r.emoji}</span><span class="re-who">${r.sender}</span><span class="re-time">${formatTimestamp(r.time, this.timestampFormat)}</span></div>`)}
-        ${!this._reactAll && hidden > 0 ? html`<button class="rs-more" @click=${() => { this._reactAll = true; }}>Show all ${rows.length + hidden}</button>` : ''}
-      </div>` : ''}
-    </div>`;
-  }
-
-  private _react(msg: ChatMessage, emoji: string) {
-    this._selectedMessage = null;
-    this.dispatchEvent(new CustomEvent('react-to-message', { detail: { emoji, msg }, bubbles: true, composed: true }));
   }
 
   private _renderQuote(msg: ChatMessage) {
@@ -657,125 +536,6 @@ export class MessageBubble extends LitElement {
     }
     if (last < text.length) parts.push(text.slice(last));
     return parts;
-  }
-
-  private _renderMessageDialog(msg: ChatMessage) {
-    const hasRoute = msg.rxLogData && msg.rxLogData.length > 0;
-    const routeText = hasRoute
-      ? msg.rxLogData!
-          .map((e) => {
-            const nodes = e.path_nodes as string[] | undefined;
-            const hops = e.hop_count as number | undefined;
-            const snr = e.snr as number | undefined;
-            const rssi = e.rssi as number | undefined;
-            const parts: string[] = [];
-            if (nodes && nodes.length > 0) {
-              parts.push(nodes.map((n: string) => n.substring(0, 4).toUpperCase()).join(' > '));
-            } else if (hops !== undefined) {
-              parts.push(`${hops} hop${hops !== 1 ? 's' : ''}`);
-            } else {
-              // No path_nodes / hop_count → packet was heard directly by
-              // the local node. Label as "0 hops" rather than "direct" so
-              // it isn't confusable with the "direct message" message-type
-              // for channel broadcasts that happened to be in radio range.
-              parts.push('0 hops');
-            }
-            if (snr !== undefined) parts.push(`SNR: ${snr}`);
-            if (rssi !== undefined) parts.push(`RSSI: ${rssi}`);
-            return parts.join(' · ');
-          })
-          .join(' | ')
-      : '';
-
-    const fullDateTime = msg.timestamp.toLocaleString(undefined, {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-    });
-    const footerStyle = 'padding: 8px 16px; font-size: 12px; color: var(--secondary-text-color); border-top: 1px solid var(--divider-color, #e0e0e0);';
-
-    return html`
-      <div class="message-dialog-overlay" @click=${() => { this._selectedMessage = null; this._showRouteMap = false; this._confirmResend = false; }}>
-        <div class="message-dialog ${this._showRouteMap ? 'with-map' : ''} ${this._reactPicker ? 'with-picker' : ''}"
-             role="dialog" aria-modal="true" aria-label="Message actions"
-             @click=${(e: Event) => e.stopPropagation()}>
-          <div class="message-dialog-preview">${msg.text}</div>
-          ${this._renderReactionList(msg)}
-          ${!msg.isSystem ? html`<div class="reaction-row" role="group" aria-label="React">
-            ${QUICK_REACTIONS.map((e) => html`<button title="React ${e}" @click=${() => this._react(msg, e)}>${e}</button>`)}
-            <button class="more-react ${this._reactPicker ? 'on' : ''}" title="More emoji" aria-label="More emoji" @click=${() => { this._reactPicker = !this._reactPicker; }}>＋</button>
-          </div>
-          ${this._reactPicker ? html`<div class="react-picker" @emoji-picked=${(e: CustomEvent) => { e.stopPropagation(); this._reactPicker = false; this._react(msg, (e.detail as { emoji: string }).emoji); }}><meshcore-emoji-picker></meshcore-emoji-picker></div>` : ''}` : ''}
-          <button class="message-dialog-action" @click=${() => this._copyText(msg.text)}>
-            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>Copy Text
-          </button>
-          ${!msg.isOutgoing && !msg.isSystem
-            ? html`
-                <button class="message-dialog-action" @click=${() => this._replyToSender(msg)}>
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>Reply
-                </button>
-              `
-            : html``}
-          ${this._renderResend(msg)}
-          ${this.getHass && hasMapPath(msg)
-            ? html`
-                <button class="message-dialog-action"
-                  @click=${() => { this._showRouteMap = !this._showRouteMap; }}>
-                  <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z"/></svg>${this._showRouteMap ? 'Hide Route Map' : 'Show Route on Map'}
-                </button>
-                ${this._showRouteMap
-                  ? html`<meshcore-path-map .getHass=${this.getHass} .message=${msg} .entryId=${this.entryId}></meshcore-path-map>`
-                  : html``}
-              `
-            : html``}
-          ${hasRoute ? html`<div style=${footerStyle} class="route-footer">Route: ${routeText}</div>` : html``}
-          <div style=${footerStyle}>
-            ${msg.isOutgoing ? 'Sent' : 'Received'}: ${fullDateTime}
-          </div>
-          ${msg.isOutgoing && msg.deliveryStatus
-            ? html`
-                <div style=${footerStyle}>
-                  ${(msg.deliveryStatus.repeaterCount ?? 0) > 0
-                    ? `${msg.deliveryStatus.repeaterCount} repeater${msg.deliveryStatus.repeaterCount === 1 ? '' : 's'} responded`
-                    : 'No repeaters responded'}${msg.deliveryStatus.ackReceived ? ' · ACK received' : ''}${msg.deliveryStatus.roundTripMs ? ` · ${msg.deliveryStatus.roundTripMs}ms RTT` : ''}
-                </div>
-              `
-            : html``}
-        </div>
-      </div>
-    `;
-  }
-
-  private async _copyText(text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      // Fallback for older browsers
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      document.body.removeChild(textarea);
-    }
-    this._selectedMessage = null;
-  }
-
-  private _replyToSender(msg: ChatMessage) {
-    this.dispatchEvent(
-      new CustomEvent('reply-to-sender', {
-        detail: { mention: `@[${msg.sender}] `, sender: msg.sender, text: msg.text },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    this._selectedMessage = null;
   }
 
   private _classMap(obj: Record<string, boolean>): string {

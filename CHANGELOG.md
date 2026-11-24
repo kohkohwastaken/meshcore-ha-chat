@@ -8,6 +8,11 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 - The route in the message dialog is now small text under "Show Route on Map", next to the received time. Tapping it no longer closes the dialog.
 - The Home Assistant phone apps kept running an old cached copy of the panel after updates. The panel's address now changes with each build, so apps load the new version after a restart.
 
+### Message menu
+- Tapping a message now opens a bottom sheet on phones and a panel beside the chat on desktop, instead of the old dialog.
+- Both show who sent it, when, its hop count and SNR, the message, reactions, and Reply / Copy / Route / Message (opens a DM with the sender when they're a contact). Resend shows for your own unheard or failed messages.
+- Phone: the route map opens with Route; the full route and received time are under Details. Desktop: the route map, who reacted and the details are always shown. The open message is outlined in the chat.
+
 ### Contacts
 - Share contact no longer sends straight away. The contact is attached to the box, like a location, so you can add a message and send when ready.
 - Contacts sent with a message show as the message plus a contact card. A note explains that the MeshCore phone apps only show a card for a contact sent on its own.
