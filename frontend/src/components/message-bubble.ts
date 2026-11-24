@@ -171,6 +171,13 @@ export class MessageBubble extends LitElement {
     .card-link:disabled { text-decoration: none; opacity: 0.7; cursor: default; }
     .reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .reaction { background: rgba(127, 127, 127, 0.25); border-radius: 10px; padding: 1px 6px; font-size: 0.85em; }
+    .bubble.system.activity { cursor: pointer; font-size: 12px; }
+    .bubble.system.activity:hover { text-decoration: underline; }
+    .reaction-list { padding: 6px 16px; border-bottom: 1px solid var(--divider-color, #e0e0e0); max-height: 160px; overflow-y: auto; }
+    .reaction-entry { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: 14px; }
+    .re-emoji { width: 24px; text-align: center; }
+    .re-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .re-time { font-size: 12px; color: var(--secondary-text-color); }
     .reaction-row { display: flex; justify-content: space-around; padding: 6px 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
     .reaction-row button { background: none; border: none; font-size: 24px; cursor: pointer; border-radius: 50%; padding: 4px 6px; }
     .reaction-row button:hover { background: rgba(127, 127, 127, 0.2); }
@@ -399,6 +406,13 @@ export class MessageBubble extends LitElement {
   }
 
   private _renderBubble(msg: ChatMessage) {
+    if (msg.activityTarget) {
+      return html`<div class="bubble system activity" data-msg-id=${msg.id} title="Show the message"
+        @click=${(e: Event) => {
+          e.stopPropagation();
+          this.dispatchEvent(new CustomEvent('jump-to-message', { detail: { id: msg.activityTarget }, bubbles: true, composed: true }));
+        }}>${msg.text} · ${formatTimestamp(msg.timestamp, this.timestampFormat)}</div>`;
+    }
     const bubbleClasses = {
       bubble: true,
       incoming: !msg.isOutgoing && !msg.isSystem,
@@ -540,6 +554,18 @@ export class MessageBubble extends LitElement {
     return html`<div class="reactions">${chips.map((c) => html`<span class="reaction" title=${c.senders.join(', ')}>${c.emoji}${c.senders.length > 1 ? html` <b>${c.senders.length}</b>` : ''}</span>`)}</div>`;
   }
 
+  /** Who reacted, with what and when, in the message dialog. */
+  private _renderReactionList(msg: ChatMessage) {
+    const chips = this.reactionsFor?.(msg.id) ?? [];
+    if (chips.length === 0) return '';
+    const rows = chips
+      .flatMap((c) => c.who.map((w) => ({ emoji: c.emoji, ...w })))
+      .sort((a, b) => a.time.getTime() - b.time.getTime());
+    return html`<div class="reaction-list" aria-label="Reactions">
+      ${rows.map((r) => html`<div class="reaction-entry"><span class="re-emoji">${r.emoji}</span><span class="re-who">${r.sender}</span><span class="re-time">${formatTimestamp(r.time, this.timestampFormat)}</span></div>`)}
+    </div>`;
+  }
+
   private _react(msg: ChatMessage, emoji: string) {
     this._selectedMessage = null;
     this.dispatchEvent(new CustomEvent('react-to-message', { detail: { emoji, msg }, bubbles: true, composed: true }));
@@ -633,6 +659,7 @@ export class MessageBubble extends LitElement {
              role="dialog" aria-modal="true" aria-label="Message actions"
              @click=${(e: Event) => e.stopPropagation()}>
           <div class="message-dialog-preview">${msg.text}</div>
+          ${this._renderReactionList(msg)}
           ${!msg.isSystem ? html`<div class="reaction-row" role="group" aria-label="React">
             ${QUICK_REACTIONS.map((e) => html`<button title="React ${e}" @click=${() => this._react(msg, e)}>${e}</button>`)}
           </div>` : ''}

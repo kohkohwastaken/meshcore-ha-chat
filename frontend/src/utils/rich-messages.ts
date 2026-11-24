@@ -156,6 +156,8 @@ export function formatReaction(emoji: string, msg: ChatMessage, isChannel: boole
 export interface ReactionChip {
   emoji: string;
   senders: string[];
+  /** Each reaction, oldest first. */
+  who: Array<{ sender: string; time: Date }>;
 }
 
 /**
@@ -196,9 +198,25 @@ export function collectReactions(messages: ChatMessage[], isChannel = true): { v
     seen.add(dedup);
     const chips = reactions.get(target.id) ?? [];
     const chip = chips.find((c) => c.emoji === r.emoji);
-    if (chip) chip.senders.push(sender);
-    else chips.push({ emoji: r.emoji, senders: [sender] });
+    if (chip) {
+      chip.senders.push(sender);
+      chip.who.push({ sender, time: m.timestamp });
+    } else chips.push({ emoji: r.emoji, senders: [sender], who: [{ sender, time: m.timestamp }] });
     reactions.set(target.id, chips);
+    // Your own reactions also get a small line in the chat, where you sent them.
+    if (m.isOutgoing) {
+      const snippet = target.text.length > 40 ? `${target.text.slice(0, 40)}…` : target.text;
+      visible.push({
+        ...m,
+        id: `react_${m.id}`,
+        isSystem: true,
+        // Stays outgoing so it never counts as unread.
+        isOutgoing: true,
+        text: `You reacted ${r.emoji} to ${target.sender}: “${snippet}”`,
+        mentions: [],
+        activityTarget: target.id,
+      });
+    }
   }
   return { visible, reactions };
 }

@@ -136,6 +136,8 @@ export interface ChatMessage {
   isOutgoing: boolean;
   /** true if unparseable (no sender:message pattern) */
   isSystem: boolean;
+  /** For a "You reacted" log line: the message it points at. */
+  activityTarget?: string;
   /** Original logbook message text */
   raw: string;
   /** Extracted @[Name] and @Name mentions */

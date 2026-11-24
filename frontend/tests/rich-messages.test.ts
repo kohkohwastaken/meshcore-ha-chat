@@ -36,13 +36,17 @@ describe('rich messages', () => {
     const r = m('r', 'Me', formatReaction('👍', a, true), 300, true);
     expect(r.text).toBe(`@[Dave]👍\n${reactionHash('Test', 90)}`);
     const { visible, reactions } = collectReactions([a, b, r]);
-    expect(visible.map((x) => x.id)).toEqual(['a', 'b']);
-    expect(reactions.get('a')).toEqual([{ emoji: '👍', senders: ['You'] }]);
+    expect(visible.map((x) => x.id)).toEqual(['a', 'b', 'react_r']);
+    expect(visible[2]).toMatchObject({ isSystem: true, activityTarget: 'a', text: 'You reacted 👍 to Dave: “Test”' });
+    expect(reactions.get('a')).toMatchObject([{ emoji: '👍', senders: ['You'] }]);
+    expect(reactions.get('a')?.[0].who[0].time).toEqual(r.timestamp);
   });
   it('finds a MeshCore Open reaction within the clock window', () => {
     const a = m('a', 'Bob', 'hello there', 1700000005);
     const r = m('r', 'Eve', `r:${openReactionHash(1700000000, 'Bob', 'hello there')}:05`, 1700000100);
-    expect(collectReactions([a, r]).reactions.get('a')).toEqual([{ emoji: '🔥', senders: ['Eve'] }]);
+    const out = collectReactions([a, r]);
+    expect(out.reactions.get('a')).toMatchObject([{ emoji: '🔥', senders: ['Eve'] }]);
+    expect(out.visible.map((x) => x.id)).toEqual(['a']); // others' reactions get no log line
   });
   it('drops reactions that match nothing', () => {
     const r = m('r', 'Bob', '@[Dave]🔥\nabcdefgh', 300);

@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.11
+
+- Reactions you send now leave a small line in the chat ("You reacted 👍 to Dave: “Test”"). Tap it to jump to the message. Other people's reactions don't add lines, to keep busy channels tidy.
+- Tapping a message shows who reacted, with what and when.
+
 ## 0.4.10
 
 - Share contact no longer sends straight away. The contact is attached to the box, like a location, so you can add a message and send when ready.
