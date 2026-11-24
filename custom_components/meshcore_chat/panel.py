@@ -12,6 +12,7 @@ Differences vs. upstream:
 from __future__ import annotations
 
 import logging
+import hashlib
 from pathlib import Path
 
 from homeassistant.components.frontend import (
@@ -50,6 +51,18 @@ PANEL_TITLE = "MeshCore Chat"
 PANEL_URL_PATH = "meshcore-chat"
 
 
+def _bundle_version() -> str:
+    """Short hash of the bundle, so each new build gets a new module URL.
+
+    Without it the panel loads from the same URL every version, and the
+    Home Assistant phone apps keep running a cached old copy.
+    """
+    try:
+        return hashlib.sha256(Path(PANEL_FRONTEND_PATH).read_bytes()).hexdigest()[:12]
+    except OSError:
+        return "0"
+
+
 async def async_register_panel(hass: HomeAssistant) -> None:
     """Register the MeshCore Chat sidebar panel.
 
@@ -67,6 +80,7 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         )
         _static_path_registered = True
         _LOGGER.debug("Registered MeshCore Chat panel static path %s", PANEL_URL)
+    version = await hass.async_add_executor_job(_bundle_version)
     async_register_built_in_panel(
         hass,
         component_name="custom",
@@ -76,7 +90,7 @@ async def async_register_panel(hass: HomeAssistant) -> None:
         config={
             "_panel_custom": {
                 "name": "meshcore-chat-panel",
-                "module_url": PANEL_URL,
+                "module_url": f"{PANEL_URL}?v={version}",
             }
         },
         require_admin=False,

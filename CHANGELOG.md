@@ -4,6 +4,9 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 
 ## 0.4.10
 
+### Fixed
+- The Home Assistant phone apps kept running an old cached copy of the panel after updates. The panel's address now changes with each build, so apps load the new version after a restart.
+
 ### Contacts
 - Share contact no longer sends straight away. The contact is attached to the box, like a location, so you can add a message and send when ready.
 - Contacts sent with a message show as the message plus a contact card. A note explains that the MeshCore phone apps only show a card for a contact sent on its own.
