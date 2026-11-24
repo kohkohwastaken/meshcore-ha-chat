@@ -185,16 +185,18 @@ export class MessageBubble extends LitElement {
     .rs-chip.on { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4); color: #fff; }
     .rs-more { background: none; border: none; color: var(--primary-color, #03a9f4); padding: 4px 0; cursor: pointer; font: inherit; font-size: 13px; }
     .reaction-list { padding-top: 6px; max-height: 180px; overflow-y: auto; }
-    .more-react { font-size: 20px !important; color: var(--secondary-text-color); }
+    .more-react { font-size: 20px !important; color: var(--secondary-text-color); border: 1px solid var(--divider-color, #555) !important; }
     .more-react.on { background: rgba(127,127,127,0.2) !important; }
-    .react-picker { padding: 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); display: flex; justify-content: center; }
+    .react-picker { padding: 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
+    .react-picker meshcore-emoji-picker { width: 100%; }
     .reaction-entry { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: 14px; }
     .re-emoji { width: 24px; text-align: center; }
     .re-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .re-time { font-size: 12px; color: var(--secondary-text-color); }
-    .reaction-row { display: flex; justify-content: space-around; padding: 6px 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
-    .reaction-row button { background: none; border: none; font-size: 24px; cursor: pointer; border-radius: 50%; padding: 4px 6px; }
-    .reaction-row button:hover { background: rgba(127, 127, 127, 0.2); }
+    .reaction-row { display: flex; justify-content: space-between; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
+    .reaction-row button { background: none; border: none; font-size: 22px; line-height: 1; cursor: pointer; border-radius: 50%;
+      width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    @media (hover: hover) { .reaction-row button:hover { background: rgba(127, 127, 127, 0.2); } }
     .quote {
       border-left: 3px solid var(--primary-color, #03a9f4);
       background: rgba(127, 127, 127, 0.15);
@@ -296,8 +298,16 @@ export class MessageBubble extends LitElement {
       box-shadow: 0 0 20px rgba(var(--rgb-primary-color, 3, 169, 244), 0.3);
       min-width: 240px;
       max-width: 300px;
-      overflow: hidden;
+      max-height: calc(100vh - 48px);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       z-index: 21;
+    }
+    .message-dialog.with-picker {
+      width: min(360px, calc(100vw - 24px));
+      max-width: min(360px, calc(100vw - 24px));
+      box-sizing: border-box;
     }
 
     .message-dialog-resend {
@@ -689,7 +699,7 @@ export class MessageBubble extends LitElement {
 
     return html`
       <div class="message-dialog-overlay" @click=${() => { this._selectedMessage = null; this._showRouteMap = false; this._confirmResend = false; }}>
-        <div class="message-dialog ${this._showRouteMap ? 'with-map' : ''}"
+        <div class="message-dialog ${this._showRouteMap ? 'with-map' : ''} ${this._reactPicker ? 'with-picker' : ''}"
              role="dialog" aria-modal="true" aria-label="Message actions"
              @click=${(e: Event) => e.stopPropagation()}>
           <div class="message-dialog-preview">${msg.text}</div>

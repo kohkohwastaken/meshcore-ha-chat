@@ -2382,15 +2382,16 @@ let e,t,i,n,a,o,r,s,l,c,d,p,h,u,m,g,f,v,b,y,_,x,w,k,$,C,S,M,z,A,R,I,O,D,q,T,F,E,
         <button class=${0} title="Recent" @click=${0}>🕘</button>
         ${0}
       </div>`),-1===this._cat?"on":"",()=>{this._cat=-1},e.map((e,t)=>cc(le||(le=bl`<button class=${0} title=${0} @click=${0}>${0}</button>`),this._cat===t?"on":"",e.name,()=>{this._cat=t},e.items[0].emoji))),n,0===i.length?cc(ce||(ce=bl`<div class="none">No emoji found.</div>`)):"",i.map(e=>cc(de||(de=bl`<button @click=${0}>${0}</button>`),()=>this._pick(e),e)))}};ep.styles=Cl(pe||(pe=bl`
-    :host { display: block; width: 330px; max-width: calc(100vw - 24px); }
+    :host { display: block; width: 330px; max-width: 100%; box-sizing: border-box; }
     input { width: 100%; box-sizing: border-box; padding: 7px 10px; margin-bottom: 6px; border-radius: 8px;
-      border: 1px solid var(--divider-color, #444); background: transparent; color: var(--primary-text-color); font: inherit; }
-    .tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--divider-color, #444); padding-bottom: 4px; }
-    .tabs button { background: none; border: none; padding: 4px 6px; font-size: 18px; cursor: pointer; border-radius: 6px; opacity: 0.6; }
+      border: 1px solid var(--divider-color, #444); background: transparent; color: var(--primary-text-color); font: inherit; outline: none; -webkit-appearance: none; appearance: none; }
+    input:focus { border-color: var(--primary-color, #03a9f4); }
+    .tabs { display: flex; gap: 2px; overflow-x: auto; overscroll-behavior: contain; touch-action: pan-x; border-bottom: 1px solid var(--divider-color, #444); padding-bottom: 4px; }
+    .tabs button { flex-shrink: 0; background: none; border: none; padding: 4px 6px; font-size: 18px; cursor: pointer; border-radius: 6px; opacity: 0.6; }
     .tabs button.on { opacity: 1; background: rgba(127,127,127,0.2); }
-    .grid { display: grid; grid-template-columns: repeat(8, 1fr); height: 220px; overflow-y: auto; padding-top: 6px; align-content: start; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); height: 220px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding-top: 6px; align-content: start; }
     .grid button { background: none; border: none; font-size: 22px; padding: 4px 0; cursor: pointer; border-radius: 6px; }
-    .grid button:hover { background: rgba(127,127,127,0.2); }
+    @media (hover: hover) { .grid button:hover { background: rgba(127,127,127,0.2); } }
     .label { font-size: 11px; opacity: 0.7; margin: 6px 2px 0; grid-column: 1 / -1; }
     .none { grid-column: 1 / -1; font-size: 13px; opacity: 0.7; padding: 12px 4px; }
   `)),yl([qc()],ep.prototype,"_cat",void 0),yl([qc()],ep.prototype,"_q",void 0),ep=yl([Rc("meshcore-emoji-picker")],ep);let tp=class extends zc{constructor(){super(),this.timestampFormat="relative",this.isChannel=!1,this._contactAdded="",this._reactOpen=null,this._reactAll=!1,this._reactPicker=!1,this._selectedMessage=null,this._showRouteMap=!1,this._confirmResend=!1,gd(this,{isOpen:()=>null!==this._selectedMessage,onEscape:()=>{this._selectedMessage=null,this._showRouteMap=!1,this._confirmResend=!1},getScope:()=>{var e;return null===(e=this.shadowRoot)||void 0===e?void 0:e.querySelector(".message-dialog")}})}render(){return this.group?cc(he||(he=bl`
@@ -2451,7 +2452,7 @@ let e,t,i,n,a,o,r,s,l,c,d,p,h,u,m,g,f,v,b,y,_,x,w,k,$,C,S,M,z,A,R,I,O,D,q,T,F,E,
       <div class="quote-text">${0}</div>
     </div>`),i.id?"linked":"",e=>{e.stopPropagation(),i.id&&this.dispatchEvent(new CustomEvent("jump-to-message",{detail:{id:i.id},bubbles:!0,composed:!0}))},i.id?"Show the original message":"",i.sender,i.text):""}_renderTextWithMentions(e,t){if(0===t.length)return e;const i=t.map(e=>e.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")),n=new RegExp(`@\\[(${i.join("|")})\\]|@(${i.join("|")})\\b`,"g"),a=[];let o,r=0;for(;null!==(o=n.exec(e));){var s;o.index>r&&a.push(e.slice(r,o.index));const t=null!==(s=o[1])&&void 0!==s?s:o[2];a.push(cc(Le||(Le=bl`<span class="mention">@${0}</span>`),t)),r=o.index+o[0].length}return r<e.length&&a.push(e.slice(r)),a}_renderMessageDialog(e){var t;const i=e.rxLogData&&e.rxLogData.length>0,n=i?e.rxLogData.map(e=>{const t=e.path_nodes,i=e.hop_count,n=e.snr,a=e.rssi,o=[];return t&&t.length>0?o.push(t.map(e=>e.substring(0,4).toUpperCase()).join(" > ")):void 0!==i?o.push(`${i} hop${1!==i?"s":""}`):o.push("0 hops"),void 0!==n&&o.push(`SNR: ${n}`),void 0!==a&&o.push(`RSSI: ${a}`),o.join(" · ")}).join(" | "):"",a=e.timestamp.toLocaleString(void 0,{weekday:"short",month:"short",day:"numeric",year:"numeric",hour:"numeric",minute:"2-digit",second:"2-digit"}),o="padding: 8px 16px; font-size: 12px; color: var(--secondary-text-color); border-top: 1px solid var(--divider-color, #e0e0e0);";return cc(Pe||(Pe=bl`
       <div class="message-dialog-overlay" @click=${0}>
-        <div class="message-dialog ${0}"
+        <div class="message-dialog ${0} ${0}"
              role="dialog" aria-modal="true" aria-label="Message actions"
              @click=${0}>
           <div class="message-dialog-preview">${0}</div>
@@ -2470,7 +2471,7 @@ let e,t,i,n,a,o,r,s,l,c,d,p,h,u,m,g,f,v,b,y,_,x,w,k,$,C,S,M,z,A,R,I,O,D,q,T,F,E,
           ${0}
         </div>
       </div>
-    `),()=>{this._selectedMessage=null,this._showRouteMap=!1,this._confirmResend=!1},this._showRouteMap?"with-map":"",e=>e.stopPropagation(),e.text,this._renderReactionList(e),e.isSystem?"":cc(Be||(Be=bl`<div class="reaction-row" role="group" aria-label="React">
+    `),()=>{this._selectedMessage=null,this._showRouteMap=!1,this._confirmResend=!1},this._showRouteMap?"with-map":"",this._reactPicker?"with-picker":"",e=>e.stopPropagation(),e.text,this._renderReactionList(e),e.isSystem?"":cc(Be||(Be=bl`<div class="reaction-row" role="group" aria-label="React">
             ${0}
             <button class="more-react ${0}" title="More emoji" aria-label="More emoji" @click=${0}>＋</button>
           </div>
@@ -2618,16 +2619,18 @@ let e,t,i,n,a,o,r,s,l,c,d,p,h,u,m,g,f,v,b,y,_,x,w,k,$,C,S,M,z,A,R,I,O,D,q,T,F,E,
     .rs-chip.on { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4); color: #fff; }
     .rs-more { background: none; border: none; color: var(--primary-color, #03a9f4); padding: 4px 0; cursor: pointer; font: inherit; font-size: 13px; }
     .reaction-list { padding-top: 6px; max-height: 180px; overflow-y: auto; }
-    .more-react { font-size: 20px !important; color: var(--secondary-text-color); }
+    .more-react { font-size: 20px !important; color: var(--secondary-text-color); border: 1px solid var(--divider-color, #555) !important; }
     .more-react.on { background: rgba(127,127,127,0.2) !important; }
-    .react-picker { padding: 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); display: flex; justify-content: center; }
+    .react-picker { padding: 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
+    .react-picker meshcore-emoji-picker { width: 100%; }
     .reaction-entry { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: 14px; }
     .re-emoji { width: 24px; text-align: center; }
     .re-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .re-time { font-size: 12px; color: var(--secondary-text-color); }
-    .reaction-row { display: flex; justify-content: space-around; padding: 6px 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
-    .reaction-row button { background: none; border: none; font-size: 24px; cursor: pointer; border-radius: 50%; padding: 4px 6px; }
-    .reaction-row button:hover { background: rgba(127, 127, 127, 0.2); }
+    .reaction-row { display: flex; justify-content: space-between; gap: 2px; padding: 6px 10px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
+    .reaction-row button { background: none; border: none; font-size: 22px; line-height: 1; cursor: pointer; border-radius: 50%;
+      width: 36px; height: 36px; padding: 0; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    @media (hover: hover) { .reaction-row button:hover { background: rgba(127, 127, 127, 0.2); } }
     .quote {
       border-left: 3px solid var(--primary-color, #03a9f4);
       background: rgba(127, 127, 127, 0.15);
@@ -2729,8 +2732,16 @@ let e,t,i,n,a,o,r,s,l,c,d,p,h,u,m,g,f,v,b,y,_,x,w,k,$,C,S,M,z,A,R,I,O,D,q,T,F,E,
       box-shadow: 0 0 20px rgba(var(--rgb-primary-color, 3, 169, 244), 0.3);
       min-width: 240px;
       max-width: 300px;
-      overflow: hidden;
+      max-height: calc(100vh - 48px);
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       z-index: 21;
+    }
+    .message-dialog.with-picker {
+      width: min(360px, calc(100vw - 24px));
+      max-width: min(360px, calc(100vw - 24px));
+      box-sizing: border-box;
     }
 
     .message-dialog-resend {

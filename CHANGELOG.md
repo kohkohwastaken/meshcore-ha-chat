@@ -15,7 +15,8 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 
 ### Emoji picker
 - Search by name or keyword ("thumbs", "radio", "red heart"); Enter picks the first result.
-- The full Unicode set in its usual groups, after your recent emoji. Names from unicode-emoji-json and keywords from emojilib (both MIT).
+- The full Unicode set in its usual groups, after your recent emoji.
+- Fits narrow phone screens: the picker widens the message dialog, the grid sizes its columns to the space, and it scrolls by touch. Names from unicode-emoji-json and keywords from emojilib (both MIT).
 
 ## 0.4.9
 

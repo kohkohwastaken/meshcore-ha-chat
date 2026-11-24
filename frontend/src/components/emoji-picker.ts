@@ -62,15 +62,16 @@ export class MeshCoreEmojiPicker extends LitElement {
   @state() private _q = '';
 
   static styles = css`
-    :host { display: block; width: 330px; max-width: calc(100vw - 24px); }
+    :host { display: block; width: 330px; max-width: 100%; box-sizing: border-box; }
     input { width: 100%; box-sizing: border-box; padding: 7px 10px; margin-bottom: 6px; border-radius: 8px;
-      border: 1px solid var(--divider-color, #444); background: transparent; color: var(--primary-text-color); font: inherit; }
-    .tabs { display: flex; gap: 2px; overflow-x: auto; border-bottom: 1px solid var(--divider-color, #444); padding-bottom: 4px; }
-    .tabs button { background: none; border: none; padding: 4px 6px; font-size: 18px; cursor: pointer; border-radius: 6px; opacity: 0.6; }
+      border: 1px solid var(--divider-color, #444); background: transparent; color: var(--primary-text-color); font: inherit; outline: none; -webkit-appearance: none; appearance: none; }
+    input:focus { border-color: var(--primary-color, #03a9f4); }
+    .tabs { display: flex; gap: 2px; overflow-x: auto; overscroll-behavior: contain; touch-action: pan-x; border-bottom: 1px solid var(--divider-color, #444); padding-bottom: 4px; }
+    .tabs button { flex-shrink: 0; background: none; border: none; padding: 4px 6px; font-size: 18px; cursor: pointer; border-radius: 6px; opacity: 0.6; }
     .tabs button.on { opacity: 1; background: rgba(127,127,127,0.2); }
-    .grid { display: grid; grid-template-columns: repeat(8, 1fr); height: 220px; overflow-y: auto; padding-top: 6px; align-content: start; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(38px, 1fr)); height: 220px; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; touch-action: pan-y; padding-top: 6px; align-content: start; }
     .grid button { background: none; border: none; font-size: 22px; padding: 4px 0; cursor: pointer; border-radius: 6px; }
-    .grid button:hover { background: rgba(127,127,127,0.2); }
+    @media (hover: hover) { .grid button:hover { background: rgba(127,127,127,0.2); } }
     .label { font-size: 11px; opacity: 0.7; margin: 6px 2px 0; grid-column: 1 / -1; }
     .none { grid-column: 1 / -1; font-size: 13px; opacity: 0.7; padding: 12px 4px; }
   `;
