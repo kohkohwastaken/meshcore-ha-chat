@@ -76,6 +76,8 @@ export interface StoredMessage {
   sender: string;
   text: string;
   timestamp: string;
+  /** The sender radio's own timestamp (seconds), when the backend caught it. */
+  sender_timestamp?: number;
   message_type: 'channel' | 'direct';
   channel?: string;
   channel_idx?: number;
@@ -126,6 +128,8 @@ export interface ChatMessage {
   text: string;
   /** Message timestamp */
   timestamp: Date;
+  /** The sender radio's own timestamp (seconds), used to match reactions. */
+  senderTimestamp?: number;
   /** true if sender matches node_name */
   isOutgoing: boolean;
   /** true if unparseable (no sender:message pattern) */

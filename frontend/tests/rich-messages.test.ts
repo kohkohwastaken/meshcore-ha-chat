@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  sha256, reactionHash, parseReaction, formatReaction, collectReactions,
+  sha256, reactionHash, openReactionHash, parseReaction, formatReaction, collectReactions,
   parseLocation, formatLocation, parseContact, formatContact,
 } from '../src/utils/rich-messages';
 import type { ChatMessage } from '../src/types';
@@ -15,23 +15,41 @@ describe('rich messages', () => {
     expect(hex(sha256(new Uint8Array(0)))).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855');
     expect(hex(sha256(new TextEncoder().encode('a'.repeat(1000))))).toBe('41edece42d63e8d9bf515a9ba6932e1c20cbc9f5a5d134645adb5db1b9737ea3');
   });
-  it('reaction hash is 8 Crockford chars', () => expect(reactionHash('Test', 1700000000)).toMatch(/^[0-9A-HJKMNP-TV-Z]{8}$/));
-  it('round-trips a reaction and attaches it by hash', () => {
-    const a = m('a', 'Dave', 'Test', 100);
+  it('matches MeshCore Open\'s MeshCore One hash vector', () =>
+    expect(reactionHash('Hello world!', 1234567890)).toBe('tyvbkb33'));
+  it('matches MeshCore Open\'s own hash vectors', () => {
+    expect(openReactionHash(1700000000, 'Bob', 'hello')).toBe('e779');
+    expect(openReactionHash(1700000000, null, 'hi')).toBe('b5bd');
+    expect(openReactionHash(1700000000, 'Привет😀', 'x')).toBe('7fee');
+  });
+  it('parses all three formats', () => {
+    expect(parseReaction('@[Dave]👍\nb3je6qf7')).toEqual({ emoji: '👍', target: 'Dave', hash: 'b3je6qf7', kind: 'mc1' });
+    expect(parseReaction('👍@[Dave]\nB3JE6QF7')).toEqual({ emoji: '👍', target: 'Dave', hash: 'b3je6qf7', kind: 'mc1' });
+    expect(parseReaction('❤️\nb3je6qf7')).toMatchObject({ emoji: '❤️', kind: 'mc1' });
+    expect(parseReaction('r:e779:01')).toEqual({ emoji: '❤️', hash: 'e779', kind: 'open' });
+    expect(parseReaction('hello\nb3je6qf7')).toBeNull();
+    expect(parseReaction('hello @[Dave]')).toBeNull();
+  });
+  it('attaches by sender timestamp, MeshCore One format', () => {
+    const a = { ...m('a', 'Dave', 'Test', 100), senderTimestamp: 90 };
     const b = m('b', 'Dave', 'Again', 200);
-    const r = m('r', 'Me', formatReaction('👍', a), 300, true);
-    expect(parseReaction(r.text)).toMatchObject({ emoji: '👍', target: 'Dave' });
+    const r = m('r', 'Me', formatReaction('👍', a, true), 300, true);
+    expect(r.text).toBe(`@[Dave]👍\n${reactionHash('Test', 90)}`);
     const { visible, reactions } = collectReactions([a, b, r]);
     expect(visible.map((x) => x.id)).toEqual(['a', 'b']);
     expect(reactions.get('a')).toEqual([{ emoji: '👍', senders: ['You'] }]);
   });
-  it('falls back to the newest message from the named person', () => {
-    const a = m('a', 'Dave', 'Test', 100);
-    const r = m('r', 'Bob', '🔥@[Dave]\nABCDEFGH', 300);
-    expect(collectReactions([a, r]).reactions.get('a')?.[0].emoji).toBe('🔥');
+  it('finds a MeshCore Open reaction within the clock window', () => {
+    const a = m('a', 'Bob', 'hello there', 1700000005);
+    const r = m('r', 'Eve', `r:${openReactionHash(1700000000, 'Bob', 'hello there')}:05`, 1700000100);
+    expect(collectReactions([a, r]).reactions.get('a')).toEqual([{ emoji: '🔥', senders: ['Eve'] }]);
   });
-  it('parses MeshCore Open reactions by index', () => expect(parseReaction('r:1a2b:01')?.emoji).toBe('❤️'));
-  it('leaves ordinary text alone', () => expect(parseReaction('hello @[Dave]')).toBeNull());
+  it('drops reactions that match nothing', () => {
+    const r = m('r', 'Bob', '@[Dave]🔥\nabcdefgh', 300);
+    const out = collectReactions([m('a', 'Dave', 'Test', 100), r]);
+    expect(out.visible.length).toBe(1);
+    expect(out.reactions.size).toBe(0);
+  });
   it('location round-trip', () => {
     const t = formatLocation(51.5, -0.12, 'Pub | garden');
     expect(t).toBe('m:51.500000,-0.120000|Pub   garden|');

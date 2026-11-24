@@ -1,11 +1,12 @@
 /**
  * Message formats shared with the MeshCore apps:
- *   reaction (MeshCore One):  "👍@[Dave]\n<8-char hash>"
+ *   reaction (MeshCore One):  "@[Dave]👍\n<8-char hash>" (DM: "👍\n<hash>")
  *   reaction (MeshCore Open): "r:HASH4:IDX2"
  *   location:                 "m:lat,lon|label|poi"
  *   contact:                  "<64 hex key:type:name>"
  */
 import type { ChatMessage } from '../types';
+import { OPEN_REACTION_EMOJIS } from './reaction-emojis';
 
 /** MeshCore Open's quick reactions; its reaction indices follow this order. */
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '👏', '🔥'];
@@ -55,9 +56,13 @@ export function sha256(data: Uint8Array): Uint8Array {
   return out;
 }
 
-const CROCKFORD = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+const CROCKFORD = '0123456789abcdefghjkmnpqrstvwxyz';
 
-/** MeshCore One's message hash: Crockford base32 of the first 5 bytes of SHA-256(text + uint32le timestamp). */
+/**
+ * MeshCore One's message hash, as in its docs/Reactions.md: Crockford base32
+ * (lower case) of the first 5 bytes of SHA-256(UTF-8 text + uint32 LE of the
+ * sender's own timestamp).
+ */
 export function reactionHash(text: string, timestampSeconds: number): string {
   const t = new TextEncoder().encode(text);
   const data = new Uint8Array(t.length + 4);
@@ -71,30 +76,81 @@ export function reactionHash(text: string, timestampSeconds: number): string {
   return out;
 }
 
+/**
+ * MeshCore Open's own 4-hex hash (reaction_helper.dart computeReactionHash):
+ * the Dart VM string hash of `${timestamp}${senderName}${first 5 UTF-16
+ * units of text}`, lower 16 bits. senderName is left out in 1:1 chats.
+ */
+export function openReactionHash(timestampSeconds: number, senderName: string | null, text: string): string {
+  const input = `${timestampSeconds}${senderName ?? ''}${text.substring(0, 5)}`;
+  let h = 0;
+  for (let i = 0; i < input.length; i++) {
+    h = (h + input.charCodeAt(i)) >>> 0;
+    h = (h + ((h << 10) >>> 0)) >>> 0;
+    h = (h ^ (h >>> 6)) >>> 0;
+  }
+  h = (h + ((h << 3) >>> 0)) >>> 0;
+  h = (h ^ (h >>> 11)) >>> 0;
+  h = (h + ((h << 15) >>> 0)) >>> 0;
+  h &= 0x3fffffff;
+  if (h === 0) h = 1;
+  return (h & 0xffff).toString(16).padStart(4, '0');
+}
+
 // --- Reactions -------------------------------------------------------------
 export interface ParsedReaction {
   emoji: string;
-  /** Name of the person whose message it reacts to, when given. */
+  /** Whose message it reacts to (MeshCore One channel reactions). */
   target?: string;
-  hash?: string;
+  hash: string;
+  kind: 'mc1' | 'open';
 }
 
-const ONE_RE = /^(\S{1,16})@\[([^\]]+)\]\n([0-9A-HJKMNP-TV-Z]{8})$/i;
-const OPEN_RE = /^r:([0-9a-f]{4}):([0-9a-f]{2})$/i;
+/** One emoji (a single grapheme), not ordinary text. */
+function looksLikeEmoji(s: string): boolean {
+  if (!s) return false;
+  const Seg = (Intl as unknown as { Segmenter?: new (l?: string, o?: { granularity: string }) => { segment: (t: string) => Iterable<unknown> } }).Segmenter;
+  if (Seg && [...new Seg(undefined, { granularity: 'grapheme' }).segment(s)].length !== 1) return false;
+  const first = s.codePointAt(0) ?? 0;
+  return first >= 0x2000 || s.includes('\uFE0F') || s.includes('\u20E3');
+}
+
+const MC1_RE = /^(?:@\[(.*)\])?(.+?)\n([a-hjkmnp-tv-z0-9]{8})$/i;
+const MC1_LEGACY_RE = /^(.+?)(?:@\[(.*)\])?\n([a-hjkmnp-tv-z0-9]{8})$/i;
+const OPEN_RE = /^r:([0-9a-f]{4}):([0-9a-f]{2})$/;
 
 export function parseReaction(text: string): ParsedReaction | null {
-  const one = ONE_RE.exec(text);
-  if (one) return { emoji: one[1], target: one[2], hash: one[3].toUpperCase() };
   const open = OPEN_RE.exec(text);
   if (open) {
-    const emoji = QUICK_REACTIONS[parseInt(open[2], 16)];
-    return emoji ? { emoji, hash: open[1].toLowerCase() } : { emoji: '👍', hash: open[1].toLowerCase() };
+    const emoji = OPEN_REACTION_EMOJIS[parseInt(open[2], 16)];
+    return emoji ? { emoji, hash: open[1], kind: 'open' } : null;
   }
+  const one = MC1_RE.exec(text);
+  if (one && looksLikeEmoji(one[2])) return { emoji: one[2], target: one[1], hash: one[3].toLowerCase(), kind: 'mc1' };
+  const legacy = MC1_LEGACY_RE.exec(text);
+  if (legacy && looksLikeEmoji(legacy[1])) return { emoji: legacy[1], target: legacy[2], hash: legacy[3].toLowerCase(), kind: 'mc1' };
   return null;
 }
 
-export function formatReaction(emoji: string, msg: ChatMessage): string {
-  return `${emoji}@[${msg.sender}]\n${reactionHash(msg.text, Math.floor(msg.timestamp.getTime() / 1000))}`;
+/** Seconds the sender's radio may have stamped on a message, best guess first. */
+function candidateTimes(m: ChatMessage): number[] {
+  if (m.senderTimestamp) return [m.senderTimestamp];
+  // Without it, the sender's clock is usually a little behind when we logged it.
+  const t = Math.floor(m.timestamp.getTime() / 1000);
+  const out = [t];
+  for (let d = 1; d <= 15; d++) out.push(t - d);
+  out.push(t + 1, t + 2);
+  return out;
+}
+
+/**
+ * A reaction in MeshCore One's format, which MeshCore Open also reads:
+ * "@[Name]👍\nhash" on channels, "👍\nhash" in direct messages.
+ */
+export function formatReaction(emoji: string, msg: ChatMessage, isChannel: boolean): string {
+  const ts = msg.senderTimestamp ?? Math.floor(msg.timestamp.getTime() / 1000);
+  const hash = reactionHash(msg.text, ts);
+  return isChannel ? `@[${msg.sender}]${emoji}\n${hash}` : `${emoji}\n${hash}`;
 }
 
 export interface ReactionChip {
@@ -104,38 +160,44 @@ export interface ReactionChip {
 
 /**
  * Pull reactions out of the message list and attach them to the message
- * they react to: by hash first, else the newest earlier message from the
- * named person (or just the newest earlier message).
+ * whose hash they carry. Reactions that match nothing are dropped, as the
+ * MeshCore apps do (the message may be older than what's loaded).
  */
-export function collectReactions(messages: ChatMessage[]): { visible: ChatMessage[]; reactions: Map<string, ReactionChip[]> } {
+export function collectReactions(messages: ChatMessage[], isChannel = true): { visible: ChatMessage[]; reactions: Map<string, ReactionChip[]> } {
   const visible: ChatMessage[] = [];
   const reactions = new Map<string, ReactionChip[]>();
-  const hashes = new Map<string, string>();
-  const hashOf = (m: ChatMessage) => {
-    let h = hashes.get(m.id);
-    if (!h) {
-      h = reactionHash(m.text, Math.floor(m.timestamp.getTime() / 1000));
-      hashes.set(m.id, h);
+  const mc1 = new Map<string, Set<string>>();
+  const open = new Map<string, Set<string>>();
+  const hashes = (m: ChatMessage, kind: 'mc1' | 'open') => {
+    const cache = kind === 'mc1' ? mc1 : open;
+    let set = cache.get(m.id);
+    if (!set) {
+      const times = candidateTimes(m);
+      set = new Set(kind === 'mc1'
+        ? times.map((t) => reactionHash(m.text, t))
+        : times.map((t) => openReactionHash(t, isChannel ? m.sender : null, m.text)));
+      cache.set(m.id, set);
     }
-    return h;
+    return set;
   };
+  const seen = new Set<string>();
   for (const m of messages) {
     const r = m.isSystem ? null : parseReaction(m.text);
     if (!r) {
       visible.push(m);
       continue;
     }
-    const earlier = [...visible].reverse();
-    const target =
-      (r.hash && earlier.find((x) => (r.hash!.length === 8 ? hashOf(x) === r.hash : hashOf(x).slice(0, 4).toLowerCase() === r.hash)))
-      || (r.target ? earlier.find((x) => x.sender === r.target) : earlier[0]);
+    const target = [...visible].reverse().find((x) =>
+      (!r.target || x.sender === r.target) && hashes(x, r.kind).has(r.hash));
     if (!target) continue;
-    const chips = reactions.get(target.id) ?? [];
     const sender = m.isOutgoing ? 'You' : m.sender;
+    const dedup = `${target.id}|${sender}|${r.emoji}`;
+    if (seen.has(dedup)) continue;
+    seen.add(dedup);
+    const chips = reactions.get(target.id) ?? [];
     const chip = chips.find((c) => c.emoji === r.emoji);
-    if (chip) {
-      if (!chip.senders.includes(sender)) chip.senders.push(sender);
-    } else chips.push({ emoji: r.emoji, senders: [sender] });
+    if (chip) chip.senders.push(sender);
+    else chips.push({ emoji: r.emoji, senders: [sender] });
     reactions.set(target.id, chips);
   }
   return { visible, reactions };

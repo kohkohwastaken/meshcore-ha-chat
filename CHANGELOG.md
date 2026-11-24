@@ -2,6 +2,14 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.6
+
+- Reactions now match the way MeshCore One and MeshCore Open actually do it, checked against their code and test vectors:
+  - Sends MeshCore One's current format (`@[Name]👍` + hash on channels, `👍` + hash in DMs), which both apps read.
+  - Reads MeshCore One's current and older formats, and MeshCore Open's `r:` reactions with its full emoji list.
+  - The backend now keeps the sender radio's timestamp for received messages, which both apps' hashes use. Older messages fall back to a short time window.
+  - Reactions that match no loaded message are hidden, as the apps do, rather than guessed onto the wrong message.
+
 ## 0.4.5
 
 - Replies now show the message they answer, as a quote at the top of the bubble. Tap it to jump to the original.

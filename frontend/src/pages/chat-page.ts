@@ -987,7 +987,7 @@ export class ChatPage extends LitElement {
       `;
     }
 
-    const { visible: messages, reactions } = collectReactions(this._messageStore.messages);
+    const { visible: messages, reactions } = collectReactions(this._messageStore.messages, this._isChannelSelected());
     this._reactions = reactions;
     const renderItems = buildRenderItems(messages, {
       group_messages: this.config?.group_messages ?? true,
@@ -1218,7 +1218,7 @@ export class ChatPage extends LitElement {
 
   private _onReact(e: CustomEvent) {
     const { emoji, msg } = e.detail as { emoji: string; msg: ChatMessage };
-    void this._sendText(formatReaction(emoji, msg));
+    void this._sendText(formatReaction(emoji, msg, this._isChannelSelected()));
   }
 
   private _renderLimitNote(budget: MessageBudget) {

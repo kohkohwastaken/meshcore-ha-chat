@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -235,9 +236,14 @@ async def async_setup_entry(
     # Subscribe to upstream meshcore events. ``entry.async_on_unload``
     # tracks each unsub callback and invokes it on unload — no manual
     # listener-list bookkeeping needed.
+    sender_times = SenderTimestamps()
+    entry.async_on_unload(hass.bus.async_listen(
+        f"{MESHCORE_DOMAIN}_raw_event",
+        sender_times.on_raw_event,
+    ))
     entry.async_on_unload(hass.bus.async_listen(
         EVENT_MESHCORE_MESSAGE,
-        _make_message_handler(hass, entry.entry_id),
+        _make_message_handler(hass, entry.entry_id, sender_times),
     ))
     entry.async_on_unload(hass.bus.async_listen(
         EVENT_MESHCORE_DELIVERY_UPDATE,
@@ -338,7 +344,48 @@ def _store_message_id(payload: dict) -> str | None:
     return str(msg_id) if msg_id else None
 
 
-def _make_message_handler(hass: HomeAssistant, entry_id: str):
+class SenderTimestamps:
+    """Recent received messages' sender timestamps, by message text.
+
+    The upstream ``meshcore_message`` event only carries the time Home
+    Assistant received a message. Reactions from the MeshCore apps identify
+    a message by its text plus the *sender's* timestamp, which the radio
+    passes up in the raw ``CHANNEL_MSG_RECV`` / ``CONTACT_MSG_RECV`` events
+    (fired just before the message event), so remember it from there.
+    """
+
+    MAX = 256
+
+    def __init__(self) -> None:
+        self._times: OrderedDict[str, int] = OrderedDict()
+
+    @callback
+    def on_raw_event(self, event: Event) -> None:
+        data = event.data or {}
+        kind = str(data.get("event_type") or "")
+        if "CHANNEL_MSG_RECV" not in kind and "CONTACT_MSG_RECV" not in kind:
+            return
+        payload = data.get("payload") or {}
+        if not isinstance(payload, dict):
+            return
+        ts = payload.get("sender_timestamp")
+        text = payload.get("text")
+        if not isinstance(ts, (int, float)) or not isinstance(text, str):
+            return
+        keys = [text]
+        if "CHANNEL_MSG_RECV" in kind and ": " in text:
+            keys.append(text.split(": ", 1)[1])
+        for key in keys:
+            self._times[key] = int(ts)
+            self._times.move_to_end(key)
+        while len(self._times) > self.MAX:
+            self._times.popitem(last=False)
+
+    def lookup(self, text: str) -> int | None:
+        return self._times.get(text)
+
+
+def _make_message_handler(hass: HomeAssistant, entry_id: str, sender_times: SenderTimestamps | None = None):
     """Return a listener that persists incoming/outgoing meshcore_message events."""
 
     async def _handle(event: Event) -> None:
@@ -383,6 +430,10 @@ def _make_message_handler(hass: HomeAssistant, entry_id: str):
             "message_type": data.get("message_type", ""),
             "outgoing": bool(data.get("outgoing", False)),
         }
+        if sender_times is not None and not record["outgoing"]:
+            sender_ts = sender_times.lookup(record["text"])
+            if sender_ts is not None:
+                record["sender_timestamp"] = sender_ts
         # Optional metadata — copy through only if present.
         for k in (
             "channel",
