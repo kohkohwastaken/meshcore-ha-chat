@@ -192,20 +192,6 @@ export class MeshCoreMessagePanel extends LitElement {
     return parts.join(' · ');
   }
 
-  private _routeText(m: ChatMessage): string {
-    if (!m.rxLogData?.length) return '';
-    return m.rxLogData.map((e) => {
-      const nodes = e.path_nodes as string[] | undefined;
-      const hops = e.hop_count as number | undefined;
-      const parts: string[] = [];
-      if (nodes && nodes.length > 0) parts.push(nodes.map((n) => n.substring(0, 4).toUpperCase()).join(' › '));
-      else parts.push(hops !== undefined ? `${hops} hop${hops !== 1 ? 's' : ''}` : '0 hops');
-      if (e.snr !== undefined) parts.push(`SNR ${e.snr}`);
-      if (e.rssi !== undefined) parts.push(`RSSI ${e.rssi}`);
-      return parts.join(' · ');
-    }).join(' | ');
-  }
-
   private _icon(path: string) {
     return html`<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d=${path}></path></svg>`;
   }
@@ -255,7 +241,6 @@ export class MeshCoreMessagePanel extends LitElement {
   private _renderBody(m: ChatMessage) {
     const side = this.mode === 'side';
     const mapAvailable = !!this.getHass && hasMapPath(m);
-    const route = this._routeText(m);
     const when = formatFullDateTime(m.timestamp);
     const ds = m.deliveryStatus;
     const delivery = m.isOutgoing && ds
@@ -263,10 +248,11 @@ export class MeshCoreMessagePanel extends LitElement {
       : '';
     // The side panel lists SNR under the message, so its header leaves it out.
     const signal = this._signal(m);
-    const summary = [formatTimestamp(m.timestamp, this.timestampFormat), side ? signal.split(' · ')[0] : signal].filter(Boolean).join(' · ');
+    // Desktop shows SNR and the full received time under the message, so its
+    // header keeps only the hop count.
+    const summary = side ? signal.split(' · ')[0] : [formatTimestamp(m.timestamp, this.timestampFormat), signal].filter(Boolean).join(' · ');
     const detailLines = html`
-      ${route ? html`Route: ${route}<br>` : ''}
-      ${m.isOutgoing ? 'Sent' : 'Received'}: ${when}
+      ${this._signalLine(m, when)}
       ${delivery ? html`<br>${delivery}` : ''}`;
 
     const actions = html`<div class="actions">
