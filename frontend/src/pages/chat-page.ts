@@ -54,6 +54,8 @@ export class ChatPage extends LitElement {
   /** Unsubscribe handle for the `UnreadController` subscription. */
   private _unsubUnread: (() => void) | null = null;
   @state() private _inputText = '';
+  /** The message being replied to; sent as "@[sender] " before the text. */
+  @state() private _replyTo: { sender: string; text: string } | null = null;
   @state() private _sending = false;
   private _failedDrafts = new Map<string, string[]>();
 
@@ -159,28 +161,74 @@ export class ChatPage extends LitElement {
 
     .input-area {
       display: flex;
-      align-items: flex-end;
-      gap: 8px;
-      padding: 8px 12px 12px;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px 12px 10px;
       border-top: 1px solid var(--divider-color, #e0e0e0);
       background: var(--input-bg);
       flex-shrink: 0;
     }
 
-    .input-wrap {
-      flex: 1;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      min-width: 0;
+    .composer {
+      border: 1px solid var(--input-border);
+      border-radius: 14px;
+      background: var(--chat-bg);
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .composer:focus-within {
+      border-color: var(--primary-color, #03a9f4);
     }
 
-    .byte-row {
+    .composer-strip {
       display: flex;
-      align-items: baseline;
-      gap: 8px;
-      padding: 3px 14px 0;
-      min-height: 16px;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      font-size: 12px;
+      border-bottom: 1px solid var(--divider-color, #e0e0e0);
+      min-width: 0;
+    }
+    .composer-strip.reply {
+      background: var(--secondary-background-color, rgba(127, 127, 127, 0.1));
+    }
+    .strip-icon {
+      color: var(--primary-color, #03a9f4);
+      flex-shrink: 0;
+    }
+    .strip-title {
+      font-weight: 600;
+      white-space: nowrap;
+      color: var(--primary-text-color);
+    }
+    .strip-detail {
+      color: var(--secondary-text-color, #727272);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      flex: 1;
+      min-width: 0;
+    }
+    .strip-close {
+      border: none;
+      background: none;
+      color: var(--secondary-text-color, #727272);
+      cursor: pointer;
+      font-size: 13px;
+      padding: 2px 4px;
+      flex-shrink: 0;
+    }
+
+    .composer-body {
+      padding: 6px 8px 6px 12px;
+    }
+
+    .composer-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-top: 1px solid var(--divider-color, #e0e0e0);
+      padding-top: 6px;
     }
 
     .byte-counter {
@@ -190,38 +238,42 @@ export class ChatPage extends LitElement {
       font-variant-numeric: tabular-nums;
       color: var(--secondary-text-color, #727272);
       opacity: 0.8;
-      pointer-events: none;
     }
     .byte-counter.low { color: var(--warning-color, #ff9800); opacity: 1; }
     .byte-counter.over { color: var(--error-color, #db4437); opacity: 1; font-weight: 600; }
 
-    .byte-note {
-      font-size: 12px;
+    .composer .send-button {
+      width: 34px;
+      height: 34px;
+    }
+    .composer .send-button svg {
+      width: 17px;
+      height: 17px;
     }
 
-    /* Keep the send button level with the text box, above the counter row. */
-    .input-area .send-button {
-      margin-bottom: 19px;
+    .composer-note {
+      font-size: 12px;
+      padding: 0 6px;
     }
-    .byte-note.low { color: var(--warning-color, #ff9800); }
-    .byte-note.over { color: var(--error-color, #db4437); }
+    .composer-note.low { color: var(--warning-color, #ff9800); }
+    .composer-note.over { color: var(--error-color, #db4437); }
 
     .input-area textarea {
-      flex: 1;
-      padding: 10px 14px;
-      border: 1px solid var(--input-border);
-      border-radius: 20px;
-      background: var(--chat-bg);
+      width: 100%;
+      box-sizing: border-box;
+      display: block;
+      padding: 4px 0 8px;
+      border: none !important;
+      border-radius: 0;
+      background: transparent;
       color: var(--primary-text-color);
       font-size: 14px;
       font-family: inherit;
       resize: none;
       outline: none;
       max-height: 120px;
-      min-height: 40px;
+      min-height: 32px;
       line-height: 1.4;
-      transition: border-color 0.2s;
-      box-sizing: border-box;
     }
 
     .input-area textarea:focus {
@@ -657,6 +709,7 @@ export class ChatPage extends LitElement {
     }
     if (changedProperties.has('selectedId')) {
       this._onConversationSelected();
+      if (this._replyTo && changedProperties.get('selectedId') !== undefined) this._replyTo = null;
     }
     // Late-arriving `lastRead` re-anchor. Handles the fresh-panel-load
     // / entry-switch-immediate-click race where the user picks a
@@ -882,7 +935,7 @@ export class ChatPage extends LitElement {
 
     const budget = this._budget();
     return html`
-      <div class="chat-container" @reply-to-sender=${this._onReplyToSender} @scroll=${this._onChatScroll}>
+      <div class="chat-container" @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @scroll=${this._onChatScroll}>
         ${this._messageStore.loadingOlder
           ? html`<div class="loading-older"><div class="loading-spinner"></div></div>`
           : html``}
@@ -915,33 +968,46 @@ export class ChatPage extends LitElement {
         ${this._renderNewMessagesIndicator()}
       </div>
       <div class="input-area">
-        <div class="input-wrap">
-        <textarea
-          placeholder="Type a message..."
-          aria-label="Message text. Press Enter to send, Shift+Enter for newline."
-          .value=${this._inputText}
-          @input=${(e: Event) => {
-            const ta = e.target as HTMLTextAreaElement;
-            this._inputText = ta.value;
-          }}
-          @keydown=${(e: KeyboardEvent) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
-              e.preventDefault();
-              this._sendMessage();
-            }
-          }}
-          ?disabled=${this._sending || !this.selectedId}></textarea>
-        ${this._renderByteCounter(budget)}
+        <div class="composer">
+          ${this._replyTo ? html`
+            <div class="composer-strip reply">
+              <svg class="strip-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>
+              <span class="strip-title">Replying to ${this._replyTo.sender}</span>
+              <span class="strip-detail">· ${this._replyTo.text}</span>
+              <button class="strip-close" aria-label="Cancel reply" @click=${() => { this._replyTo = null; }}>✕</button>
+            </div>` : ''}
+          <div class="composer-body">
+            <textarea
+              placeholder="Type a message..."
+              aria-label="Message text. Press Enter to send, Shift+Enter for newline."
+              .value=${this._inputText}
+              @input=${(e: Event) => {
+                const ta = e.target as HTMLTextAreaElement;
+                this._inputText = ta.value;
+              }}
+              @keydown=${(e: KeyboardEvent) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  this._sendMessage();
+                } else if (e.key === 'Escape' && this._replyTo) {
+                  this._replyTo = null;
+                }
+              }}
+              ?disabled=${this._sending || !this.selectedId}></textarea>
+            <div class="composer-toolbar">
+              <span class="byte-counter ${budget.over ? 'over' : budget.left < LOW_BYTES ? 'low' : ''}"
+                title="Bytes left in this message. Accented letters use 2 bytes, most emoji 4 or more.">${budget.over ? budget.left : `${budget.left} left`}</span>
+              <button
+                class="send-button"
+                aria-label="Send message"
+                @click=${() => this._sendMessage()}
+                ?disabled=${this._sending || !this.selectedId || !this._inputText.trim() || budget.over}>
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+              </button>
+            </div>
+          </div>
         </div>
-        <button
-          class="send-button"
-          aria-label="Send message"
-          @click=${() => this._sendMessage()}
-          ?disabled=${this._sending || !this.selectedId || !this._inputText.trim() || budget.over}>
-          <svg viewBox="0 0 24 24" fill="currentColor">
-            <path d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 L4.13399899,1.16151496 C3.34915502,0.9 2.40734225,0.9 1.77946707,1.4429026 C0.994623095,2.0752101 0.837654326,3.00778453 1.15159189,3.98029867 L3.03521743,10.4212916 C3.03521743,10.5783889 3.19218622,10.7354863 3.50612381,10.7354863 L16.6915026,11.5209733 C16.6915026,11.5209733 17.1624089,11.5209733 17.1624089,12.0492776 C17.1624089,12.5775818 16.6915026,12.4744748 16.6915026,12.4744748 Z"/>
-          </svg>
-        </button>
+        ${this._renderComposerNotes(budget)}
       </div>
     `;
   }
@@ -957,7 +1023,7 @@ export class ChatPage extends LitElement {
   /** Bytes used and left for the text in the send box, as it would be sent. */
   private _budget(): MessageBudget {
     return messageBudget(
-      this._inputText,
+      this._replyPrefix() + this._inputText,
       this._isChannelSelected() ? (this.config?.node_name ?? '') : null,
       trackableChannelLimit(),
     );
@@ -965,27 +1031,25 @@ export class ChatPage extends LitElement {
 
   private _onLimitSettingChanged = () => this.requestUpdate();
 
-  private _renderByteCounter(budget: MessageBudget) {
+  /** Notes under the box: too long, or a channel message whose repeats can't be detected. */
+  private _renderComposerNotes(budget: MessageBudget) {
     if (!this.selectedId) return html``;
-    const level = budget.over ? 'over' : budget.left < LOW_BYTES ? 'low' : '';
     let note = html``;
     if (budget.over) {
+      const n = -budget.left;
       note = budget.trackable
-        ? html`<span class="byte-note over">${-budget.left} ${-budget.left === 1 ? 'byte' : 'bytes'} over the trackable limit. Shorten it to send, or allow longer channel messages in Settings.</span>`
-        : html`<span class="byte-note over">${-budget.left} ${-budget.left === 1 ? 'byte' : 'bytes'} too long. Shorten it to send.</span>`;
+        ? html`${n} ${n === 1 ? 'byte' : 'bytes'} over the trackable limit. Shorten it to send, or allow longer channel messages in Settings.`
+        : html`${n} ${n === 1 ? 'byte' : 'bytes'} too long. Shorten it to send.`;
     } else if (budget.echoUndetectable) {
-      note = html`<span class="byte-note low">Long message: repeats can't be detected, so it'll show as Unheard.</span>`;
+      note = html`Long message: repeats can't be detected, so it'll show as Unheard.`;
+    } else {
+      return html``;
     }
-    return html`
-      <div class="byte-row" role="status">
-        ${note}
-        <span class="byte-counter ${level}"
-          title="Bytes left in this message. Accented letters use 2 bytes, most emoji 4 or more.">${budget.over ? budget.left : `${budget.left} left`}</span>
-      </div>
-    `;
+    return html`<div class="composer-note ${budget.over ? 'over' : 'low'}" role="status">${note}</div>`;
   }
 
   private _renderItemsWithDivider(renderItems: Array<any>) {
+    const isChannel = this._isChannelSelected();
     const results: any[] = [];
     let messageIdx = 0;
     let dividerInserted = false;
@@ -1025,6 +1089,7 @@ export class ChatPage extends LitElement {
           .group=${item.group}
           .getHass=${this._getHass}
           .entryId=${this.config?.entry_id}
+          ?isChannel=${isChannel}
           .timestampFormat=${this.config?.timestamp_format ?? 'relative'}></meshcore-message-bubble>
       `);
       messageIdx++;
@@ -1212,6 +1277,21 @@ export class ChatPage extends LitElement {
     if (this._budget().over) {
       return;
     }
+    const text = this._replyPrefix() + this._inputText.trim();
+    this._inputText = '';
+    this._replyTo = null;
+    await this._sendText(text, true);
+  }
+
+  /**
+   * Send text to the open conversation. A typed message that fails is put
+   * back in the box (restoreDraft); a resend that fails just stays marked
+   * failed.
+   */
+  private async _sendText(text: string, restoreDraft = false) {
+    if (this._sending || !text.trim() || !this.selectedId || !this.hass || !this.config) {
+      return;
+    }
     if (!this._conversationResolved) {
       console.warn('Cannot send — conversation not resolved');
       return;
@@ -1222,8 +1302,6 @@ export class ChatPage extends LitElement {
     const selectedId = this.selectedId;
     const entryId = this.config.entry_id;
     const store = this._messageStore;
-    const text = this._inputText.trim();
-    this._inputText = '';
     let optimisticId: string | undefined;
 
     try {
@@ -1258,15 +1336,18 @@ export class ChatPage extends LitElement {
     } catch (err) {
       console.error('Failed to send message:', err);
       if (optimisticId) store?.markOptimisticFailed(optimisticId);
-      const queue = this._failedDrafts.get(context) ?? [];
-      queue.push(text);
-      this._failedDrafts.set(context, queue);
-      if (context === this._draftContext()) this._restoreFailedDraft();
+      if (restoreDraft) {
+        const queue = this._failedDrafts.get(context) ?? [];
+        queue.push(text);
+        this._failedDrafts.set(context, queue);
+        if (context === this._draftContext()) this._restoreFailedDraft();
+      }
     } finally {
       this._sending = false;
       if (context === this._draftContext()) this._restoreFailedDraft();
     }
   }
+
 
   /**
    * Newest non-temporary buffer message id, or null if the buffer is
@@ -1319,11 +1400,22 @@ export class ChatPage extends LitElement {
   }
 
   private _onReplyToSender(e: CustomEvent) {
-    const { mention } = e.detail;
-    if (mention) {
-      this._inputText = mention + this._inputText;
-      this.requestUpdate();
-    }
+    const { sender, text } = e.detail as { sender?: string; text?: string };
+    if (!sender) return;
+    this._replyTo = { sender, text: text ?? '' };
+    void this.updateComplete.then(() => {
+      (this.renderRoot.querySelector('.composer textarea') as HTMLTextAreaElement | null)?.focus();
+    });
+  }
+
+  private _onResendMessage(e: CustomEvent) {
+    const text = (e.detail as { text?: string })?.text;
+    if (text) void this._sendText(text);
+  }
+
+  /** "@[sender] " when replying, else empty: sent before the typed text. */
+  private _replyPrefix(): string {
+    return this._replyTo ? `@[${this._replyTo.sender}] ` : '';
   }
 
   private _getConversationName(): string {

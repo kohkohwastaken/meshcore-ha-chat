@@ -2,6 +2,17 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## [0.4.4] - 2026-11-24
+
+### Added
+
+- **Replies show what you're replying to.** Reply now puts a "Replying to Dave · …" strip at the top of the message box instead of typing `@[Dave]` into it. ✕ or Esc cancels it. On air it's still sent as `@[Dave] your text`, the same as the MeshCore apps, and the byte counter includes that prefix.
+- **Resend for unheard or failed messages.** Tap one of your messages marked Unheard or Failed and choose Resend. The dialog explains that an unheard message may still have been delivered out of your radio's range; on a channel, Resend asks you to confirm first, since others may already have it.
+
+### Changed
+
+- **New message box layout.** The text sits in a rounded box with a toolbar row underneath for the byte counter and Send button, with room for more buttons (emoji, attachments) to come. Notes such as "too long" appear below the box.
+
 ## [0.4.3] - 2026-11-24
 
 ### Added

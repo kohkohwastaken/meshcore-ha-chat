@@ -29,16 +29,20 @@ export class MessageBubble extends LitElement {
    */
   @property({ attribute: false }) getHass?: () => HomeAssistant | undefined;
   @property({ type: String }) entryId?: string;
+  /** The conversation is a channel: resending asks for confirmation (others may already have it). */
+  @property({ type: Boolean }) isChannel = false;
 
   @state() private _selectedMessage: ChatMessage | null = null;
   @state() private _showRouteMap = false;
+  /** Resend tapped on a channel message: waiting for the confirm tap. */
+  @state() private _confirmResend = false;
 
   constructor() {
     super();
     // Focus trap + Escape closes the message-action sheet.
     attachDialogA11y(this, {
       isOpen: () => this._selectedMessage !== null,
-      onEscape: () => { this._selectedMessage = null; this._showRouteMap = false; },
+      onEscape: () => { this._selectedMessage = null; this._showRouteMap = false; this._confirmResend = false; },
       getScope: () => this.shadowRoot?.querySelector('.message-dialog'),
     });
   }
@@ -235,6 +239,26 @@ export class MessageBubble extends LitElement {
       z-index: 21;
     }
 
+    .message-dialog-resend {
+      border-top: 1px solid var(--divider-color, #e0e0e0);
+      padding-top: 4px;
+    }
+    .resend-note {
+      padding: 8px 16px 0;
+      font-size: 12px;
+      color: var(--secondary-text-color);
+      line-height: 1.4;
+    }
+    .resend-actions {
+      display: flex;
+    }
+    .resend-actions .message-dialog-action {
+      flex: 1;
+    }
+    .message-dialog-action.secondary {
+      color: var(--secondary-text-color);
+    }
+
     .message-dialog.with-map {
       width: min(560px, 94vw);
       max-width: none;
@@ -355,7 +379,7 @@ export class MessageBubble extends LitElement {
         : '';
 
     return html`
-      <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this._selectedMessage = msg; this._showRouteMap = false; }}>
+      <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this._selectedMessage = msg; this._showRouteMap = false; this._confirmResend = false; }}>
         <div class="message-text">${this._renderTextWithMentions(msg.text, msg.mentions)}</div>
         <div class="timestamp">${statusLabel ? html`<span class="delivery-status">${statusLabel}</span> · ` : ''}${ts}${scopeLabel ? html` · <span class="flood-scope">${scopeLabel}</span>` : ''}</div>
       </div>
@@ -367,6 +391,51 @@ export class MessageBubble extends LitElement {
    * Shows "Repeated" for messages heard by repeaters, "No repeats" otherwise.
    * Full details (repeater count, RTT) are in the click-to-open dialog.
    */
+  /** Own messages no repeater was heard passing on, or that failed, can be resent. */
+  private _canResend(msg: ChatMessage): boolean {
+    if (!msg.isOutgoing || !msg.deliveryStatus) return false;
+    const label = this._getStatusLabel(msg.deliveryStatus);
+    return label === 'Unheard' || label === 'Failed';
+  }
+
+  private _renderResend(msg: ChatMessage) {
+    if (!this._canResend(msg)) return html``;
+    const failed = msg.deliveryStatus?.status === 'failed';
+    const note = failed
+      ? 'No reply came back, so it most likely didn\'t arrive.'
+      : 'No repeat was heard. It may still have been delivered, out of your radio\'s range.';
+    if (this._confirmResend) {
+      return html`
+        <div class="message-dialog-resend">
+          <div class="resend-note">Resend to this channel? Others may already have it, and they'd see it twice.</div>
+          <div class="resend-actions">
+            <button class="message-dialog-action secondary" @click=${() => { this._confirmResend = false; }}>Cancel</button>
+            <button class="message-dialog-action" @click=${() => this._resend(msg)}>Resend</button>
+          </div>
+        </div>
+      `;
+    }
+    return html`
+      <div class="message-dialog-resend">
+        <div class="resend-note">${note}</div>
+        <button class="message-dialog-action"
+          @click=${() => { if (this.isChannel && !failed) { this._confirmResend = true; } else { this._resend(msg); } }}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M17.65 6.35A7.958 7.958 0 0012 4a8 8 0 108 8h-2a6 6 0 11-1.76-4.24L13 11h7V4l-2.35 2.35z"/></svg>Resend
+        </button>
+      </div>
+    `;
+  }
+
+  private _resend(msg: ChatMessage) {
+    this.dispatchEvent(new CustomEvent('resend-message', {
+      detail: { text: msg.text },
+      bubbles: true,
+      composed: true,
+    }));
+    this._confirmResend = false;
+    this._selectedMessage = null;
+  }
+
   private _getStatusLabel(deliveryStatus: DeliveryStatus): string {
     const status = deliveryStatus.status;
     const repeats = deliveryStatus.repeaterCount ?? 0;
@@ -459,7 +528,7 @@ export class MessageBubble extends LitElement {
     const footerStyle = 'padding: 8px 16px; font-size: 12px; color: var(--secondary-text-color); border-top: 1px solid var(--divider-color, #e0e0e0);';
 
     return html`
-      <div class="message-dialog-overlay" @click=${() => { this._selectedMessage = null; this._showRouteMap = false; }}>
+      <div class="message-dialog-overlay" @click=${() => { this._selectedMessage = null; this._showRouteMap = false; this._confirmResend = false; }}>
         <div class="message-dialog ${this._showRouteMap ? 'with-map' : ''}"
              role="dialog" aria-modal="true" aria-label="Message actions"
              @click=${(e: Event) => e.stopPropagation()}>
@@ -469,11 +538,12 @@ export class MessageBubble extends LitElement {
           </button>
           ${!msg.isOutgoing && !msg.isSystem
             ? html`
-                <button class="message-dialog-action" @click=${() => this._replyToSender(msg.sender)}>
+                <button class="message-dialog-action" @click=${() => this._replyToSender(msg)}>
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>Reply
                 </button>
               `
             : html``}
+          ${this._renderResend(msg)}
           ${hasRoute
             ? html`
                 <div class="message-dialog-route" @click=${() => this._copyText(routeText)}>
@@ -526,10 +596,10 @@ export class MessageBubble extends LitElement {
     this._selectedMessage = null;
   }
 
-  private _replyToSender(sender: string) {
+  private _replyToSender(msg: ChatMessage) {
     this.dispatchEvent(
       new CustomEvent('reply-to-sender', {
-        detail: { mention: `@[${sender}] ` },
+        detail: { mention: `@[${msg.sender}] `, sender: msg.sender, text: msg.text },
         bubbles: true,
         composed: true,
       }),
