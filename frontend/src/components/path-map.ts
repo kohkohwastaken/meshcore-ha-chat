@@ -264,22 +264,21 @@ export class PathMap extends LitElement {
       colours.set(entityId, p.kind === 'sender' ? '#43a047' : TYPE_COLORS[2]);
       const name = p.name || 'Unknown';
       const prefix = p.prefix ? ` (${p.prefix.toUpperCase()})` : '';
-      titles.set(entityId, p.kind === 'repeater' ? `${hop}. ${name}${prefix}` : `Sender: ${name}`);
+      titles.set(entityId, p.kind === 'repeater' ? `${name}${prefix}` : `Sender: ${name}`);
       // Repeaters by hop number, the sender by its name, as in the list below.
       entities.push({ entity_id: entityId, label_mode: 'name', name: p.kind === 'repeater' ? String(hop) : (p.name || 'Sender') });
     }
     map.clusterMarkers = false;
     map.autoFit = false;
     map.entities = entities;
-    // Label each dot on the line like the numbered list, not with a time.
-    let n = 0;
+    // Label each dot on the line with its repeater's name, not a time.
+    // (The marker already shows the hop number.)
     const points = route
       .filter((p) => p.lat !== null && p.lon !== null)
       .map((p) => {
-        if (p.kind === 'repeater') n++;
         const name = p.name || 'Unknown';
         const prefix = p.prefix ? ` (${p.prefix.toUpperCase()})` : '';
-        const tooltip = p.kind === 'me' ? 'You' : p.kind === 'sender' ? `Sender: ${name}` : `${n}. ${name}${prefix}`;
+        const tooltip = p.kind === 'me' ? 'You' : p.kind === 'sender' ? `Sender: ${name}` : `${name}${prefix}`;
         return { point: [p.lat!, p.lon!] as [number, number], tooltip };
       });
     usePointTooltips(map);
