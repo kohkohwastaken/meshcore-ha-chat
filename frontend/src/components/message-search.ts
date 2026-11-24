@@ -1,3 +1,4 @@
+import { formatClock, formatDate } from '../utils/display-prefs';
 import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant } from '../types';
@@ -297,8 +298,8 @@ export class MessageSearch extends LitElement {
 
   private _renderResult(result: SearchResult) {
     const date = new Date(result.timestamp);
-    const dateStr = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-    const timeStr = date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const dateStr = formatDate(date, false);
+    const timeStr = formatClock(date);
     const highlightedText = this._highlightQuery(result.text);
 
     return html`

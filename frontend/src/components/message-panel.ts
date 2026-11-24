@@ -4,6 +4,7 @@ import type { ChatMessage, HomeAssistant } from '../types';
 import { formatTimestamp } from '../chat/message-parser';
 import { QUICK_REACTIONS, type ReactionChip } from '../utils/rich-messages';
 import { canResend } from '../utils/delivery-label';
+import { formatFullDateTime } from '../utils/display-prefs';
 import { hasMapPath } from './path-map';
 import './path-map';
 import './emoji-picker';
@@ -240,9 +241,7 @@ export class MeshCoreMessagePanel extends LitElement {
     const side = this.mode === 'side';
     const mapAvailable = !!this.getHass && hasMapPath(m);
     const route = this._routeText(m);
-    const when = m.timestamp.toLocaleString(undefined, {
-      weekday: 'short', month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', second: '2-digit',
-    });
+    const when = formatFullDateTime(m.timestamp);
     const ds = m.deliveryStatus;
     const delivery = m.isOutgoing && ds
       ? `${(ds.repeaterCount ?? 0) > 0 ? `${ds.repeaterCount} repeater${ds.repeaterCount === 1 ? '' : 's'} responded` : 'No repeaters responded'}${ds.ackReceived ? ' · ACK received' : ''}${ds.roundTripMs ? ` · ${ds.roundTripMs}ms RTT` : ''}`

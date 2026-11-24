@@ -1,3 +1,4 @@
+import { formatClock, formatDate } from '../utils/display-prefs';
 import type { PanelConfig, ChatMessage, StoredMessage, DeliveryStatus, MessageGroup, RenderItem } from '../types';
 import {
   MENTION_BRACKET_REGEX,
@@ -291,6 +292,11 @@ export function buildRenderItems(
 /**
  * Format a relative timestamp (e.g., "2m ago", "1h ago", "Yesterday").
  */
+function isToday(d: Date): boolean {
+  const n = new Date();
+  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+}
+
 export function formatRelativeTime(date: Date): string {
   const now = Date.now();
   const diffMs = now - date.getTime();
@@ -301,7 +307,7 @@ export function formatRelativeTime(date: Date): string {
   if (diffSec < 60) return 'now';
   if (diffMin < 60) return `${diffMin}m`;
   if (diffHour < 24) return `${diffHour}h`;
-  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return formatDate(date, false);
 }
 
 /**
@@ -312,14 +318,10 @@ export function formatTimestamp(date: Date, format: 'relative' | 'time' | 'datet
     case 'relative':
       return formatRelativeTime(date);
     case 'time':
-      return date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+      // Older than today: the date too, or "19:26" could be any day.
+      return isToday(date) ? formatClock(date) : `${formatDate(date, false)}, ${formatClock(date)}`;
     case 'datetime':
-      return date.toLocaleString(undefined, {
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      });
+      return `${formatDate(date, false)}, ${formatClock(date)}`;
     default:
       return formatRelativeTime(date);
   }

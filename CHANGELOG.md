@@ -12,7 +12,7 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 ### Added
 - Route map: a "Larger map" button opens it big over the page (Esc or tap outside to close). The old ⤢ button is now a re-centre icon, as that's what it does.
 - Received messages show their hop count next to the time ("5m · 7 hops").
-- Settings → Messages → Message times: time since (5m), time (19:26), or date and time. Saved in this browser.
+- Settings → Messages: choose Message times (time since, clock time, or date and time), Clock (system default, 12 or 24 hour) and Date (system default, 24 Nov 2026, 24/11/2026, 11/24/2026 or 2026-11-24). Clock time adds the date for older days. Used under messages, in the message details and in search. Saved in this browser.
 
 ### Fixed
 - Tapping the route no longer closes the message menu.

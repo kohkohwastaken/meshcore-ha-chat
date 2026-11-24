@@ -18,7 +18,7 @@ import type { CompanionDeviceDescriptor } from '../components/node-summary';
 import { panelStyles } from '../styles';
 import { loadMeshcoreEntityRegistry, type EntityInfo } from '../utils/classify-entity';
 import { setTrackableChannelLimit, trackableChannelLimit } from '../utils/message-limit';
-import { setTimestampFormat, timestampFormat, type TimestampFormat } from '../utils/display-prefs';
+import { clockFormat, dateFormat, formatClock, formatDate, setClockFormat, setDateFormat, setTimestampFormat, timestampFormat, type ClockFormat, type DateFormat, type TimestampFormat } from '../utils/display-prefs';
 
 interface ConfirmAction {
   title: string;
@@ -774,6 +774,8 @@ export class SettingsPage extends LitElement {
 
   @state() private _trackableLimit = trackableChannelLimit();
   @state() private _tsFormat: TimestampFormat = timestampFormat();
+  @state() private _clock: ClockFormat = clockFormat();
+  @state() private _date: DateFormat = dateFormat();
 
   private _renderMessageSettings() {
     return html`
@@ -791,17 +793,39 @@ export class SettingsPage extends LitElement {
       <label class="message-setting">
         <span>
           <span class="message-setting-title">Message times</span>
-          <span class="message-setting-help">How times show under messages. Saved in this browser.</span>
+          <span class="message-setting-help">Under each message. Clock time adds the date for older days. Saved in this browser.</span>
         </span>
-        <select .value=${this._tsFormat} aria-label="Message times"
-          style="margin-left:auto;align-self:center;padding:6px 8px;border-radius:8px;border:1px solid var(--divider-color,#555);background:var(--card-background-color);color:var(--primary-text-color);font:inherit"
-          @change=${(e: Event) => {
-            this._tsFormat = (e.target as HTMLSelectElement).value as TimestampFormat;
-            setTimestampFormat(this._tsFormat);
-          }}>
+        <select .value=${this._tsFormat} aria-label="Message times" style="margin-left:auto;align-self:center;padding:6px 8px;border-radius:8px;border:1px solid var(--divider-color,#555);background:var(--card-background-color);color:var(--primary-text-color);font:inherit;max-width:55%"
+          @change=${(e: Event) => { this._tsFormat = (e.target as HTMLSelectElement).value as TimestampFormat; setTimestampFormat(this._tsFormat); }}>
           <option value="relative">Time since (5m)</option>
-          <option value="time">Time (19:26)</option>
-          <option value="datetime">Date and time (24 Nov, 19:26)</option>
+          <option value="time">Clock time</option>
+          <option value="datetime">Date and time</option>
+        </select>
+      </label>
+      <label class="message-setting">
+        <span>
+          <span class="message-setting-title">Clock</span>
+          <span class="message-setting-help">12 or 24 hour, or your device's own setting.</span>
+        </span>
+        <select .value=${this._clock} aria-label="Clock" style="margin-left:auto;align-self:center;padding:6px 8px;border-radius:8px;border:1px solid var(--divider-color,#555);background:var(--card-background-color);color:var(--primary-text-color);font:inherit;max-width:55%"
+          @change=${(e: Event) => { this._clock = (e.target as HTMLSelectElement).value as ClockFormat; setClockFormat(this._clock); }}>
+          <option value="system">System default (${formatClock(new Date(), false, 'system')})</option>
+          <option value="12">12 hour (${formatClock(new Date(), false, '12')})</option>
+          <option value="24">24 hour (${formatClock(new Date(), false, '24')})</option>
+        </select>
+      </label>
+      <label class="message-setting">
+        <span>
+          <span class="message-setting-title">Date</span>
+          <span class="message-setting-help">How dates are written.</span>
+        </span>
+        <select .value=${this._date} aria-label="Date" style="margin-left:auto;align-self:center;padding:6px 8px;border-radius:8px;border:1px solid var(--divider-color,#555);background:var(--card-background-color);color:var(--primary-text-color);font:inherit;max-width:55%"
+          @change=${(e: Event) => { this._date = (e.target as HTMLSelectElement).value as DateFormat; setDateFormat(this._date); }}>
+          <option value="system">System default (${formatDate(new Date(), true, 'system')})</option>
+          <option value="d-mon">${formatDate(new Date(), true, 'd-mon')}</option>
+          <option value="dmy">${formatDate(new Date(), true, 'dmy')} (day/month)</option>
+          <option value="mdy">${formatDate(new Date(), true, 'mdy')} (month/day)</option>
+          <option value="iso">${formatDate(new Date(), true, 'iso')} (ISO)</option>
         </select>
       </label>
     `;
