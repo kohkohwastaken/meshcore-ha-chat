@@ -49,6 +49,20 @@ export function locationCandidates(hass: HomeAssistant | undefined): Candidate[]
   return out.sort((a, b) => b.updated - a.updated);
 }
 
+/** Tracker entities linked to the logged-in user's person. */
+export function ownTrackers(hass: HomeAssistant | undefined): Set<string> {
+  const mine = new Set<string>();
+  const userId = hass?.user?.id;
+  if (!userId) return mine;
+  for (const [id, s] of Object.entries(hass?.states ?? {})) {
+    if (!id.startsWith('person.')) continue;
+    const a = s.attributes as Record<string, unknown>;
+    if (a.user_id !== userId) continue;
+    for (const t of (a.device_trackers as string[] | undefined) ?? []) mine.add(t);
+  }
+  return mine;
+}
+
 function ago(ms: number): string {
   const s = Math.max(0, (Date.now() - ms) / 1000);
   if (s < 60) return 'just now';
@@ -73,6 +87,8 @@ const dialogStyles = css`
   .row:hover { background: rgba(127,127,127,0.15); }
   .row .meta { font-size: 12px; opacity: 0.7; }
   .row .meta.stale { color: var(--warning-color, #ffa600); opacity: 1; }
+  .section { font-size: 12px; font-weight: 600; opacity: 0.7; padding: 8px 8px 4px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .section.toggle { background: none; border: none; color: inherit; cursor: pointer; text-align: left; width: 100%; font-family: inherit; }
   .empty { padding: 16px; opacity: 0.7; font-size: 14px; }
   .mapwrap { position: relative; height: 320px; margin: 0 16px; border-radius: 8px; overflow: hidden; }
   .mapwrap ha-map { height: 100%; display: block; }
@@ -91,6 +107,7 @@ export class MeshCoreLocationPicker extends LitElement {
   @state() private _tab: 'devices' | 'map' = 'map';
   @state() private _q = '';
   @state() private _mapOk: boolean | null = null;
+  @state() private _showOthers = false;
   private _fitted = false;
 
   static styles = dialogStyles;
@@ -158,7 +175,19 @@ export class MeshCoreLocationPicker extends LitElement {
 
   render() {
     const q = this._q.toLowerCase();
-    const items = locationCandidates(this.hass).filter((c) => !q || c.name.toLowerCase().includes(q) || c.entityId.includes(q));
+    const all = locationCandidates(this.hass).filter((c) => !q || c.name.toLowerCase().includes(q) || c.entityId.includes(q));
+    const mineIds = ownTrackers(this.hass);
+    const mine = all.filter((c) => mineIds.has(c.entityId));
+    const isAdmin = !!this.hass?.user?.is_admin;
+    // Admins can pick any device; everyone else only their own.
+    const others = isAdmin ? all.filter((c) => !mineIds.has(c.entityId)) : [];
+    const row = (c: Candidate) => {
+      const stale = Date.now() - c.updated > 3600_000;
+      return html`<button class="row" @click=${() => this._pick({ lat: c.lat, lon: c.lon, source: c.name, accuracy: c.accuracy })}>
+        <span>${c.name}</span>
+        <span class="meta ${stale ? 'stale' : ''}">Updated ${ago(c.updated)}${c.accuracy != null ? ` · ±${Math.round(c.accuracy)} m` : ''}</span>
+      </button>`;
+    };
     return html`
       <div class="backdrop" @click=${this._close}>
         <div class="dialog" @click=${(e: Event) => e.stopPropagation()}>
@@ -170,14 +199,13 @@ export class MeshCoreLocationPicker extends LitElement {
           ${this._tab === 'devices' ? html`
             <input class="search" placeholder="Search devices" .value=${this._q} @input=${(e: Event) => { this._q = (e.target as HTMLInputElement).value; }}>
             <div class="list">
-              ${items.length === 0 ? html`<div class="empty">No devices with a position. Phones with the Home Assistant app, and other trackers, show here.</div>` : ''}
-              ${items.map((c) => {
-                const stale = Date.now() - c.updated > 3600_000;
-                return html`<button class="row" @click=${() => this._pick({ lat: c.lat, lon: c.lon, source: c.name, accuracy: c.accuracy })}>
-                  <span>${c.name}</span>
-                  <span class="meta ${stale ? 'stale' : ''}">Updated ${ago(c.updated)}${c.accuracy != null ? ` · ±${Math.round(c.accuracy)} m` : ''}</span>
-                </button>`;
-              })}
+              <div class="section">Your devices</div>
+              ${mine.length === 0 ? html`<div class="empty">${q ? 'No match.' : 'No devices with a position are linked to you. In Home Assistant, add your phone\'s tracker to your person (Settings → People).'}</div>` : mine.map(row)}
+              ${others.length > 0 ? html`
+                <button class="section toggle" aria-expanded=${this._showOthers} @click=${() => { this._showOthers = !this._showOthers; }}>
+                  ${this._showOthers ? '▾' : '▸'} Other devices (${others.length})
+                </button>
+                ${this._showOthers || q ? others.map(row) : ''}` : ''}
             </div>
           ` : html`
             ${this._mapOk === false ? html`<div class="empty">${NO_MAP_NOTE}</div>` : html`

@@ -35,6 +35,8 @@ export interface HomeAssistant {
   themes: {
     darkMode: boolean;
   };
+  /** The logged-in Home Assistant user. */
+  user?: { id: string; name?: string; is_admin: boolean };
   language: string;
   locale: Record<string, unknown>;
   dockedSidebar: 'docked' | 'auto' | 'always_hidden';

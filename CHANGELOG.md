@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.8
+
+- Share location → From a device now lists your own devices first: the trackers linked to your person in Home Assistant.
+- Admins also get a collapsed "Other devices" section with everything else. Other users only see their own devices.
+
 ## 0.4.7
 
 - Share location: "Pick on map" is now the first option.
