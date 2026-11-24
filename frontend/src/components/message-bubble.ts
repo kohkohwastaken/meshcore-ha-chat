@@ -8,6 +8,7 @@ import './path-map';
 import type { QuotedMessage } from '../utils/reply-links';
 import { QUICK_REACTIONS, NODE_TYPE_NAMES, parseContact, parseLocation, type ReactionChip } from '../utils/rich-messages';
 import { addContact } from '../api';
+import './emoji-picker';
 
 /**
  * Generate a deterministic color from a string (e.g., pubkey prefix).
@@ -38,6 +39,9 @@ export class MessageBubble extends LitElement {
   /** Reactions on a message (supplied by the chat page). */
   @property({ attribute: false }) reactionsFor?: (id: string) => ReactionChip[];
   @state() private _contactAdded = '';
+  @state() private _reactOpen: string | null = null;
+  @state() private _reactAll = false;
+  @state() private _reactPicker = false;
   @property({ attribute: false }) quoteFor?: (msg: ChatMessage) => QuotedMessage | null;
 
   @state() private _selectedMessage: ChatMessage | null = null;
@@ -173,7 +177,17 @@ export class MessageBubble extends LitElement {
     .reaction { background: rgba(127, 127, 127, 0.25); border-radius: 10px; padding: 1px 6px; font-size: 0.85em; }
     .bubble.system.activity { cursor: pointer; font-size: 12px; }
     .bubble.system.activity:hover { text-decoration: underline; }
-    .reaction-list { padding: 6px 16px; border-bottom: 1px solid var(--divider-color, #e0e0e0); max-height: 160px; overflow-y: auto; }
+    .reaction-summary { padding: 8px 16px 6px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
+    .rs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .rs-chip { border: 1px solid var(--divider-color, #555); background: rgba(127,127,127,0.12); color: var(--primary-text-color);
+      border-radius: 12px; padding: 3px 10px; font-size: 13px; cursor: pointer; font-family: inherit; }
+    .rs-chip.mine { border-color: var(--primary-color, #03a9f4); }
+    .rs-chip.on { background: var(--primary-color, #03a9f4); border-color: var(--primary-color, #03a9f4); color: #fff; }
+    .rs-more { background: none; border: none; color: var(--primary-color, #03a9f4); padding: 4px 0; cursor: pointer; font: inherit; font-size: 13px; }
+    .reaction-list { padding-top: 6px; max-height: 180px; overflow-y: auto; }
+    .more-react { font-size: 20px !important; color: var(--secondary-text-color); }
+    .more-react.on { background: rgba(127,127,127,0.2) !important; }
+    .react-picker { padding: 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); display: flex; justify-content: center; }
     .reaction-entry { display: flex; gap: 8px; align-items: center; padding: 3px 0; font-size: 14px; }
     .re-emoji { width: 24px; text-align: center; }
     .re-who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -433,7 +447,7 @@ export class MessageBubble extends LitElement {
         : '';
 
     return html`
-      <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this._selectedMessage = msg; this._showRouteMap = false; this._confirmResend = false; }}>
+      <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this._selectedMessage = msg; this._showRouteMap = false; this._confirmResend = false; this._reactOpen = null; this._reactAll = false; this._reactPicker = false; }}>
         ${this._renderQuote(msg)}
         ${this._renderBody(msg)}
         ${this._renderReactions(msg)}
@@ -554,15 +568,35 @@ export class MessageBubble extends LitElement {
     return html`<div class="reactions">${chips.map((c) => html`<span class="reaction" title=${c.senders.join(', ')}>${c.emoji}${c.senders.length > 1 ? html` <b>${c.senders.length}</b>` : ''}</span>`)}</div>`;
   }
 
-  /** Who reacted, with what and when, in the message dialog. */
+  /**
+   * Reaction counts in the message dialog. Tapping a count lists who sent
+   * it and when (newest first, 5 until "Show all"); "N reactions" lists all.
+   */
   private _renderReactionList(msg: ChatMessage) {
     const chips = this.reactionsFor?.(msg.id) ?? [];
     if (chips.length === 0) return '';
-    const rows = chips
-      .flatMap((c) => c.who.map((w) => ({ emoji: c.emoji, ...w })))
-      .sort((a, b) => a.time.getTime() - b.time.getTime());
-    return html`<div class="reaction-list" aria-label="Reactions">
-      ${rows.map((r) => html`<div class="reaction-entry"><span class="re-emoji">${r.emoji}</span><span class="re-who">${r.sender}</span><span class="re-time">${formatTimestamp(r.time, this.timestampFormat)}</span></div>`)}
+    const total = chips.reduce((n, c) => n + c.who.length, 0);
+    const mine = new Set(chips.filter((c) => c.senders.includes('You')).map((c) => c.emoji));
+    const open = this._reactOpen;
+    const chip = (key: string, label: string, isMine = false) => html`<button
+      class="rs-chip ${open === key ? 'on' : ''} ${isMine ? 'mine' : ''}" aria-expanded=${open === key}
+      @click=${() => { this._reactOpen = open === key ? null : key; this._reactAll = false; }}>${label}</button>`;
+    let rows = open
+      ? chips.filter((c) => open === '*' || c.emoji === open)
+        .flatMap((c) => c.who.map((w) => ({ emoji: c.emoji, ...w })))
+        .sort((x, y) => y.time.getTime() - x.time.getTime())
+      : [];
+    const hidden = rows.length - 5;
+    if (!this._reactAll && hidden > 0) rows = rows.slice(0, 5);
+    return html`<div class="reaction-summary">
+      <div class="rs-chips">
+        ${[...chips].sort((x, y) => y.who.length - x.who.length).map((c) => chip(c.emoji, `${c.emoji} ${c.who.length}`, mine.has(c.emoji)))}
+        ${chip('*', `${total} ${total === 1 ? 'reaction' : 'reactions'}`)}
+      </div>
+      ${open ? html`<div class="reaction-list">
+        ${rows.map((r) => html`<div class="reaction-entry"><span class="re-emoji">${r.emoji}</span><span class="re-who">${r.sender}</span><span class="re-time">${formatTimestamp(r.time, this.timestampFormat)}</span></div>`)}
+        ${!this._reactAll && hidden > 0 ? html`<button class="rs-more" @click=${() => { this._reactAll = true; }}>Show all ${rows.length + hidden}</button>` : ''}
+      </div>` : ''}
     </div>`;
   }
 
@@ -662,7 +696,9 @@ export class MessageBubble extends LitElement {
           ${this._renderReactionList(msg)}
           ${!msg.isSystem ? html`<div class="reaction-row" role="group" aria-label="React">
             ${QUICK_REACTIONS.map((e) => html`<button title="React ${e}" @click=${() => this._react(msg, e)}>${e}</button>`)}
-          </div>` : ''}
+            <button class="more-react ${this._reactPicker ? 'on' : ''}" title="More emoji" aria-label="More emoji" @click=${() => { this._reactPicker = !this._reactPicker; }}>＋</button>
+          </div>
+          ${this._reactPicker ? html`<div class="react-picker" @emoji-picked=${(e: CustomEvent) => { e.stopPropagation(); this._reactPicker = false; this._react(msg, (e.detail as { emoji: string }).emoji); }}><meshcore-emoji-picker></meshcore-emoji-picker></div>` : ''}` : ''}
           <button class="message-dialog-action" @click=${() => this._copyText(msg.text)}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>Copy Text
           </button>
