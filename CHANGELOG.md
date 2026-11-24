@@ -2,7 +2,9 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
-## [Unreleased]
+## [0.4.0] - 2026-11-24
+
+First release of this fork, maintained by kohkohwastaken. Based on MeshCore Chat 0.3.2 by Matt Wolter.
 
 ### Added
 

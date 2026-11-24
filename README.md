@@ -2,11 +2,13 @@
 
 # MeshCore Chat for Home Assistant
 
+> **This is a fork** of [MeshCore Chat](https://github.com/mwolter805/meshcore-ha-chat) by Matt Wolter, maintained by [kohkohwastaken](https://github.com/kohkohwastaken). It adds node and route maps on Home Assistant's own map, with more to come; see the [changelog](CHANGELOG.md). Route matching is ported from [MeshCore Chattx](https://github.com/michalsiman/meshcore-ha-chattx) by Michal Šiman. Both are MIT-licensed. Report issues for this fork [here](https://github.com/kohkohwastaken/meshcore-ha-chat/issues).
+
 A sidebar chat panel and persistent message store for the [MeshCore](https://meshcore.io) mesh radio network that was written by an agent, thoroughly reviewed and carefully tested by a human.
 
 Works as a **companion** to the [core meshcore integration](https://github.com/meshcore-dev/meshcore-ha) — install both. This integration does not drive the radio itself; it adds a chat UI, message persistence, and search on top of the events and services exposed by the core integration.
 
-> **Status:** v0.3 in active development.
+> **Status:** v0.4 in active development.
 
 ## Features (v0.3)
 
@@ -92,7 +94,7 @@ Works as a **companion** to the [core meshcore integration](https://github.com/m
 
 ### HACS (custom repository)
 
-[![Open meshcore-ha-chat in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=mwolter805&repository=meshcore-ha-chat&category=integration)
+[![Open meshcore-ha-chat in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kohkohwastaken&repository=meshcore-ha-chat&category=integration)
 
 Click the badge above to open this repository in your HACS dashboard, or follow the manual steps:
 
