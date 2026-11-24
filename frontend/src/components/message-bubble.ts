@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { ChatMessage, MessageGroup, HomeAssistant } from '../types';
 import { formatTimestamp } from '../chat/message-parser';
-import { deliveryLabel } from '../utils/delivery-label';
+import { canResend, deliveryLabel } from '../utils/delivery-label';
 import type { QuotedMessage } from '../utils/reply-links';
 import { NODE_TYPE_NAMES, parseContact, parseLocation, type ReactionChip } from '../utils/rich-messages';
 import { addContact } from '../api';
@@ -168,8 +168,12 @@ export class MessageBubble extends LitElement {
     .reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .reaction { background: rgba(127, 127, 127, 0.25); border-radius: 10px; padding: 1px 6px; font-size: 0.85em; }
     .bubble.selected { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 1px; }
-    .bubble.system.activity { cursor: pointer; font-size: 12px; }
-    .bubble.system.activity:hover { text-decoration: underline; }
+    .bubble.system.activity { cursor: default; font-size: 12px; }
+    .activity-text { background: none; border: none; padding: 0; font: inherit; color: inherit; font-style: italic; cursor: pointer; }
+    @media (hover: hover) { .activity-text:hover { text-decoration: underline; } }
+    .activity-status.bad { color: var(--warning-color, #ffa600); font-style: normal; }
+    .activity-retry { background: none; border: none; padding: 0; font: inherit; font-style: normal; color: var(--primary-color, #03a9f4);
+      text-decoration: underline; cursor: pointer; }
     .reaction-summary { padding: 8px 16px 6px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
     .rs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
     .rs-chip { border: 1px solid var(--divider-color, #555); background: rgba(127,127,127,0.12); color: var(--primary-text-color);
@@ -424,11 +428,18 @@ export class MessageBubble extends LitElement {
 
   private _renderBubble(msg: ChatMessage) {
     if (msg.activityTarget) {
-      return html`<div class="bubble system activity" data-msg-id=${msg.id} title="Show the message"
-        @click=${(e: Event) => {
+      const status = msg.deliveryStatus ? deliveryLabel(msg.deliveryStatus) : '';
+      const retry = canResend(true, msg.deliveryStatus) && msg.activityText;
+      return html`<div class="bubble system activity" data-msg-id=${msg.id}>
+        <button class="activity-text" title="Show the message" @click=${(e: Event) => {
           e.stopPropagation();
           this.dispatchEvent(new CustomEvent('jump-to-message', { detail: { id: msg.activityTarget }, bubbles: true, composed: true }));
-        }}>${msg.text} · ${formatTimestamp(msg.timestamp, this.timestampFormat)}</div>`;
+        }}>${msg.text}</button> · ${status ? html`<span class="activity-status ${retry ? 'bad' : ''}">${status}</span> · ` : ''}${formatTimestamp(msg.timestamp, this.timestampFormat)}
+        ${retry ? html` · <button class="activity-retry" @click=${(e: Event) => {
+          e.stopPropagation();
+          this.dispatchEvent(new CustomEvent('resend-message', { detail: { text: msg.activityText }, bubbles: true, composed: true }));
+        }}>Resend</button>` : ''}
+      </div>`;
     }
     const bubbleClasses = {
       bubble: true,

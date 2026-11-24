@@ -160,6 +160,22 @@ export interface ReactionChip {
   who: Array<{ sender: string; time: Date }>;
 }
 
+/** The "You reacted 👍 to Dave: “Test”" line for a reaction you sent. */
+function logLine(m: ChatMessage, emoji: string, target: ChatMessage): ChatMessage {
+  const snippet = target.text.length > 40 ? `${target.text.slice(0, 40)}…` : target.text;
+  return {
+    ...m,
+    id: `react_${m.id}`,
+    isSystem: true,
+    // Stays outgoing so it never counts as unread.
+    isOutgoing: true,
+    text: `You reacted ${emoji} to ${target.sender}: “${snippet}”`,
+    mentions: [],
+    activityTarget: target.id,
+    activityText: m.text,
+  };
+}
+
 /**
  * Pull reactions out of the message list and attach them to the message
  * whose hash they carry. Reactions that match nothing are dropped, as the
@@ -194,7 +210,16 @@ export function collectReactions(messages: ChatMessage[], isChannel = true): { v
     if (!target) continue;
     const sender = m.isOutgoing ? 'You' : m.sender;
     const dedup = `${target.id}|${sender}|${r.emoji}`;
-    if (seen.has(dedup)) continue;
+    if (seen.has(dedup)) {
+      // The same reaction again (a resend): your log line moves to the newest
+      // copy, so it shows that copy's delivery state.
+      if (m.isOutgoing) {
+        const i = visible.findIndex((x) => x.activityTarget === target.id && x.activityText === m.text);
+        if (i >= 0) visible.splice(i, 1);
+        visible.push(logLine(m, r.emoji, target));
+      }
+      continue;
+    }
     seen.add(dedup);
     const chips = reactions.get(target.id) ?? [];
     const chip = chips.find((c) => c.emoji === r.emoji);
@@ -204,19 +229,7 @@ export function collectReactions(messages: ChatMessage[], isChannel = true): { v
     } else chips.push({ emoji: r.emoji, senders: [sender], who: [{ sender, time: m.timestamp }] });
     reactions.set(target.id, chips);
     // Your own reactions also get a small line in the chat, where you sent them.
-    if (m.isOutgoing) {
-      const snippet = target.text.length > 40 ? `${target.text.slice(0, 40)}…` : target.text;
-      visible.push({
-        ...m,
-        id: `react_${m.id}`,
-        isSystem: true,
-        // Stays outgoing so it never counts as unread.
-        isOutgoing: true,
-        text: `You reacted ${r.emoji} to ${target.sender}: “${snippet}”`,
-        mentions: [],
-        activityTarget: target.id,
-      });
-    }
+    if (m.isOutgoing) visible.push(logLine(m, r.emoji, target));
   }
   return { visible, reactions };
 }

@@ -138,6 +138,8 @@ export interface ChatMessage {
   isSystem: boolean;
   /** For a "You reacted" log line: the message it points at. */
   activityTarget?: string;
+  /** For a "You reacted" line: the reaction as sent, so it can be resent. */
+  activityText?: string;
   /** Original logbook message text */
   raw: string;
   /** Extracted @[Name] and @Name mentions */

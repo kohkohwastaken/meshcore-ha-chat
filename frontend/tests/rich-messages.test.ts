@@ -48,6 +48,16 @@ describe('rich messages', () => {
     expect(out.reactions.get('a')).toMatchObject([{ emoji: '🔥', senders: ['Eve'] }]);
     expect(out.visible.map((x) => x.id)).toEqual(['a']); // others' reactions get no log line
   });
+  it('a resent reaction moves your log line to the newest copy', () => {
+    const a = { ...m('a', 'Dave', 'Test', 100), senderTimestamp: 90 };
+    const text = formatReaction('👍', a, true);
+    const r1 = { ...m('r1', 'Me', text, 200, true), deliveryStatus: { status: 'sent', repeaterCount: 0, repeatsObservable: true } };
+    const r2 = { ...m('r2', 'Me', text, 300, true), deliveryStatus: { status: 'sent', repeaterCount: 2 } };
+    const out = collectReactions([a, r1, r2] as never);
+    expect(out.visible.map((x) => x.id)).toEqual(['a', 'react_r2']);
+    expect(out.visible[1]).toMatchObject({ activityText: text, deliveryStatus: { repeaterCount: 2 } });
+    expect(out.reactions.get('a')?.[0].who.length).toBe(1);
+  });
   it('drops reactions that match nothing', () => {
     const r = m('r', 'Bob', '@[Dave]🔥\nabcdefgh', 300);
     const out = collectReactions([m('a', 'Dave', 'Test', 100), r]);
