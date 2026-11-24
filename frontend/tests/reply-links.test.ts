@@ -1,3 +1,4 @@
+// @vitest-environment happy-dom
 import { describe, it, expect, beforeEach } from 'vitest';
 import { findQuoted, rememberReply } from '../src/utils/reply-links';
 import type { ChatMessage } from '../src/types';
