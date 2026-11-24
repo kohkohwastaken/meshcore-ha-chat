@@ -19,6 +19,16 @@ function senderColorFromPrefix(prefix: string): string {
   return colors[Math.abs(hash) % colors.length];
 }
 
+/** Hops a received message took, from its first heard copy; null when unknown. */
+export function hopCount(msg: ChatMessage): number | null {
+  const e = msg.rxLogData?.[0];
+  if (!e) return null;
+  const hops = e.hop_count as number | undefined;
+  if (typeof hops === 'number') return hops;
+  const nodes = e.path_nodes as unknown[] | undefined;
+  return Array.isArray(nodes) ? nodes.length : 0;
+}
+
 @customElement('meshcore-message-bubble')
 export class MessageBubble extends LitElement {
   @property({ type: Object }) group?: MessageGroup;
@@ -440,12 +450,13 @@ export class MessageBubble extends LitElement {
           : msg.floodScope
         : '';
 
+    const hops = !msg.isOutgoing && !msg.isSystem ? hopCount(msg) : null;
     return html`
       <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this.dispatchEvent(new CustomEvent('message-selected', { detail: { msg }, bubbles: true, composed: true })); }}>
         ${this._renderQuote(msg)}
         ${this._renderBody(msg)}
         ${this._renderReactions(msg)}
-        <div class="timestamp">${statusLabel ? html`<span class="delivery-status">${statusLabel}</span> · ` : ''}${ts}${scopeLabel ? html` · <span class="flood-scope">${scopeLabel}</span>` : ''}</div>
+        <div class="timestamp">${statusLabel ? html`<span class="delivery-status">${statusLabel}</span> · ` : ''}${ts}${hops !== null ? html` · <span class="hops">${hops} hop${hops === 1 ? '' : 's'}</span>` : ''}${scopeLabel ? html` · <span class="flood-scope">${scopeLabel}</span>` : ''}</div>
       </div>
     `;
   }

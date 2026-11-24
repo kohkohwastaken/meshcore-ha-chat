@@ -21,6 +21,7 @@ import '../components/emoji-picker';
 import '../components/share-pickers';
 import '../components/message-panel';
 import type { PickedLocation } from '../components/share-pickers';
+import { DISPLAY_PREFS_EVENT, timestampFormat } from '../utils/display-prefs';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
 
 @customElement('meshcore-chat-page')
@@ -660,6 +661,7 @@ export class ChatPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
+    window.addEventListener(DISPLAY_PREFS_EVENT, this._onLimitSettingChanged);
     if (this.config && !this._messageStore) {
       this._messageStore = new MessageStore(this.config);
       this._messageStore.setOnChange(() => this.requestUpdate());
@@ -702,6 +704,7 @@ export class ChatPage extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     window.removeEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
+    window.removeEventListener(DISPLAY_PREFS_EVENT, this._onLimitSettingChanged);
     if (this._messageStore) {
       this._messageStore.destroy();
       this._messageStore = null;
@@ -991,7 +994,7 @@ export class ChatPage extends LitElement {
       .getHass=${this._getHass}
       .entryId=${this.config?.entry_id}
       ?isChannel=${this._isChannelSelected()}
-      .timestampFormat=${this.config?.timestamp_format ?? 'relative'}
+      .timestampFormat=${timestampFormat(this.config?.timestamp_format ?? 'relative')}
       .senderConversation=${contact && contact.pubkey_prefix !== this.selectedId ? contact.pubkey_prefix : undefined}
       @panel-close=${() => { this._selMsgId = null; }}
       @react-to-message=${(e: CustomEvent) => { e.stopPropagation(); this._onReact(e); }}
@@ -1332,7 +1335,7 @@ export class ChatPage extends LitElement {
           .reactionsFor=${this._reactionsFor}
           .entryId=${this.config?.entry_id}
           ?isChannel=${isChannel}
-          .timestampFormat=${this.config?.timestamp_format ?? 'relative'}></meshcore-message-bubble>
+          .timestampFormat=${timestampFormat(this.config?.timestamp_format ?? 'relative')}></meshcore-message-bubble>
       `);
       messageIdx++;
     }

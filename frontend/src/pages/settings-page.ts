@@ -18,6 +18,7 @@ import type { CompanionDeviceDescriptor } from '../components/node-summary';
 import { panelStyles } from '../styles';
 import { loadMeshcoreEntityRegistry, type EntityInfo } from '../utils/classify-entity';
 import { setTrackableChannelLimit, trackableChannelLimit } from '../utils/message-limit';
+import { setTimestampFormat, timestampFormat, type TimestampFormat } from '../utils/display-prefs';
 
 interface ConfirmAction {
   title: string;
@@ -772,6 +773,7 @@ export class SettingsPage extends LitElement {
   }
 
   @state() private _trackableLimit = trackableChannelLimit();
+  @state() private _tsFormat: TimestampFormat = timestampFormat();
 
   private _renderMessageSettings() {
     return html`
@@ -785,6 +787,22 @@ export class SettingsPage extends LitElement {
           <span class="message-setting-title">Keep channel messages trackable</span>
           <span class="message-setting-help">Limits channel messages to 155 bytes including your radio's name, so repeats of every message you send can be detected. Off allows the full 160 bytes, but messages over 155 always show as Unheard. Saved in this browser.</span>
         </span>
+      </label>
+      <label class="message-setting">
+        <span>
+          <span class="message-setting-title">Message times</span>
+          <span class="message-setting-help">How times show under messages. Saved in this browser.</span>
+        </span>
+        <select .value=${this._tsFormat} aria-label="Message times"
+          style="margin-left:auto;align-self:center;padding:6px 8px;border-radius:8px;border:1px solid var(--divider-color,#555);background:var(--card-background-color);color:var(--primary-text-color);font:inherit"
+          @change=${(e: Event) => {
+            this._tsFormat = (e.target as HTMLSelectElement).value as TimestampFormat;
+            setTimestampFormat(this._tsFormat);
+          }}>
+          <option value="relative">Time since (5m)</option>
+          <option value="time">Time (19:26)</option>
+          <option value="datetime">Date and time (24 Nov, 19:26)</option>
+        </select>
       </label>
     `;
   }

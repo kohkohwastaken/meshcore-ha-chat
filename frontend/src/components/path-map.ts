@@ -54,6 +54,7 @@ export class PathMap extends LitElement {
   @state() private _pathIndex = 0;
   /** Home Assistant's map is available: null while loading. */
   @state() private _native: boolean | null = null;
+  @state() private _expanded = false;
   /** The route last drawn, for the native map (set during render, applied in updated). */
   private _route: RoutePoint[] = [];
   private _nativeKey = '';
@@ -92,10 +93,36 @@ export class PathMap extends LitElement {
       display: block;
       height: 100%;
     }
+    .wrap.expanded {
+      position: fixed;
+      inset: 5vh 5vw;
+      height: auto;
+      margin: 0;
+      z-index: 1001;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    }
+    .backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.6);
+    }
     .controls {
       position: absolute;
       top: 6px;
       right: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 2;
+    }
+    .controls svg {
+      width: 16px;
+      height: 16px;
+      display: block;
+      margin: auto;
     }
     .controls button {
       width: 30px;
@@ -135,8 +162,14 @@ export class PathMap extends LitElement {
     }
   `;
 
+  disconnectedCallback() {
+    window.removeEventListener('keydown', this._onKey, true);
+    super.disconnectedCallback();
+  }
+
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener('keydown', this._onKey, true);
     if (this._native === null) void loadHaMap().then((ok) => { this._native = ok; });
     const hass = this.getHass?.();
     if (hass && !this._meLoaded) {
@@ -188,12 +221,22 @@ export class PathMap extends LitElement {
     if (!route.some((p) => p.lat !== null && p.lon !== null)) {
       return html`<div class="note">No repeater on this path has a known position.</div>`;
     }
-    return html`<div class="wrap"
+    const exp = this._expanded;
+    return html`
+    ${exp ? html`<div class="backdrop" @click=${(e: Event) => { e.stopPropagation(); this._setExpanded(false); }}></div>` : nothing}
+    <div class="wrap ${exp ? 'expanded' : ''}"
         @hass-more-info=${(e: Event) => e.stopPropagation()}
         @click=${(e: Event) => e.stopPropagation()}>
       <ha-map></ha-map>
       <div class="controls">
-        <button aria-label="Fit route" title="Fit route" @click=${() => this._fitNative()}>⤢</button>
+        <button aria-label="Re-centre on the route" title="Re-centre on the route" @click=${() => this._fitNative()}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+        </button>
+        <button aria-label=${exp ? 'Close large map' : 'Open a larger map'} title=${exp ? 'Close' : 'Larger map'} @click=${() => this._setExpanded(!exp)}>
+          ${exp
+            ? html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>`
+            : html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>`}
+        </button>
       </div>
     </div>`;
   }
@@ -229,6 +272,21 @@ export class PathMap extends LitElement {
     void colourMarkers(map, (id) => colours.get(id));
     this._fitNative();
   }
+
+  /** Show the map large, over the page; Escape or the backdrop closes it. */
+  private _setExpanded(on: boolean) {
+    this._expanded = on;
+    // Refit once the map has its new size.
+    setTimeout(() => this._fitNative(), 250);
+  }
+
+  private _onKey = (e: KeyboardEvent) => {
+    if (e.key === 'Escape' && this._expanded) {
+      // Close just the large map, not the message panel under it.
+      e.stopPropagation();
+      this._setExpanded(false);
+    }
+  };
 
   private _fitNative() {
     const map = this.renderRoot.querySelector('ha-map') as HaMapElement | null;

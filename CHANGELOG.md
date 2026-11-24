@@ -9,6 +9,11 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 - Both show who sent it, when, its hop count and SNR, the message, reactions, and Reply / Copy / Route / Message (opens a DM with the sender when they're a contact). Resend shows for your own unheard or failed messages.
 - Phone: the route map opens with Route; the full route and received time are under Details. Desktop: the route map, who reacted and the details are always shown. The open message is outlined in the chat.
 
+### Added
+- Route map: a "Larger map" button opens it big over the page (Esc or tap outside to close). The old ⤢ button is now a re-centre icon, as that's what it does.
+- Received messages show their hop count next to the time ("5m · 7 hops").
+- Settings → Messages → Message times: time since (5m), time (19:26), or date and time. Saved in this browser.
+
 ### Fixed
 - Tapping the route no longer closes the message menu.
 
