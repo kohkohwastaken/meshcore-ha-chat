@@ -5,6 +5,7 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 ## 0.4.10
 
 ### Fixed
+- Tapping the route in the message dialog copies it and keeps the dialog open, showing "Copied", instead of closing it.
 - The Home Assistant phone apps kept running an old cached copy of the panel after updates. The panel's address now changes with each build, so apps load the new version after a restart.
 
 ### Contacts

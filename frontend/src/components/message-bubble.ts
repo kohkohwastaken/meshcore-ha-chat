@@ -42,6 +42,7 @@ export class MessageBubble extends LitElement {
   @state() private _reactOpen: string | null = null;
   @state() private _reactAll = false;
   @state() private _reactPicker = false;
+  @state() private _routeCopied = false;
   @property({ attribute: false }) quoteFor?: (msg: ChatMessage) => QuotedMessage | null;
 
   @state() private _selectedMessage: ChatMessage | null = null;
@@ -374,6 +375,7 @@ export class MessageBubble extends LitElement {
       border-top: 1px solid var(--divider-color, #e0e0e0);
     }
 
+    .route-copied { color: var(--primary-color, #03a9f4); font-family: inherit; white-space: nowrap; }
     .message-dialog-route {
       padding: 12px 16px;
       font-size: 12px;
@@ -722,8 +724,8 @@ export class MessageBubble extends LitElement {
           ${this._renderResend(msg)}
           ${hasRoute
             ? html`
-                <div class="message-dialog-route" @click=${() => this._copyText(routeText)}>
-                  Route: ${routeText}
+                <div class="message-dialog-route" title="Tap to copy the route" @click=${() => this._copyText(routeText, true)}>
+                  Route: ${routeText}${this._routeCopied ? html` <span class="route-copied">Copied</span>` : ''}
                 </div>
               `
             : html``}
@@ -755,7 +757,7 @@ export class MessageBubble extends LitElement {
     `;
   }
 
-  private async _copyText(text: string) {
+  private async _copyText(text: string, keepOpen = false) {
     try {
       await navigator.clipboard.writeText(text);
     } catch {
@@ -768,6 +770,11 @@ export class MessageBubble extends LitElement {
       textarea.select();
       document.execCommand('copy');
       document.body.removeChild(textarea);
+    }
+    if (keepOpen) {
+      this._routeCopied = true;
+      setTimeout(() => { this._routeCopied = false; }, 1500);
+      return;
     }
     this._selectedMessage = null;
   }
