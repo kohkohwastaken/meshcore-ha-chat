@@ -263,8 +263,7 @@ export class PathMap extends LitElement {
       if (!entityId || colours.has(entityId)) continue;
       colours.set(entityId, p.kind === 'sender' ? '#43a047' : TYPE_COLORS[2]);
       const name = p.name || 'Unknown';
-      const prefix = p.prefix ? ` (${p.prefix.toUpperCase()})` : '';
-      titles.set(entityId, p.kind === 'repeater' ? `${name}${prefix}` : `Sender: ${name}`);
+      titles.set(entityId, p.kind === 'repeater' ? name : `Sender: ${name}`);
       // Repeaters by hop number, the sender by its name, as in the list below.
       entities.push({ entity_id: entityId, label_mode: 'name', name: p.kind === 'repeater' ? String(hop) : (p.name || 'Sender') });
     }
@@ -277,8 +276,7 @@ export class PathMap extends LitElement {
       .filter((p) => p.lat !== null && p.lon !== null)
       .map((p) => {
         const name = p.name || 'Unknown';
-        const prefix = p.prefix ? ` (${p.prefix.toUpperCase()})` : '';
-        const tooltip = p.kind === 'me' ? 'You' : p.kind === 'sender' ? `Sender: ${name}` : `${name}${prefix}`;
+        const tooltip = p.kind === 'me' ? 'You' : p.kind === 'sender' ? `Sender: ${name}` : name;
         return { point: [p.lat!, p.lon!] as [number, number], tooltip };
       });
     usePointTooltips(map);
