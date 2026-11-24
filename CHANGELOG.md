@@ -2,7 +2,7 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
-## [Unreleased]
+## [0.4.1] - 2026-11-24
 
 ### Added
 
