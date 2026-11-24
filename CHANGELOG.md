@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.9
+
+- Share location: tapping a device now shows it on the map first, with when it last updated and its accuracy. Choose "Use this location" to attach it, or Back.
+- The location map shows your Home Assistant zones for reference.
+
 ## 0.4.8
 
 - Share location → From a device now lists your own devices first: the trackers linked to your person in Home Assistant.

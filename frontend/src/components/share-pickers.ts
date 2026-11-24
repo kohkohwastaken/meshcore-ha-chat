@@ -108,6 +108,8 @@ export class MeshCoreLocationPicker extends LitElement {
   @state() private _q = '';
   @state() private _mapOk: boolean | null = null;
   @state() private _showOthers = false;
+  /** A device being previewed on the map before it's attached. */
+  @state() private _preview: Candidate | null = null;
   private _fitted = false;
 
   static styles = dialogStyles;
@@ -139,11 +141,13 @@ export class MeshCoreLocationPicker extends LitElement {
     if (c) this._pick({ lat: c.lat, lon: c.lng, source: 'Picked on map' });
   }
 
-  /** Start the map on home once its engine is up. */
-  private async _centreOnHome() {
+  /** Centre the map on a device being previewed, else on home, once its engine is up. */
+  private async _centreMap() {
     const home = this.hass?.states['zone.home']?.attributes as Record<string, number> | undefined;
-    if (home?.latitude == null) return;
-    const centre: [number, number] = [home.latitude, home.longitude];
+    const centre: [number, number] | null = this._preview
+      ? [this._preview.lat, this._preview.lon]
+      : home?.latitude != null ? [home.latitude, home.longitude] : null;
+    if (!centre) return;
     for (let i = 0; i < 40; i++) {
       const map = this._engine();
       if (!map) return;
@@ -168,9 +172,11 @@ export class MeshCoreLocationPicker extends LitElement {
     const map = this.renderRoot.querySelector('ha-map') as HaMapElement | null;
     if (!map || this._fitted) return;
     this._fitted = true;
-    map.entities = [];
+    // Zones are shown for reference; the previewed device as a marker.
+    const zones = Object.keys(this.hass?.states ?? {}).filter((id) => id.startsWith('zone.'));
+    map.entities = this._preview ? [...zones, this._preview.entityId] : zones;
     map.autoFit = false;
-    void this._centreOnHome();
+    void this._centreMap();
   }
 
   render() {
@@ -183,7 +189,7 @@ export class MeshCoreLocationPicker extends LitElement {
     const others = isAdmin ? all.filter((c) => !mineIds.has(c.entityId)) : [];
     const row = (c: Candidate) => {
       const stale = Date.now() - c.updated > 3600_000;
-      return html`<button class="row" @click=${() => this._pick({ lat: c.lat, lon: c.lon, source: c.name, accuracy: c.accuracy })}>
+      return html`<button class="row" @click=${() => { this._preview = c; this._tab = 'map'; this._fitted = false; }}>
         <span>${c.name}</span>
         <span class="meta ${stale ? 'stale' : ''}">Updated ${ago(c.updated)}${c.accuracy != null ? ` · ±${Math.round(c.accuracy)} m` : ''}</span>
       </button>`;
@@ -193,8 +199,8 @@ export class MeshCoreLocationPicker extends LitElement {
         <div class="dialog" @click=${(e: Event) => e.stopPropagation()}>
           <header>Share a location<button class="x" aria-label="Close" @click=${this._close}>✕</button></header>
           <div class="tabs">
-            <button class=${this._tab === 'map' ? 'on' : ''} @click=${() => { this._tab = 'map'; this._fitted = false; }}>Pick on map</button>
-            <button class=${this._tab === 'devices' ? 'on' : ''} @click=${() => { this._tab = 'devices'; }}>From a device</button>
+            <button class=${this._tab === 'map' && !this._preview ? 'on' : ''} @click=${() => { this._tab = 'map'; this._preview = null; this._fitted = false; }}>Pick on map</button>
+            <button class=${this._tab === 'devices' || this._preview ? 'on' : ''} @click=${() => { this._tab = 'devices'; this._preview = null; }}>From a device</button>
           </div>
           ${this._tab === 'devices' ? html`
             <input class="search" placeholder="Search devices" .value=${this._q} @input=${(e: Event) => { this._q = (e.target as HTMLInputElement).value; }}>
@@ -209,13 +215,18 @@ export class MeshCoreLocationPicker extends LitElement {
             </div>
           ` : html`
             ${this._mapOk === false ? html`<div class="empty">${NO_MAP_NOTE}</div>` : html`
-              <div class="hint">Move the map so the pin is on the spot.</div>
-              <div class="mapwrap">
-                ${this._mapOk ? html`<ha-map .hass=${this.hass}></ha-map><div class="pin">📍</div>` : ''}
+              ${this._preview ? html`<div class="hint"><strong>${this._preview.name}</strong> · updated ${ago(this._preview.updated)}${this._preview.accuracy != null ? ` · ±${Math.round(this._preview.accuracy)} m` : ''}</div>`
+                : html`<div class="hint">Move the map so the pin is on the spot. Your zones are shown for reference.</div>`}
+              <div class="mapwrap" @hass-more-info=${(e: Event) => e.stopPropagation()}>
+                ${this._mapOk ? html`<ha-map .hass=${this.hass}></ha-map>${this._preview ? '' : html`<div class="pin">📍</div>`}` : ''}
               </div>
               <footer>
-                <button class="secondary" @click=${this._close}>Cancel</button>
-                <button class="primary" ?disabled=${!this._mapOk} @click=${this._useMapCentre}>Use this spot</button>
+                ${this._preview ? html`
+                  <button class="secondary" @click=${() => { this._preview = null; this._tab = 'devices'; }}>Back</button>
+                  <button class="primary" @click=${() => { const c = this._preview!; this._pick({ lat: c.lat, lon: c.lon, source: c.name, accuracy: c.accuracy }); }}>Use this location</button>`
+                : html`
+                  <button class="secondary" @click=${this._close}>Cancel</button>
+                  <button class="primary" ?disabled=${!this._mapOk} @click=${this._useMapCentre}>Use this spot</button>`}
               </footer>`}
           `}
         </div>
