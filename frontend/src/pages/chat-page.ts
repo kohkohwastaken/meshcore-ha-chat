@@ -175,11 +175,17 @@ export class ChatPage extends LitElement {
       min-width: 0;
     }
 
+    .byte-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 3px 14px 0;
+      min-height: 16px;
+    }
+
     .byte-counter {
-      position: absolute;
-      right: 14px;
-      top: 21px;
-      transform: translateY(-50%);
+      margin-left: auto;
+      white-space: nowrap;
       font-size: 11px;
       font-variant-numeric: tabular-nums;
       color: var(--secondary-text-color, #727272);
@@ -191,14 +197,17 @@ export class ChatPage extends LitElement {
 
     .byte-note {
       font-size: 12px;
-      padding: 4px 14px 0;
+    }
+
+    /* Keep the send button level with the text box, above the counter row. */
+    .input-area .send-button {
+      margin-bottom: 19px;
     }
     .byte-note.low { color: var(--warning-color, #ff9800); }
     .byte-note.over { color: var(--error-color, #db4437); }
 
     .input-area textarea {
       flex: 1;
-      padding-right: 64px !important;
       padding: 10px 14px;
       border: 1px solid var(--input-border);
       border-radius: 20px;
@@ -953,14 +962,16 @@ export class ChatPage extends LitElement {
     const level = budget.over ? 'over' : budget.left < LOW_BYTES ? 'low' : '';
     let note = html``;
     if (budget.over) {
-      note = html`<div class="byte-note over" role="status">${-budget.left} ${-budget.left === 1 ? 'byte' : 'bytes'} too long. Shorten it to send.</div>`;
+      note = html`<span class="byte-note over">${-budget.left} ${-budget.left === 1 ? 'byte' : 'bytes'} too long. Shorten it to send.</span>`;
     } else if (budget.echoUndetectable) {
-      note = html`<div class="byte-note low" role="status">Long message: repeats can't be detected, so it'll show as Unheard.</div>`;
+      note = html`<span class="byte-note low">Long message: repeats can't be detected, so it'll show as Unheard.</span>`;
     }
     return html`
-      <span class="byte-counter ${level}"
-        title="Bytes left in this message. Accented letters use 2 bytes, most emoji 4 or more.">${budget.over ? budget.left : `${budget.left} left`}</span>
-      ${note}
+      <div class="byte-row" role="status">
+        ${note}
+        <span class="byte-counter ${level}"
+          title="Bytes left in this message. Accented letters use 2 bytes, most emoji 4 or more.">${budget.over ? budget.left : `${budget.left} left`}</span>
+      </div>
     `;
   }
 

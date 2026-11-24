@@ -29,7 +29,7 @@ export function utf8Bytes(text: string): number {
 }
 
 export interface MessageBudget {
-  /** Bytes the text uses (as sent: trimmed). */
+  /** Bytes the text uses, as typed. */
   used: number;
   /** Bytes allowed for the text itself. */
   limit: number;
@@ -42,11 +42,12 @@ export interface MessageBudget {
 }
 
 /**
- * The budget for a message as it would be sent. The panel trims the text
- * before sending, so the trimmed text is what counts.
+ * The budget for the text exactly as typed. The panel trims spaces from the
+ * ends before sending, so this can over-count by a trailing space or two,
+ * but every key typed visibly changes the count.
  */
 export function messageBudget(text: string, channelSender: string | null): MessageBudget {
-  const used = utf8Bytes(text.trim());
+  const used = utf8Bytes(text);
   const prefix = channelSender === null ? 0 : utf8Bytes(`${channelSender}: `);
   const limit = Math.max(0, TEXT_MAX_BYTES - prefix);
   const left = limit - used;

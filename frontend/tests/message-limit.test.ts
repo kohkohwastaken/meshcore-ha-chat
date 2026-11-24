@@ -25,8 +25,9 @@ describe('message byte budget', () => {
     expect(messageBudget('x'.repeat(155), 'wiki').over).toBe(true);
   });
 
-  it('counts the text as sent, trimmed', () => {
-    expect(messageBudget('  hi \n', null).used).toBe(2);
+  it('counts the text as typed, including spaces', () => {
+    expect(messageBudget('hi ', null).used).toBe(3);
+    expect(messageBudget('  hi \n', null).used).toBe(6);
   });
 
   it('flags channel messages whose repeats cannot be detected', () => {

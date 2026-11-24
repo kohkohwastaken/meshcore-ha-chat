@@ -2,6 +2,13 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## [0.4.2] - 2026-11-24
+
+### Changed
+
+- **The bytes-left counter sits under the message box**, on its own line with any note, instead of inside the box.
+- **It counts the text exactly as typed**, so typing a space changes the count straight away. (Spaces at the ends are still trimmed when sending.)
+
 ## [0.4.1] - 2026-11-24
 
 ### Added
