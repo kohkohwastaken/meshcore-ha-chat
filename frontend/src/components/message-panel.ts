@@ -265,6 +265,12 @@ export class MeshCoreMessagePanel extends LitElement {
       ${m.isOutgoing ? 'Sent' : 'Received'}: ${when}
       ${delivery ? html`<br>${delivery}` : ''}`;
 
+    const actions = html`<div class="actions">
+        ${!m.isOutgoing ? html`<button class="act" @click=${this._reply}>${this._icon('M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z')}Reply</button>` : ''}
+        <button class="act" @click=${this._copy}>${this._icon('M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z')}${this._copied ? 'Copied' : 'Copy'}</button>
+        ${mapAvailable && !side ? html`<button class="act ${this._showMap ? 'on' : ''}" aria-expanded=${this._showMap} @click=${() => { this._showMap = !this._showMap; }}>${this._icon('M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z')}Route</button>` : ''}
+        ${!m.isOutgoing && this.senderConversation ? html`<button class="act" @click=${() => { this._emit('open-conversation', { id: this.senderConversation }); this._close(); }}>${this._icon('M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z')}Message</button>` : ''}
+      </div>`;
     return html`
       ${side ? html`<div class="side-head">Message<button class="x" aria-label="Close" @click=${this._close}>✕</button></div>` : html`<div class="grab"></div>`}
       <div>
@@ -272,6 +278,7 @@ export class MeshCoreMessagePanel extends LitElement {
         <div class="preview">${m.text}</div>
         ${side ? html`<div class="meta signal">${this._signalLine(m, when)}</div>` : ''}
       </div>
+      ${side ? actions : ''}
       ${side ? html`<div>${this._renderReactions()}</div>` : this.reactions.length ? this._renderReactions() : ''}
       <div class="reacts" role="group" aria-label="React">
         ${QUICK_REACTIONS.map((e) => html`<button class="em" aria-label="React ${e}" @click=${() => this._react(e)}>${e}</button>`)}
@@ -279,12 +286,7 @@ export class MeshCoreMessagePanel extends LitElement {
           @click=${() => { this._picker = !this._picker; }}>＋</button>
       </div>
       ${this._picker ? html`<div class="picker" @emoji-picked=${(e: CustomEvent) => { e.stopPropagation(); this._react((e.detail as { emoji: string }).emoji); }}><meshcore-emoji-picker></meshcore-emoji-picker></div>` : ''}
-      <div class="actions">
-        ${!m.isOutgoing ? html`<button class="act" @click=${this._reply}>${this._icon('M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z')}Reply</button>` : ''}
-        <button class="act" @click=${this._copy}>${this._icon('M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z')}${this._copied ? 'Copied' : 'Copy'}</button>
-        ${mapAvailable && !side ? html`<button class="act ${this._showMap ? 'on' : ''}" aria-expanded=${this._showMap} @click=${() => { this._showMap = !this._showMap; }}>${this._icon('M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z')}Route</button>` : ''}
-        ${!m.isOutgoing && this.senderConversation ? html`<button class="act" @click=${() => { this._emit('open-conversation', { id: this.senderConversation }); this._close(); }}>${this._icon('M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z')}Message</button>` : ''}
-      </div>
+      ${side ? '' : actions}
       ${this._renderResend(m)}
       ${mapAvailable && this._showMap ? html`<div class="map">${side ? html`<div class="lbl">Route</div>` : ''}<meshcore-path-map .getHass=${this.getHass} .message=${m} .entryId=${this.entryId}></meshcore-path-map></div>` : ''}
       ${side ? html`
