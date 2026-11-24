@@ -52,3 +52,20 @@ describe('message panel', () => {
     el.remove();
   });
 });
+
+describe('desktop react button', () => {
+  it('opens the reaction buttons from React', async () => {
+    const el = document.createElement('meshcore-message-panel') as HTMLElement & { message?: ChatMessage; mode: string; updateComplete: Promise<unknown> };
+    el.message = msg;
+    el.mode = 'side';
+    document.body.appendChild(el);
+    await el.updateComplete;
+    const root = el.shadowRoot!;
+    expect(root.querySelector('.reacts')).toBeNull();
+    const react = [...root.querySelectorAll('.act')].find((b) => b.textContent!.includes('React')) as HTMLElement;
+    react.click();
+    await el.updateComplete;
+    expect(root.querySelector('.reacts')).not.toBeNull();
+    el.remove();
+  });
+});
