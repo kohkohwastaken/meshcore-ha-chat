@@ -226,6 +226,8 @@ export class PathMap extends LitElement {
     ${exp ? html`<div class="backdrop" @click=${(e: Event) => { e.stopPropagation(); this._setExpanded(false); }}></div>` : nothing}
     <div class="wrap ${exp ? 'expanded' : ''}"
         @hass-more-info=${(e: Event) => e.stopPropagation()}
+        @mouseover=${this._blockMarkerHover} @mouseenter=${this._blockMarkerHover}
+        @pointerover=${this._blockMarkerHover} @pointerenter=${this._blockMarkerHover}
         @click=${(e: Event) => e.stopPropagation()}>
       <ha-map></ha-map>
       <div class="controls">
@@ -251,6 +253,7 @@ export class PathMap extends LitElement {
     this._nativeKey = key;
     const index = contactEntityIndex(this.getHass?.());
     const colours = new Map<string, string>();
+    const titles = new Map<string, string>();
     const entities: Array<string | Record<string, unknown>> = [];
     let hop = 0;
     for (const p of route) {
@@ -259,6 +262,9 @@ export class PathMap extends LitElement {
       const entityId = index.get(p.key);
       if (!entityId || colours.has(entityId)) continue;
       colours.set(entityId, p.kind === 'sender' ? '#43a047' : TYPE_COLORS[2]);
+      const name = p.name || 'Unknown';
+      const prefix = p.prefix ? ` (${p.prefix.toUpperCase()})` : '';
+      titles.set(entityId, p.kind === 'repeater' ? `${hop}. ${name}${prefix}` : `Sender: ${name}`);
       // Repeaters by hop number, the sender by its name, as in the list below.
       entities.push({ entity_id: entityId, label_mode: 'name', name: p.kind === 'repeater' ? String(hop) : (p.name || 'Sender') });
     }
@@ -269,9 +275,26 @@ export class PathMap extends LitElement {
       .filter((p) => p.lat !== null && p.lon !== null)
       .map((p) => ({ point: [p.lat!, p.lon!] as [number, number], tooltip: p.name || p.prefix || 'You' }));
     map.paths = points.length > 1 ? [{ points, color: '#d32f2f' }] : [];
-    void colourMarkers(map, (id) => colours.get(id));
+    void colourMarkers(map, (id) => colours.get(id), (id) => titles.get(id));
     this._fitNative();
   }
+
+  /**
+   * Home Assistant's own marker tooltip shows the entity's last-changed
+   * time, which means nothing here. Stop hover events reaching the marker
+   * (a capturing listener on the wrapper runs first); the marker's title,
+   * set by colourMarkers, shows the repeater name instead.
+   */
+  private _blockMarkerHover = {
+    handleEvent: (e: Event) => {
+      const map = this.renderRoot.querySelector('ha-map') as HaMapElement | null;
+      const markers = map?._entityMarkers;
+      if (!markers) return;
+      const els = new Set(markers.values());
+      if (e.composedPath().some((n) => els.has(n as HTMLElement))) e.stopPropagation();
+    },
+    capture: true,
+  };
 
   /** Show the map large, over the page; Escape or the backdrop closes it. */
   private _setExpanded(on: boolean) {

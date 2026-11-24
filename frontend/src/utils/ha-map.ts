@@ -89,6 +89,7 @@ export function useCountClusters(map: HaMapElement): void {
 export async function colourMarkers(
   map: HaMapElement,
   colourFor: (entityId: string) => string | undefined,
+  titleFor?: (entityId: string) => string | undefined,
 ): Promise<void> {
   let lastSize = -1;
   let stable = 0;
@@ -98,6 +99,11 @@ export async function colourMarkers(
     const markers = map._entityMarkers;
     if (!markers) continue;
     for (const [entityId, el] of markers) {
+      const title = titleFor?.(entityId);
+      if (title && el.title !== title) {
+        el.title = title;
+        el.setAttribute('aria-label', title);
+      }
       const colour = colourFor(entityId);
       if (!colour || el.style.getPropertyValue('--ha-marker-color') === colour) continue;
       el.style.setProperty('--ha-marker-color', colour);
