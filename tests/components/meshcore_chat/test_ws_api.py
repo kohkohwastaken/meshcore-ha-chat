@@ -588,6 +588,26 @@ async def test_ws_get_channels_skips_unused(
     assert trusted["settings"]["secret"] == "abcd"
 
 
+async def test_ws_get_channels_hides_keys_from_non_admins(
+    hass: HomeAssistant, coordinator: MagicMock
+) -> None:
+    """Channel keys go to admins only; other users get the channels without them."""
+    coordinator._channel_info = {
+        2: {"channel_name": "Trusted", "channel_secret": b"\xab\xcd", "secret": b"\x01"},
+    }
+    conn = _Connection()
+    conn.user.is_admin = False
+    await _call_ws(ws_api.ws_get_channels, hass, conn, {"id": 1})
+    trusted = conn.results[0][1]["channels"][0]
+    assert trusted["name"] == "Trusted"
+    assert "channel_secret" not in trusted["settings"]
+    assert "secret" not in trusted["settings"]
+
+    admin = _Connection()
+    await _call_ws(ws_api.ws_get_channels, hass, admin, {"id": 1})
+    assert admin.results[0][1]["channels"][0]["settings"]["channel_secret"] == "abcd"
+
+
 async def test_ws_get_channels_error_no_coordinator(
     hass: HomeAssistant,
 ) -> None:

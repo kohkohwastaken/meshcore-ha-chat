@@ -197,7 +197,6 @@ npm run build       # production bundle (minified)
 npm run dev         # rollup watch mode
 npm test            # vitest, run once
 npm run test:watch  # vitest in watch mode
-npm run lint        # eslint
 ```
 
 The build writes straight to `../custom_components/meshcore_chat/meshcore-chat-panel.js`. Committing the rebuilt bundle does not deploy it — for that, see below.

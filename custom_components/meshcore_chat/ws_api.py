@@ -745,6 +745,10 @@ def ws_get_channels(hass, connection, msg):
 
     scope_store = _get_channel_scopes(hass)
     upstream_entry_id = coordinator.config_entry.entry_id
+    # Channel keys let anyone read and post on a private channel from their
+    # own radio. Only admins can edit channels (the only place the panel
+    # shows a key), so other users get the channels without their keys.
+    include_secrets = bool(getattr(connection.user, "is_admin", False))
 
     channels = []
     for idx in range(coordinator.max_channels):
@@ -756,6 +760,8 @@ def ws_get_channels(hass, connection, msg):
         # Sanitize settings: convert bytes to hex strings for JSON serialization
         sanitized = {}
         for k, v in info.items():
+            if not include_secrets and "secret" in k.lower():
+                continue
             if isinstance(v, bytes):
                 sanitized[k] = v.hex()
             elif isinstance(v, dict):

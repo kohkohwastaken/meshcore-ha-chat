@@ -7,8 +7,6 @@
     "build:ts": "tsc -p tsconfig.build.json",
     "build": "npm run build:ts && rollup -c",
     "dev": "npm run build:ts && rollup -c --watch",
-    "lint": "eslint src/ --ext .ts",
-    "lint:fix": "eslint src/ --ext .ts --fix",
     "test": "vitest run",
     "test:watch": "vitest"
   },

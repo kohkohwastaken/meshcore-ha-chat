@@ -11,3 +11,9 @@
 # (hass fixture, MockConfigEntry, registry fakes, etc.).
 
 pytest-homeassistant-custom-component
+
+# Runtime libraries the integration imports from meshcore-ha's environment.
+# Without them the identity tests fail with a misleading assertion error.
+meshcore
+pynacl
+pytest-cov

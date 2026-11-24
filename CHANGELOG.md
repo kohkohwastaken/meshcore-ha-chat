@@ -2,6 +2,18 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## [Unreleased]
+
+### Security
+
+- **Private channel keys are no longer sent to non-admin users.** The channel list included every channel's secret key for any logged-in Home Assistant user, so a non-admin could copy a private channel's key and read or post on it from their own radio. Keys now go to admins only, who are the only ones who can edit channels.
+
+### Development
+
+- CI now runs on this fork, and runs the backend tests (previously only the frontend was tested in CI). The frontend job also checks the committed panel bundle matches its source.
+- `requirements_test.txt` includes `meshcore` and `pynacl`, without which the identity tests failed.
+- Removed the `npm run lint` scripts, which had no ESLint configuration and did nothing.
+
 ## [0.4.0] - 2026-11-24
 
 First release of this fork, maintained by kohkohwastaken. Based on MeshCore Chat 0.3.2 by Matt Wolter.
