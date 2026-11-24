@@ -11,7 +11,7 @@ import {
   type RoutePoint,
 } from '../utils/path-route';
 import {
-  NO_MAP_NOTE, TYPE_COLORS, boundsOf, colourMarkers, contactEntityIndex, loadHaMap,
+  NO_MAP_NOTE, TYPE_COLORS, boundsOf, colourMarkers, contactEntityIndex, loadHaMap, usePointTooltips,
   type HaMapElement,
 } from '../utils/ha-map';
 
@@ -271,9 +271,18 @@ export class PathMap extends LitElement {
     map.clusterMarkers = false;
     map.autoFit = false;
     map.entities = entities;
+    // Label each dot on the line like the numbered list, not with a time.
+    let n = 0;
     const points = route
       .filter((p) => p.lat !== null && p.lon !== null)
-      .map((p) => ({ point: [p.lat!, p.lon!] as [number, number], tooltip: p.name || p.prefix || 'You' }));
+      .map((p) => {
+        if (p.kind === 'repeater') n++;
+        const name = p.name || 'Unknown';
+        const prefix = p.prefix ? ` (${p.prefix.toUpperCase()})` : '';
+        const tooltip = p.kind === 'me' ? 'You' : p.kind === 'sender' ? `Sender: ${name}` : `${n}. ${name}${prefix}`;
+        return { point: [p.lat!, p.lon!] as [number, number], tooltip };
+      });
+    usePointTooltips(map);
     map.paths = points.length > 1 ? [{ points, color: '#d32f2f' }] : [];
     void colourMarkers(map, (id) => colours.get(id), (id) => titles.get(id));
     this._fitNative();

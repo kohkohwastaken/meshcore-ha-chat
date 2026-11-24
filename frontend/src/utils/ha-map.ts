@@ -50,6 +50,18 @@ export interface HaMapElement extends HTMLElement {
   _createClusterBubble?: unknown;
 }
 
+/**
+ * ha-map labels the dots on a path with a time (it was made for location
+ * history). Use each point's own `tooltip` text instead when it has one.
+ */
+export function usePointTooltips(map: HaMapElement): void {
+  const m = map as HaMapElement & { _computePathTooltip?: (path: unknown, point: { tooltip?: string }) => string; _mcTooltips?: boolean };
+  if (m._mcTooltips || typeof m._computePathTooltip !== 'function') return;
+  const original = m._computePathTooltip.bind(m);
+  m._computePathTooltip = (path, point) => point?.tooltip ?? original(path, point);
+  m._mcTooltips = true;
+}
+
 /** Single node markers, smaller than Home Assistant's default 48px so groups stand out. */
 
 export const TYPE_COLORS: Record<number, string> = {

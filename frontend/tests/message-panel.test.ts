@@ -41,11 +41,13 @@ describe('message panel', () => {
     el.remove();
   });
 
-  it('side panel shows the route details without a toggle', async () => {
+  it('side panel shows signal and time under the message, no route text', async () => {
     const el = await mount('side');
     const root = el.shadowRoot!;
     expect(root.querySelector('aside.side')).not.toBeNull();
-    expect(root.querySelector('.details')!.textContent).toContain('60AA › 06BB');
+    const signal = root.querySelector('.signal')!.textContent!;
+    expect(signal).toContain('SNR 12 · RSSI -87 · Received');
+    expect(root.textContent).not.toContain('60AA › 06BB');
     expect(root.querySelector('.toggle')).toBeNull();
     el.remove();
   });

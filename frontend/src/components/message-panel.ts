@@ -76,6 +76,7 @@ export class MeshCoreMessagePanel extends LitElement {
     .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--secondary-text-color); margin-bottom: 6px; }
     .map { margin-top: 10px; }
     .side .map { margin-top: 0; }
+    .signal { margin: -4px 0 0; }
     .toggle { background: none; border: none; color: var(--secondary-text-color); font: inherit; font-size: 12px; cursor: pointer; padding: 10px 0 0; }
     .details { font-size: 12px; color: var(--secondary-text-color); line-height: 1.7; word-break: break-word; }
     .resend { margin-top: 10px; font-size: 13px; }
@@ -177,6 +178,16 @@ export class MeshCoreMessagePanel extends LitElement {
     return `${hops} hop${hops === 1 ? '' : 's'}${snr !== undefined ? ` · SNR ${snr}` : ''}`;
   }
 
+  /** SNR, RSSI and when, for the line under the message in the side panel. */
+  private _signalLine(m: ChatMessage, when: string): string {
+    const e = m.rxLogData?.[0];
+    const parts: string[] = [];
+    if (e?.snr !== undefined) parts.push(`SNR ${e.snr}`);
+    if (e?.rssi !== undefined) parts.push(`RSSI ${e.rssi}`);
+    parts.push(`${m.isOutgoing ? 'Sent' : 'Received'} ${when}`);
+    return parts.join(' · ');
+  }
+
   private _routeText(m: ChatMessage): string {
     if (!m.rxLogData?.length) return '';
     return m.rxLogData.map((e) => {
@@ -197,7 +208,7 @@ export class MeshCoreMessagePanel extends LitElement {
 
   private _renderReactions() {
     const chips = this.reactions;
-    if (chips.length === 0) return this.mode === 'side' ? html`<div class="none">No reactions yet</div>` : '';
+    if (chips.length === 0) return '';
     const total = chips.reduce((n, c) => n + c.who.length, 0);
     const mine = new Set(chips.filter((c) => c.senders.includes('You')).map((c) => c.emoji));
     // The side panel has room: list everyone by default.
@@ -246,7 +257,9 @@ export class MeshCoreMessagePanel extends LitElement {
     const delivery = m.isOutgoing && ds
       ? `${(ds.repeaterCount ?? 0) > 0 ? `${ds.repeaterCount} repeater${ds.repeaterCount === 1 ? '' : 's'} responded` : 'No repeaters responded'}${ds.ackReceived ? ' · ACK received' : ''}${ds.roundTripMs ? ` · ${ds.roundTripMs}ms RTT` : ''}`
       : '';
-    const summary = [formatTimestamp(m.timestamp, this.timestampFormat), this._signal(m)].filter(Boolean).join(' · ');
+    // The side panel lists SNR under the message, so its header leaves it out.
+    const signal = this._signal(m);
+    const summary = [formatTimestamp(m.timestamp, this.timestampFormat), side ? signal.split(' · ')[0] : signal].filter(Boolean).join(' · ');
     const detailLines = html`
       ${route ? html`Route: ${route}<br>` : ''}
       ${m.isOutgoing ? 'Sent' : 'Received'}: ${when}
@@ -257,8 +270,9 @@ export class MeshCoreMessagePanel extends LitElement {
       <div>
         <div class="head"><span class="sender">${m.isOutgoing ? 'You' : m.sender}</span><span class="meta">${summary}</span></div>
         <div class="preview">${m.text}</div>
+        ${side ? html`<div class="meta signal">${this._signalLine(m, when)}</div>` : ''}
       </div>
-      ${!side && this.reactions.length ? this._renderReactions() : ''}
+      ${side ? html`<div>${this._renderReactions()}</div>` : this.reactions.length ? this._renderReactions() : ''}
       <div class="reacts" role="group" aria-label="React">
         ${QUICK_REACTIONS.map((e) => html`<button class="em" aria-label="React ${e}" @click=${() => this._react(e)}>${e}</button>`)}
         <button class="em more ${this._picker ? 'on' : ''}" aria-label="More emoji" aria-expanded=${this._picker}
@@ -274,8 +288,7 @@ export class MeshCoreMessagePanel extends LitElement {
       ${this._renderResend(m)}
       ${mapAvailable && this._showMap ? html`<div class="map">${side ? html`<div class="lbl">Route</div>` : ''}<meshcore-path-map .getHass=${this.getHass} .message=${m} .entryId=${this.entryId}></meshcore-path-map></div>` : ''}
       ${side ? html`
-        <div><div class="lbl">Reactions</div>${this._renderReactions()}</div>
-        <div class="details" style="margin-top:auto">${detailLines}</div>
+        ${delivery ? html`<div class="details">${delivery}</div>` : ''}
       ` : html`
         <button class="toggle" aria-expanded=${this._details} @click=${() => { this._details = !this._details; }}>Details ${this._details ? '▴' : '▾'}</button>
         ${this._details ? html`<div class="details">${detailLines}</div>` : ''}
