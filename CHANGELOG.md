@@ -6,6 +6,11 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 
 - Replies now show the message they answer, as a quote at the top of the bubble. Tap it to jump to the original.
 - Your own replies show the @mention highlighted straight away.
+- Emoji button in the message box: recent emoji first, then categories. Inserts where the cursor is.
+- Reactions: tap a message and pick one of 👍 ❤️ 😂 🎉 👏 🔥. They show as chips under the message, and reactions from MeshCore One and MeshCore Open show too.
+- "+" button: share a location (from a Home Assistant device with a position, or by picking a spot on the map) or a contact (including your own).
+  - A location shows an amber strip in the box with a warning below it, warns if the spot is inside one of your zones, and asks you to confirm before sending. Any text you type becomes its caption.
+- Shared locations and contacts show as cards, with Open map / Add contact.
 
 ## [0.4.4] - 2026-11-24
 

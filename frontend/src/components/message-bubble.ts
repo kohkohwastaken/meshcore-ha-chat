@@ -6,6 +6,8 @@ import { attachDialogA11y } from '../utils/dialog-a11y';
 import { hasMapPath } from './path-map';
 import './path-map';
 import type { QuotedMessage } from '../utils/reply-links';
+import { QUICK_REACTIONS, NODE_TYPE_NAMES, parseContact, parseLocation, type ReactionChip } from '../utils/rich-messages';
+import { addContact } from '../api';
 
 /**
  * Generate a deterministic color from a string (e.g., pubkey prefix).
@@ -33,6 +35,9 @@ export class MessageBubble extends LitElement {
   /** The conversation is a channel: resending asks for confirmation (others may already have it). */
   @property({ type: Boolean }) isChannel = false;
   /** Finds the message a reply answers (supplied by the chat page). */
+  /** Reactions on a message (supplied by the chat page). */
+  @property({ attribute: false }) reactionsFor?: (id: string) => ReactionChip[];
+  @state() private _contactAdded = '';
   @property({ attribute: false }) quoteFor?: (msg: ChatMessage) => QuotedMessage | null;
 
   @state() private _selectedMessage: ChatMessage | null = null;
@@ -157,6 +162,17 @@ export class MessageBubble extends LitElement {
       white-space: pre-wrap;
     }
 
+    .card { display: flex; flex-direction: column; gap: 2px; min-width: 160px; }
+    .card-title { font-weight: 600; word-break: break-word; }
+    .card-meta { font-size: 0.8em; opacity: 0.8; }
+    .card-link { align-self: flex-start; margin-top: 4px; font: inherit; font-size: 0.85em; color: inherit; text-decoration: underline;
+      background: none; border: none; padding: 0; cursor: pointer; }
+    .card-link:disabled { text-decoration: none; opacity: 0.7; cursor: default; }
+    .reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .reaction { background: rgba(127, 127, 127, 0.25); border-radius: 10px; padding: 1px 6px; font-size: 0.85em; }
+    .reaction-row { display: flex; justify-content: space-around; padding: 6px 8px; border-bottom: 1px solid var(--divider-color, #e0e0e0); }
+    .reaction-row button { background: none; border: none; font-size: 24px; cursor: pointer; border-radius: 50%; padding: 4px 6px; }
+    .reaction-row button:hover { background: rgba(127, 127, 127, 0.2); }
     .quote {
       border-left: 3px solid var(--primary-color, #03a9f4);
       background: rgba(127, 127, 127, 0.15);
@@ -404,7 +420,8 @@ export class MessageBubble extends LitElement {
     return html`
       <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this._selectedMessage = msg; this._showRouteMap = false; this._confirmResend = false; }}>
         ${this._renderQuote(msg)}
-        <div class="message-text">${this._renderTextWithMentions(msg.text, msg.mentions)}</div>
+        ${this._renderBody(msg)}
+        ${this._renderReactions(msg)}
         <div class="timestamp">${statusLabel ? html`<span class="delivery-status">${statusLabel}</span> · ` : ''}${ts}${scopeLabel ? html` · <span class="flood-scope">${scopeLabel}</span>` : ''}</div>
       </div>
     `;
@@ -480,6 +497,49 @@ export class MessageBubble extends LitElement {
       default:
         return 'Sent';
     }
+  }
+
+  private _renderBody(msg: ChatMessage) {
+    const loc = msg.isSystem ? null : parseLocation(msg.text);
+    if (loc) {
+      const osm = `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=16/${loc.lat}/${loc.lon}`;
+      return html`<div class="card">
+        <div class="card-title">📍 ${loc.label || 'Location'}</div>
+        <div class="card-meta">${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</div>
+        <a class="card-link" href=${osm} target="_blank" rel="noopener noreferrer" @click=${(e: Event) => e.stopPropagation()}>Open map</a>
+      </div>`;
+    }
+    const contact = msg.isSystem ? null : parseContact(msg.text);
+    if (contact) {
+      const added = this._contactAdded === contact.publicKey;
+      return html`<div class="card">
+        <div class="card-title">👤 ${contact.name || 'Contact'}</div>
+        <div class="card-meta">${NODE_TYPE_NAMES[contact.type] ?? 'Node'} · ${contact.publicKey.slice(0, 8)}</div>
+        ${msg.isOutgoing ? '' : html`<button class="card-link" ?disabled=${added} @click=${(e: Event) => { e.stopPropagation(); void this._addSharedContact(contact.publicKey, contact.name); }}>${added ? 'Added' : 'Add contact'}</button>`}
+      </div>`;
+    }
+    return html`<div class="message-text">${this._renderTextWithMentions(msg.text, msg.mentions)}</div>`;
+  }
+
+  private async _addSharedContact(publicKey: string, name: string) {
+    const hass = this.getHass?.();
+    if (!hass) return;
+    const r = await addContact(hass, publicKey, name, this.entryId);
+    if (r.success) {
+      this._contactAdded = publicKey;
+      this.dispatchEvent(new CustomEvent('contacts-changed', { bubbles: true, composed: true }));
+    }
+  }
+
+  private _renderReactions(msg: ChatMessage) {
+    const chips = this.reactionsFor?.(msg.id) ?? [];
+    if (chips.length === 0) return '';
+    return html`<div class="reactions">${chips.map((c) => html`<span class="reaction" title=${c.senders.join(', ')}>${c.emoji}${c.senders.length > 1 ? html` <b>${c.senders.length}</b>` : ''}</span>`)}</div>`;
+  }
+
+  private _react(msg: ChatMessage, emoji: string) {
+    this._selectedMessage = null;
+    this.dispatchEvent(new CustomEvent('react-to-message', { detail: { emoji, msg }, bubbles: true, composed: true }));
   }
 
   private _renderQuote(msg: ChatMessage) {
@@ -570,6 +630,9 @@ export class MessageBubble extends LitElement {
              role="dialog" aria-modal="true" aria-label="Message actions"
              @click=${(e: Event) => e.stopPropagation()}>
           <div class="message-dialog-preview">${msg.text}</div>
+          ${!msg.isSystem ? html`<div class="reaction-row" role="group" aria-label="React">
+            ${QUICK_REACTIONS.map((e) => html`<button title="React ${e}" @click=${() => this._react(msg, e)}>${e}</button>`)}
+          </div>` : ''}
           <button class="message-dialog-action" @click=${() => this._copyText(msg.text)}>
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>Copy Text
           </button>

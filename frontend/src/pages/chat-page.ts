@@ -15,6 +15,11 @@ import '../components/manage-dialog';
 import '../components/message-bubble';
 import '../components/message-search';
 import { findQuoted, rememberReply } from '../utils/reply-links';
+import { collectReactions, distanceMetres, formatContact, formatLocation, formatReaction, type ReactionChip } from '../utils/rich-messages';
+import { getDevices } from '../api';
+import '../components/emoji-picker';
+import '../components/share-pickers';
+import type { PickedLocation } from '../components/share-pickers';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
 
 @customElement('meshcore-chat-page')
@@ -22,6 +27,14 @@ export class ChatPage extends LitElement {
   @property({ type: Object }) hass?: HomeAssistant;
   /** Stable getter for children that need hass without re-rendering on every state change. */
   private _getHass = () => this.hass;
+  /** Reactions on each message, by message id (rebuilt every render). */
+  private _reactions = new Map<string, ReactionChip[]>();
+  private _reactionsFor = (id: string) => this._reactions.get(id) ?? [];
+  @state() private _popup: 'emoji' | 'plus' | null = null;
+  @state() private _picker: 'location' | 'contact' | null = null;
+  @state() private _location: PickedLocation | null = null;
+  @state() private _confirmLocation = false;
+  @state() private _ownContact?: { publicKey: string; name: string };
   /** The message a bubble replies to, if any. */
   private _quoteFor = (msg: ChatMessage) =>
     this.selectedId && this._messageStore ? findQuoted(msg, this.selectedId, this._messageStore.messages) : null;
@@ -193,6 +206,50 @@ export class ChatPage extends LitElement {
       border-bottom: 1px solid var(--divider-color, #e0e0e0);
       min-width: 0;
     }
+    .composer-strip.location {
+      background: rgba(255, 166, 0, 0.14);
+    }
+    .composer-note.location {
+      color: var(--warning-color, #ffa600);
+    }
+    .tool-button {
+      border: none;
+      background: none;
+      color: var(--secondary-text-color, #727272);
+      cursor: pointer;
+      padding: 4px;
+      border-radius: 50%;
+      display: flex;
+    }
+    .tool-button:hover, .tool-button.on { color: var(--primary-color, #03a9f4); background: rgba(127, 127, 127, 0.15); }
+    .tool-button:disabled { opacity: 0.4; cursor: default; }
+    .toolbar-spacer { flex: 1; }
+    .input-area { position: relative; }
+    .popup {
+      position: absolute;
+      bottom: calc(100% - 4px);
+      left: 12px;
+      z-index: 20;
+      background: var(--card-background-color, #1c1c1c);
+      border: 1px solid var(--divider-color, #444);
+      border-radius: 12px;
+      padding: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+    .popup.menu { display: flex; flex-direction: column; padding: 4px; }
+    .popup.menu button {
+      background: none; border: none; color: var(--primary-text-color); text-align: left;
+      padding: 10px 14px; border-radius: 8px; cursor: pointer; font: inherit;
+    }
+    .popup.menu button:hover { background: rgba(127, 127, 127, 0.15); }
+    .confirm-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .confirm { background: var(--card-background-color, #1c1c1c); color: var(--primary-text-color); border-radius: 12px; padding: 16px; width: 340px; max-width: calc(100vw - 32px); }
+    .confirm-title { font-weight: 600; font-size: 16px; margin-bottom: 8px; }
+    .confirm-text { font-size: 14px; opacity: 0.85; margin-bottom: 14px; }
+    .confirm-actions { display: flex; justify-content: flex-end; gap: 8px; }
+    .confirm-actions button { padding: 8px 14px; border-radius: 8px; border: none; cursor: pointer; font: inherit; }
+    .confirm-actions .primary { background: var(--primary-color, #03a9f4); color: #fff; }
+    .confirm-actions .secondary { background: none; color: inherit; border: 1px solid var(--divider-color, #444); }
     .composer-strip.reply {
       background: var(--secondary-background-color, rgba(127, 127, 127, 0.1));
     }
@@ -713,7 +770,7 @@ export class ChatPage extends LitElement {
     }
     if (changedProperties.has('selectedId')) {
       this._onConversationSelected();
-      if (this._replyTo && changedProperties.get('selectedId') !== undefined) this._replyTo = null;
+      if (changedProperties.get('selectedId') !== undefined) { this._replyTo = null; this._location = null; this._popup = null; }
     }
     // Late-arriving `lastRead` re-anchor. Handles the fresh-panel-load
     // / entry-switch-immediate-click race where the user picks a
@@ -930,7 +987,8 @@ export class ChatPage extends LitElement {
       `;
     }
 
-    const messages = this._messageStore.messages;
+    const { visible: messages, reactions } = collectReactions(this._messageStore.messages);
+    this._reactions = reactions;
     const renderItems = buildRenderItems(messages, {
       group_messages: this.config?.group_messages ?? true,
       group_timeout: this.config?.group_timeout ?? 300,
@@ -940,7 +998,7 @@ export class ChatPage extends LitElement {
     const budget = this._budget();
     return html`
       <div class="chat-container" @jump-to-message=${(e: CustomEvent) => this._findAndHighlightBubble(e.detail.id)}
-          @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @scroll=${this._onChatScroll}>
+          @react-to-message=${this._onReact} @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @scroll=${this._onChatScroll}>
         ${this._messageStore.loadingOlder
           ? html`<div class="loading-older"><div class="loading-spinner"></div></div>`
           : html``}
@@ -981,9 +1039,16 @@ export class ChatPage extends LitElement {
               <span class="strip-detail">· ${this._replyTo.text}</span>
               <button class="strip-close" aria-label="Cancel reply" @click=${() => { this._replyTo = null; }}>✕</button>
             </div>` : ''}
+          ${this._location ? html`
+            <div class="composer-strip location">
+              <span class="strip-icon loc" aria-hidden="true">📍</span>
+              <span class="strip-title">Location</span>
+              <span class="strip-detail">· ${this._location.source} · ${this._location.lat.toFixed(5)}, ${this._location.lon.toFixed(5)}</span>
+              <button class="strip-close" aria-label="Remove location" @click=${() => { this._location = null; }}>✕</button>
+            </div>` : ''}
           <div class="composer-body">
             <textarea
-              placeholder="Type a message..."
+              placeholder=${this._location ? 'Add a caption (optional)...' : 'Type a message...'}
               aria-label="Message text. Press Enter to send, Shift+Enter for newline."
               .value=${this._inputText}
               @input=${(e: Event) => {
@@ -994,25 +1059,39 @@ export class ChatPage extends LitElement {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   this._sendMessage();
+                } else if (e.key === 'Escape' && this._popup) {
+                  this._popup = null;
                 } else if (e.key === 'Escape' && this._replyTo) {
                   this._replyTo = null;
                 }
               }}
               ?disabled=${this._sending || !this.selectedId}></textarea>
             <div class="composer-toolbar">
+              <button class="tool-button ${this._popup === 'plus' ? 'on' : ''}" aria-label="Share location or contact" title="Share location or contact"
+                ?disabled=${!this.selectedId}
+                @click=${() => { this._popup = this._popup === 'plus' ? null : 'plus'; }}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              </button>
+              <button class="tool-button ${this._popup === 'emoji' ? 'on' : ''}" aria-label="Emoji" title="Emoji"
+                ?disabled=${!this.selectedId}
+                @click=${() => { this._popup = this._popup === 'emoji' ? null : 'emoji'; }}>
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
+              </button>
+              <span class="toolbar-spacer"></span>
               <span class="byte-counter ${budget.over ? 'over' : budget.left < LOW_BYTES ? 'low' : ''}"
                 title="Bytes left in this message. Accented letters use 2 bytes, most emoji 4 or more.">${budget.over ? budget.left : `${budget.left} left`}</span>
               <button
                 class="send-button"
                 aria-label="Send message"
                 @click=${() => this._sendMessage()}
-                ?disabled=${this._sending || !this.selectedId || !this._inputText.trim() || budget.over}>
+                ?disabled=${this._sending || !this.selectedId || (!this._inputText.trim() && !this._location) || budget.over}>
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
               </button>
             </div>
           </div>
         </div>
         ${this._renderComposerNotes(budget)}
+        ${this._renderPopups()}
       </div>
     `;
   }
@@ -1028,7 +1107,7 @@ export class ChatPage extends LitElement {
   /** Bytes used and left for the text in the send box, as it would be sent. */
   private _budget(): MessageBudget {
     return messageBudget(
-      this._replyPrefix() + this._inputText,
+      this._composedText(this._inputText),
       this._isChannelSelected() ? (this.config?.node_name ?? '') : null,
       trackableChannelLimit(),
     );
@@ -1039,7 +1118,112 @@ export class ChatPage extends LitElement {
   /** Notes under the box: too long, or a channel message whose repeats can't be detected. */
   private _renderComposerNotes(budget: MessageBudget) {
     if (!this.selectedId) return html``;
+    return html`${this._renderLimitNote(budget)}${this._renderLocationNote()}`;
+  }
+
+  /** The location warning under the box, plus a note if the spot is inside a zone. */
+  private _renderLocationNote() {
+    const loc = this._location;
+    if (!loc) return html``;
+    const zone = this._zoneAt(loc);
+    return html`<div class="composer-note location" role="status">
+      ${this._isChannelSelected()
+        ? 'This is a public channel, so anyone listening can see this location.'
+        : 'This shares a GPS position. Anyone who can read this conversation can see it.'}
+      ${zone ? html`<br><strong>It's inside your zone "${zone}".</strong>` : ''}
+    </div>`;
+  }
+
+  /** Name of a Home Assistant zone the location falls in (radius plus GPS accuracy), if any. */
+  private _zoneAt(loc: PickedLocation): string | null {
+    for (const [id, s] of Object.entries(this.hass?.states ?? {})) {
+      if (!id.startsWith('zone.')) continue;
+      const a = s.attributes as Record<string, unknown>;
+      const lat = Number(a.latitude);
+      const lon = Number(a.longitude);
+      const radius = Number(a.radius) || 100;
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      if (distanceMetres(lat, lon, loc.lat, loc.lon) <= radius + (loc.accuracy ?? 0)) return String(a.friendly_name ?? id);
+    }
+    return null;
+  }
+
+  /** The message as it would be sent: a location (caption = typed text), or the reply prefix plus text. */
+  private _composedText(typed: string): string {
+    if (this._location) return formatLocation(this._location.lat, this._location.lon, typed);
+    return this._replyPrefix() + typed;
+  }
+
+  private _renderPopups() {
+    return html`
+      ${this._popup === 'emoji' ? html`<div class="popup" @emoji-picked=${this._insertEmoji}><meshcore-emoji-picker></meshcore-emoji-picker></div>` : ''}
+      ${this._popup === 'plus' ? html`<div class="popup menu">
+        <button @click=${() => { this._popup = null; this._picker = 'location'; }}>📍 Share location</button>
+        <button @click=${() => { this._popup = null; void this._openContactPicker(); }}>👤 Share contact</button>
+      </div>` : ''}
+      ${this._picker === 'location' ? html`<meshcore-location-picker .hass=${this.hass}
+        @close=${() => { this._picker = null; }}
+        @location-picked=${(e: CustomEvent) => { this._picker = null; this._replyTo = null; this._location = e.detail as PickedLocation; this._focusInput(); }}></meshcore-location-picker>` : ''}
+      ${this._picker === 'contact' ? html`<meshcore-contact-picker
+        .contacts=${this.conversations.filter((c) => 'pubkey_prefix' in c) as Contact[]}
+        .own=${this._ownContact}
+        @close=${() => { this._picker = null; }}
+        @contact-picked=${(e: CustomEvent) => {
+          this._picker = null;
+          const c = e.detail as { publicKey: string; type: number; name: string };
+          void this._sendText(formatContact(c.publicKey, c.type, c.name));
+        }}></meshcore-contact-picker>` : ''}
+      ${this._confirmLocation && this._location ? html`
+        <div class="confirm-backdrop" @click=${() => { this._confirmLocation = false; }}>
+          <div class="confirm" role="dialog" aria-label="Send location?" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="confirm-title">Send this location?</div>
+            <div class="confirm-text">${this._location.source} · ${this._location.lat.toFixed(5)}, ${this._location.lon.toFixed(5)}<br>
+              ${this._isChannelSelected() ? 'Everyone on this channel will see it.' : 'They will see where this is.'}</div>
+            <div class="confirm-actions">
+              <button class="secondary" @click=${() => { this._confirmLocation = false; }}>Cancel</button>
+              <button class="primary" @click=${() => { this._confirmLocation = false; void this._sendMessage(true); }}>Send location</button>
+            </div>
+          </div>
+        </div>` : ''}
+    `;
+  }
+
+  private _focusInput() {
+    void this.updateComplete.then(() => {
+      (this.renderRoot.querySelector('.composer textarea') as HTMLTextAreaElement | null)?.focus();
+    });
+  }
+
+  private _insertEmoji(e: CustomEvent) {
+    const emoji = (e.detail as { emoji: string }).emoji;
+    const ta = this.renderRoot.querySelector('.composer textarea') as HTMLTextAreaElement | null;
+    const start = ta?.selectionStart ?? this._inputText.length;
+    const end = ta?.selectionEnd ?? start;
+    this._inputText = this._inputText.slice(0, start) + emoji + this._inputText.slice(end);
+    this._popup = null;
+    void this.updateComplete.then(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.selectionStart = ta.selectionEnd = start + emoji.length;
+    });
+  }
+
+  private async _openContactPicker() {
+    this._picker = 'contact';
+    if (this._ownContact || !this.hass) return;
+    const devices = await getDevices(this.hass);
+    const d = devices.find((x) => x.entry_id === this.config?.entry_id) ?? devices[0];
+    if (d?.pubkey && d.pubkey.length === 64) this._ownContact = { publicKey: d.pubkey, name: d.name || this.config?.node_name || 'Me' };
+  }
+
+  private _onReact(e: CustomEvent) {
+    const { emoji, msg } = e.detail as { emoji: string; msg: ChatMessage };
+    void this._sendText(formatReaction(emoji, msg));
+  }
+
+  private _renderLimitNote(budget: MessageBudget) {
     let note = html``;
+
     if (budget.over) {
       const n = -budget.left;
       note = budget.trackable
@@ -1094,6 +1278,7 @@ export class ChatPage extends LitElement {
           .group=${item.group}
           .getHass=${this._getHass}
           .quoteFor=${this._quoteFor}
+          .reactionsFor=${this._reactionsFor}
           .entryId=${this.config?.entry_id}
           ?isChannel=${isChannel}
           .timestampFormat=${this.config?.timestamp_format ?? 'relative'}></meshcore-message-bubble>
@@ -1276,17 +1461,22 @@ export class ChatPage extends LitElement {
     }
   }
 
-  private async _sendMessage() {
-    if (this._sending || !this._inputText.trim() || !this.selectedId || !this.hass || !this.config) {
+  private async _sendMessage(locationConfirmed = false) {
+    if (this._sending || (!this._inputText.trim() && !this._location) || !this.selectedId || !this.hass || !this.config) {
       return;
     }
     if (this._budget().over) {
       return;
     }
-    const text = this._replyPrefix() + this._inputText.trim();
-    if (this._replyTo) rememberReply(this.selectedId, text, this._replyTo);
+    if (this._location && !locationConfirmed) {
+      this._confirmLocation = true;
+      return;
+    }
+    const text = this._composedText(this._inputText.trim());
+    if (this._replyTo && !this._location) rememberReply(this.selectedId, text, this._replyTo);
     this._inputText = '';
     this._replyTo = null;
+    this._location = null;
     await this._sendText(text, true);
   }
 
@@ -1410,6 +1600,7 @@ export class ChatPage extends LitElement {
     const { sender, text } = e.detail as { sender?: string; text?: string };
     if (!sender) return;
     this._replyTo = { sender, text: text ?? '' };
+    this._location = null;
     void this.updateComplete.then(() => {
       (this.renderRoot.querySelector('.composer textarea') as HTMLTextAreaElement | null)?.focus();
     });
