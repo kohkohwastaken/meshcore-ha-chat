@@ -163,6 +163,7 @@ export class MessageBubble extends LitElement {
     }
 
     .card { display: flex; flex-direction: column; gap: 2px; min-width: 160px; }
+    .card.attached { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(127, 127, 127, 0.35); }
     .card-title { font-weight: 600; word-break: break-word; }
     .card-meta { font-size: 0.8em; opacity: 0.8; }
     .card-link { align-self: flex-start; margin-top: 4px; font: inherit; font-size: 0.85em; color: inherit; text-decoration: underline;
@@ -512,11 +513,13 @@ export class MessageBubble extends LitElement {
     const contact = msg.isSystem ? null : parseContact(msg.text);
     if (contact) {
       const added = this._contactAdded === contact.publicKey;
-      return html`<div class="card">
-        <div class="card-title">👤 ${contact.name || 'Contact'}</div>
-        <div class="card-meta">${NODE_TYPE_NAMES[contact.type] ?? 'Node'} · ${contact.publicKey.slice(0, 8)}</div>
-        ${msg.isOutgoing ? '' : html`<button class="card-link" ?disabled=${added} @click=${(e: Event) => { e.stopPropagation(); void this._addSharedContact(contact.publicKey, contact.name); }}>${added ? 'Added' : 'Add contact'}</button>`}
-      </div>`;
+      return html`
+        ${contact.caption ? html`<div class="message-text">${this._renderTextWithMentions(contact.caption, msg.mentions)}</div>` : ''}
+        <div class="card ${contact.caption ? 'attached' : ''}">
+          <div class="card-title">👤 ${contact.name || 'Contact'}</div>
+          <div class="card-meta">${NODE_TYPE_NAMES[contact.type] ?? 'Node'} · ${contact.publicKey.slice(0, 6)}…${contact.publicKey.slice(-6)}</div>
+          ${msg.isOutgoing ? '' : html`<button class="card-link" ?disabled=${added} @click=${(e: Event) => { e.stopPropagation(); void this._addSharedContact(contact.publicKey, contact.name); }}>${added ? 'Added' : 'Add contact'}</button>`}
+        </div>`;
     }
     return html`<div class="message-text">${this._renderTextWithMentions(msg.text, msg.mentions)}</div>`;
   }

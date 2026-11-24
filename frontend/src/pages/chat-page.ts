@@ -34,6 +34,8 @@ export class ChatPage extends LitElement {
   @state() private _picker: 'location' | 'contact' | null = null;
   @state() private _location: PickedLocation | null = null;
   @state() private _confirmLocation = false;
+  /** A contact attached to the message being written. */
+  @state() private _contact: { publicKey: string; type: number; name: string } | null = null;
   @state() private _ownContact?: { publicKey: string; name: string };
   /** The message a bubble replies to, if any. */
   private _quoteFor = (msg: ChatMessage) =>
@@ -205,6 +207,9 @@ export class ChatPage extends LitElement {
       font-size: 12px;
       border-bottom: 1px solid var(--divider-color, #e0e0e0);
       min-width: 0;
+    }
+    .composer-strip.contact {
+      background: rgba(3, 169, 244, 0.12);
     }
     .composer-strip.location {
       background: rgba(255, 166, 0, 0.14);
@@ -770,7 +775,7 @@ export class ChatPage extends LitElement {
     }
     if (changedProperties.has('selectedId')) {
       this._onConversationSelected();
-      if (changedProperties.get('selectedId') !== undefined) { this._replyTo = null; this._location = null; this._popup = null; }
+      if (changedProperties.get('selectedId') !== undefined) { this._replyTo = null; this._location = null; this._contact = null; this._popup = null; }
     }
     // Late-arriving `lastRead` re-anchor. Handles the fresh-panel-load
     // / entry-switch-immediate-click race where the user picks a
@@ -1046,9 +1051,16 @@ export class ChatPage extends LitElement {
               <span class="strip-detail">· ${this._location.source} · ${this._location.lat.toFixed(5)}, ${this._location.lon.toFixed(5)}</span>
               <button class="strip-close" aria-label="Remove location" @click=${() => { this._location = null; }}>✕</button>
             </div>` : ''}
+          ${this._contact ? html`
+            <div class="composer-strip contact">
+              <span class="strip-icon" aria-hidden="true">👤</span>
+              <span class="strip-title">Contact</span>
+              <span class="strip-detail">· ${this._contact.name} · ${this._contact.publicKey.slice(0, 6)}…</span>
+              <button class="strip-close" aria-label="Remove contact" @click=${() => { this._contact = null; }}>✕</button>
+            </div>` : ''}
           <div class="composer-body">
             <textarea
-              placeholder=${this._location ? 'Add a caption (optional)...' : 'Type a message...'}
+              placeholder=${this._location || this._contact ? 'Add a message (optional)...' : 'Type a message...'}
               aria-label="Message text. Press Enter to send, Shift+Enter for newline."
               .value=${this._inputText}
               @input=${(e: Event) => {
@@ -1084,7 +1096,7 @@ export class ChatPage extends LitElement {
                 class="send-button"
                 aria-label="Send message"
                 @click=${() => this._sendMessage()}
-                ?disabled=${this._sending || !this.selectedId || (!this._inputText.trim() && !this._location) || budget.over}>
+                ?disabled=${this._sending || !this.selectedId || (!this._inputText.trim() && !this._location && !this._contact) || budget.over}>
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
               </button>
             </div>
@@ -1118,7 +1130,10 @@ export class ChatPage extends LitElement {
   /** Notes under the box: too long, or a channel message whose repeats can't be detected. */
   private _renderComposerNotes(budget: MessageBudget) {
     if (!this.selectedId) return html``;
-    return html`${this._renderLimitNote(budget)}${this._renderLocationNote()}`;
+    const contactNote = this._contact && this._inputText.trim()
+      ? html`<div class="composer-note low" role="status">The MeshCore phone apps only show a contact card when it's sent on its own. With a message, they'll see the contact as a code they can copy.</div>`
+      : html``;
+    return html`${this._renderLimitNote(budget)}${this._renderLocationNote()}${contactNote}`;
   }
 
   /** The location warning under the box, plus a note if the spot is inside a zone. */
@@ -1151,6 +1166,10 @@ export class ChatPage extends LitElement {
   /** The message as it would be sent: a location (caption = typed text), or the reply prefix plus text. */
   private _composedText(typed: string): string {
     if (this._location) return formatLocation(this._location.lat, this._location.lon, typed);
+    if (this._contact) {
+      const token = formatContact(this._contact.publicKey, this._contact.type, this._contact.name);
+      return this._replyPrefix() + (typed.trim() ? `${typed} ${token}` : token);
+    }
     return this._replyPrefix() + typed;
   }
 
@@ -1163,15 +1182,16 @@ export class ChatPage extends LitElement {
       </div>` : ''}
       ${this._picker === 'location' ? html`<meshcore-location-picker .hass=${this.hass}
         @close=${() => { this._picker = null; }}
-        @location-picked=${(e: CustomEvent) => { this._picker = null; this._replyTo = null; this._location = e.detail as PickedLocation; this._focusInput(); }}></meshcore-location-picker>` : ''}
+        @location-picked=${(e: CustomEvent) => { this._picker = null; this._replyTo = null; this._contact = null; this._location = e.detail as PickedLocation; this._focusInput(); }}></meshcore-location-picker>` : ''}
       ${this._picker === 'contact' ? html`<meshcore-contact-picker
         .contacts=${this.conversations.filter((c) => 'pubkey_prefix' in c) as Contact[]}
         .own=${this._ownContact}
         @close=${() => { this._picker = null; }}
         @contact-picked=${(e: CustomEvent) => {
           this._picker = null;
-          const c = e.detail as { publicKey: string; type: number; name: string };
-          void this._sendText(formatContact(c.publicKey, c.type, c.name));
+          this._location = null;
+          this._contact = e.detail as { publicKey: string; type: number; name: string };
+          this._focusInput();
         }}></meshcore-contact-picker>` : ''}
       ${this._confirmLocation && this._location ? html`
         <div class="confirm-backdrop" @click=${() => { this._confirmLocation = false; }}>
@@ -1462,7 +1482,7 @@ export class ChatPage extends LitElement {
   }
 
   private async _sendMessage(locationConfirmed = false) {
-    if (this._sending || (!this._inputText.trim() && !this._location) || !this.selectedId || !this.hass || !this.config) {
+    if (this._sending || (!this._inputText.trim() && !this._location && !this._contact) || !this.selectedId || !this.hass || !this.config) {
       return;
     }
     if (this._budget().over) {
@@ -1477,6 +1497,7 @@ export class ChatPage extends LitElement {
     this._inputText = '';
     this._replyTo = null;
     this._location = null;
+    this._contact = null;
     await this._sendText(text, true);
   }
 

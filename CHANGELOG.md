@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.10
+
+- Share contact no longer sends straight away. The contact is attached to the box, like a location, so you can add a message and send when ready.
+- Contacts sent with a message show as the message plus a contact card. A note explains that the MeshCore phone apps only show a card for a contact sent on its own.
+
 ## 0.4.9
 
 - Share location: tapping a device now shows it on the map first, with when it last updated and its accuracy. Choose "Use this location" to attach it, or Back.

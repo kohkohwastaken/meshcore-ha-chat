@@ -58,6 +58,8 @@ describe('rich messages', () => {
   });
   it('contact round-trip', () => {
     const key = 'ab'.repeat(32);
-    expect(parseContact(formatContact(key, 2, 'Hill <RPT>'))).toEqual({ publicKey: key, type: 2, name: 'Hill RPT' });
+    expect(parseContact(formatContact(key, 2, 'Hill <RPT>'))).toEqual({ publicKey: key, type: 2, name: 'Hill RPT', caption: '' });
+    expect(parseContact(`here's Bob ${formatContact(key, 1, 'Bob')}`)).toMatchObject({ name: 'Bob', caption: "here's Bob" });
+    expect(parseContact(`<${key}:7:x>`)).toBeNull();
   });
 });

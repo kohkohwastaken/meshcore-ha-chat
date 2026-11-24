@@ -230,17 +230,23 @@ export interface SharedContact {
   publicKey: string;
   type: number;
   name: string;
+  /** Any text sent with it, with the token taken out. */
+  caption: string;
 }
 
-const CONTACT_RE = /^<([0-9a-fA-F]{64}):(\d+):([^>]*)>$/;
+// As MeshCore Open's contact_share_message.dart.
+const CONTACT_RE = /<([0-9a-fA-F]{64}):([1-4]):([^<>\r\n]*)>/;
 
+/** A contact token anywhere in the message, plus the rest of the text as its caption. */
 export function parseContact(text: string): SharedContact | null {
-  const m = CONTACT_RE.exec(text.trim());
-  return m ? { publicKey: m[1].toLowerCase(), type: Number(m[2]), name: m[3] } : null;
+  const m = CONTACT_RE.exec(text);
+  if (!m) return null;
+  const caption = (text.slice(0, m.index) + text.slice(m.index + m[0].length)).replace(/\s+/g, ' ').trim();
+  return { publicKey: m[1].toLowerCase(), type: Number(m[2]), name: m[3].trim(), caption };
 }
 
 export function formatContact(publicKey: string, type: number, name: string): string {
-  return `<${publicKey.toLowerCase()}:${type}:${name.replace(/[<>:]/g, '')}>`;
+  return `<${publicKey.toLowerCase()}:${type}:${name.replace(/[<>\r\n]/g, '').trim()}>`;
 }
 
 export const NODE_TYPE_NAMES: Record<number, string> = { 1: 'Companion', 2: 'Repeater', 3: 'Room server', 4: 'Sensor' };
