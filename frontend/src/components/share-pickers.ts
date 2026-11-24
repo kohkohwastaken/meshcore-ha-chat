@@ -88,7 +88,7 @@ const dialogStyles = css`
 @customElement('meshcore-location-picker')
 export class MeshCoreLocationPicker extends LitElement {
   @property({ attribute: false }) hass?: HomeAssistant;
-  @state() private _tab: 'devices' | 'map' = 'devices';
+  @state() private _tab: 'devices' | 'map' = 'map';
   @state() private _q = '';
   @state() private _mapOk: boolean | null = null;
   private _fitted = false;
@@ -103,10 +103,43 @@ export class MeshCoreLocationPicker extends LitElement {
     this.dispatchEvent(new CustomEvent('location-picked', { detail: loc }));
   }
 
+  /** ha-map's map engine (2026.10+), or the older Leaflet map. */
+  private _engine() {
+    return this.renderRoot.querySelector('ha-map') as (HaMapElement & {
+      _engine?: { getView?: () => { center: [number, number]; zoom: number }; setView?: (c: [number, number], z?: number) => void };
+      leafletMap?: { getCenter: () => { lat: number; lng: number }; setView: (c: [number, number], z: number) => void };
+    }) | null;
+  }
+
   private _useMapCentre() {
-    const map = this.renderRoot.querySelector('ha-map') as (HaMapElement & { leafletMap?: { getCenter: () => { lat: number; lng: number } } }) | null;
+    const map = this._engine();
+    const view = map?._engine?.getView?.();
+    if (view) {
+      this._pick({ lat: view.center[0], lon: view.center[1], source: 'Picked on map' });
+      return;
+    }
     const c = map?.leafletMap?.getCenter();
     if (c) this._pick({ lat: c.lat, lon: c.lng, source: 'Picked on map' });
+  }
+
+  /** Start the map on home once its engine is up. */
+  private async _centreOnHome() {
+    const home = this.hass?.states['zone.home']?.attributes as Record<string, number> | undefined;
+    if (home?.latitude == null) return;
+    const centre: [number, number] = [home.latitude, home.longitude];
+    for (let i = 0; i < 40; i++) {
+      const map = this._engine();
+      if (!map) return;
+      if (map._engine?.setView) {
+        map._engine.setView(centre, 15);
+        return;
+      }
+      if (map.leafletMap) {
+        map.leafletMap.setView(centre, 15);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 150));
+    }
   }
 
   updated() {
@@ -120,13 +153,7 @@ export class MeshCoreLocationPicker extends LitElement {
     this._fitted = true;
     map.entities = [];
     map.autoFit = false;
-    const home = this.hass?.states['zone.home']?.attributes as Record<string, number> | undefined;
-    if (home?.latitude != null) {
-      void (map.updateComplete ?? Promise.resolve()).then(() => setTimeout(() => {
-        const d = 0.01;
-        map.fitBounds?.([[home.latitude - d, home.longitude - d], [home.latitude + d, home.longitude + d]], { zoom: 15 });
-      }, 300));
-    }
+    void this._centreOnHome();
   }
 
   render() {
@@ -137,8 +164,8 @@ export class MeshCoreLocationPicker extends LitElement {
         <div class="dialog" @click=${(e: Event) => e.stopPropagation()}>
           <header>Share a location<button class="x" aria-label="Close" @click=${this._close}>✕</button></header>
           <div class="tabs">
-            <button class=${this._tab === 'devices' ? 'on' : ''} @click=${() => { this._tab = 'devices'; }}>From a device</button>
             <button class=${this._tab === 'map' ? 'on' : ''} @click=${() => { this._tab = 'map'; this._fitted = false; }}>Pick on map</button>
+            <button class=${this._tab === 'devices' ? 'on' : ''} @click=${() => { this._tab = 'devices'; }}>From a device</button>
           </div>
           ${this._tab === 'devices' ? html`
             <input class="search" placeholder="Search devices" .value=${this._q} @input=${(e: Event) => { this._q = (e.target as HTMLInputElement).value; }}>

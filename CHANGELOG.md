@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.7
+
+- Share location: "Pick on map" is now the first option.
+- Fixed "Use this spot" doing nothing on Home Assistant 2026.10+ (the new map engine), and the map now starts on your home.
+
 ## 0.4.6
 
 - Reactions now match the way MeshCore One and MeshCore Open actually do it, checked against their code and test vectors:
