@@ -17,7 +17,8 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 
 ### Fixed
 - Tapping the route no longer closes the message menu.
-- Hovering a marker on the route map shows the hop number and repeater name ("3. Tea-913 (91)") instead of Home Assistant's last-changed time.
+- Hovering the route map (markers and the dots on the line) shows the hop number and repeater name ("3. Tea-913 (91)") instead of a time.
+- Desktop message panel: SNR, RSSI and the received time sit right under the message, then its reactions, then the reaction buttons. The plain route text is gone; the map's numbered list covers it.
 
 ## 0.4.10
 
