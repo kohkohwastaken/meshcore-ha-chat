@@ -14,6 +14,7 @@ import '../components/conversation-list';
 import '../components/manage-dialog';
 import '../components/message-bubble';
 import '../components/message-search';
+import { LOW_BYTES, messageBudget, type MessageBudget } from '../utils/message-limit';
 
 @customElement('meshcore-chat-page')
 export class ChatPage extends LitElement {
@@ -166,8 +167,38 @@ export class ChatPage extends LitElement {
       flex-shrink: 0;
     }
 
+    .input-wrap {
+      flex: 1;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .byte-counter {
+      position: absolute;
+      right: 14px;
+      top: 21px;
+      transform: translateY(-50%);
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+      color: var(--secondary-text-color, #727272);
+      opacity: 0.8;
+      pointer-events: none;
+    }
+    .byte-counter.low { color: var(--warning-color, #ff9800); opacity: 1; }
+    .byte-counter.over { color: var(--error-color, #db4437); opacity: 1; font-weight: 600; }
+
+    .byte-note {
+      font-size: 12px;
+      padding: 4px 14px 0;
+    }
+    .byte-note.low { color: var(--warning-color, #ff9800); }
+    .byte-note.over { color: var(--error-color, #db4437); }
+
     .input-area textarea {
       flex: 1;
+      padding-right: 64px !important;
       padding: 10px 14px;
       border: 1px solid var(--input-border);
       border-radius: 20px;
@@ -838,6 +869,7 @@ export class ChatPage extends LitElement {
       show_date_separators: this.config?.show_date_separators ?? true,
     });
 
+    const budget = this._budget();
     return html`
       <div class="chat-container" @reply-to-sender=${this._onReplyToSender} @scroll=${this._onChatScroll}>
         ${this._messageStore.loadingOlder
@@ -872,6 +904,7 @@ export class ChatPage extends LitElement {
         ${this._renderNewMessagesIndicator()}
       </div>
       <div class="input-area">
+        <div class="input-wrap">
         <textarea
           placeholder="Type a message..."
           aria-label="Message text. Press Enter to send, Shift+Enter for newline."
@@ -887,16 +920,47 @@ export class ChatPage extends LitElement {
             }
           }}
           ?disabled=${this._sending || !this.selectedId}></textarea>
+        ${this._renderByteCounter(budget)}
+        </div>
         <button
           class="send-button"
           aria-label="Send message"
           @click=${() => this._sendMessage()}
-          ?disabled=${this._sending || !this.selectedId || !this._inputText.trim()}>
+          ?disabled=${this._sending || !this.selectedId || !this._inputText.trim() || budget.over}>
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path d="M16.6915026,12.4744748 L3.50612381,13.2599618 C3.19218622,13.2599618 3.03521743,13.4170592 3.03521743,13.5741566 L1.15159189,20.0151496 C0.8376543,20.8006365 0.99,21.89 1.77946707,22.52 C2.41,22.99 3.50612381,23.1 4.13399899,22.8429026 L21.714504,14.0454487 C22.6563168,13.5741566 23.1272231,12.6315722 22.9702544,11.6889879 L4.13399899,1.16151496 C3.34915502,0.9 2.40734225,0.9 1.77946707,1.4429026 C0.994623095,2.0752101 0.837654326,3.00778453 1.15159189,3.98029867 L3.03521743,10.4212916 C3.03521743,10.5783889 3.19218622,10.7354863 3.50612381,10.7354863 L16.6915026,11.5209733 C16.6915026,11.5209733 17.1624089,11.5209733 17.1624089,12.0492776 C17.1624089,12.5775818 16.6915026,12.4744748 16.6915026,12.4744748 Z"/>
           </svg>
         </button>
       </div>
+    `;
+  }
+
+  /** Whether the open conversation is a channel (sent as "<radio name>: <text>"). */
+  private _isChannelSelected(): boolean {
+    const conversation = this.conversations.find((c) => ('pubkey_prefix' in c
+      ? (c as Contact).pubkey_prefix === this.selectedId
+      : String((c as Channel).channel_idx) === this.selectedId));
+    return !!conversation && !('pubkey_prefix' in conversation);
+  }
+
+  /** Bytes used and left for the text in the send box, as it would be sent. */
+  private _budget(): MessageBudget {
+    return messageBudget(this._inputText, this._isChannelSelected() ? (this.config?.node_name ?? '') : null);
+  }
+
+  private _renderByteCounter(budget: MessageBudget) {
+    if (!this.selectedId) return html``;
+    const level = budget.over ? 'over' : budget.left < LOW_BYTES ? 'low' : '';
+    let note = html``;
+    if (budget.over) {
+      note = html`<div class="byte-note over" role="status">${-budget.left} ${-budget.left === 1 ? 'byte' : 'bytes'} too long. Shorten it to send.</div>`;
+    } else if (budget.echoUndetectable) {
+      note = html`<div class="byte-note low" role="status">Long message: repeats can't be detected, so it'll show as Unheard.</div>`;
+    }
+    return html`
+      <span class="byte-counter ${level}"
+        title="Bytes left in this message. Accented letters use 2 bytes, most emoji 4 or more.">${budget.over ? budget.left : `${budget.left} left`}</span>
+      ${note}
     `;
   }
 
@@ -1122,6 +1186,9 @@ export class ChatPage extends LitElement {
 
   private async _sendMessage() {
     if (this._sending || !this._inputText.trim() || !this.selectedId || !this.hass || !this.config) {
+      return;
+    }
+    if (this._budget().over) {
       return;
     }
     if (!this._conversationResolved) {

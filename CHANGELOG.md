@@ -4,6 +4,10 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- **Bytes left in the send box.** A small counter shows how much more fits in the message, counted in bytes as the radio counts them (accented letters take 2, most emoji 4 or more). On a channel your radio's name and ": " count too. It turns amber under 20 and red when the message is too long, and Send is blocked until you shorten it, so a message is never refused or cut off. Channel messages long enough that their repeats can't be detected (over 155 bytes with your name) get a note that they'll show as Unheard.
+
 ### Security
 
 - **Private channel keys are no longer sent to non-admin users.** The channel list included every channel's secret key for any logged-in Home Assistant user, so a non-admin could copy a private channel's key and read or post on it from their own radio. Keys now go to admins only, who are the only ones who can edit channels.
