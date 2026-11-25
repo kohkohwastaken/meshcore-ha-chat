@@ -524,7 +524,9 @@ export class ConversationList extends LitElement {
             ${collapsed && unread === 0 ? html`<span class="section-count">${items.length}</span>` : ''}
           </button>
           <button class="section-add" title=${add} aria-label=${add}
-            @click=${() => this.dispatchEvent(new CustomEvent('manage-requested', { bubbles: true, composed: true }))}>＋</button>
+            @click=${() => this.dispatchEvent(new CustomEvent(
+              key === 'channels' ? 'add-channel-requested' : 'new-chat-requested',
+              { bubbles: true, composed: true }))}>＋</button>
         </div>
         ${collapsed
           ? ''
@@ -535,7 +537,7 @@ export class ConversationList extends LitElement {
     };
     return html`
       ${section('channels', 'Channels', channels, 'Add a channel')}
-      ${section('dms', 'Direct messages', dms, 'Add a contact')}
+      ${section('dms', 'Direct messages', dms, 'New message')}
     `;
   }
 

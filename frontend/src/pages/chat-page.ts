@@ -19,6 +19,7 @@ import { collectReactions, distanceMetres, formatContact, formatLocation, format
 import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
+import '../components/new-chat-dialog';
 import '../components/message-panel';
 import '../components/location-map';
 import type { PickedLocation } from '../components/share-pickers';
@@ -610,7 +611,12 @@ export class ChatPage extends LitElement {
       cursor: pointer;
     }
 
-    .conv-menu button:hover {
+    .conv-menu button:disabled {
+      color: var(--secondary-text-color);
+      cursor: default;
+    }
+
+    .conv-menu button:hover:not(:disabled) {
       background: rgba(127, 127, 127, 0.12);
     }
 
@@ -958,7 +964,10 @@ export class ChatPage extends LitElement {
                 this.selectedId = newId;
                 this._narrowShowMessages = true;
               }}
-              @manage-requested=${() => this._onManageRequested()}></meshcore-conversation-list>
+              @manage-requested=${() => this._onManageRequested()}
+              @add-channel-requested=${() => { this._manageInitialTab = 'channels'; this._manageOpen = true; }}
+              @new-chat-requested=${() => { this._newChatOpen = true; }}></meshcore-conversation-list>
+              ${this._renderNewChat()}
             ${this._manageOpen ? html`
               <meshcore-manage-dialog
                 .hass=${this.hass}
@@ -993,7 +1002,10 @@ export class ChatPage extends LitElement {
             }
             this.selectedId = newId;
           }}
-          @manage-requested=${() => this._onManageRequested()}></meshcore-conversation-list>
+          @manage-requested=${() => this._onManageRequested()}
+              @add-channel-requested=${() => { this._manageInitialTab = 'channels'; this._manageOpen = true; }}
+              @new-chat-requested=${() => { this._newChatOpen = true; }}></meshcore-conversation-list>
+              ${this._renderNewChat()}
         <div class="chat-main">
           ${this.selectedId ? html`
             <div class="narrow-header" style="display: flex; align-items: center; padding: 8px 16px;">
@@ -1740,6 +1752,13 @@ export class ChatPage extends LitElement {
     }
   }
 
+  private _contactHasLocation(): boolean {
+    const c = this._selectedContactObj();
+    const lat = Number(c?.adv_lat);
+    const lon = Number(c?.adv_lon);
+    return Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
+  }
+
   /** ⋯ in the conversation header. */
   private _renderConvMenu() {
     const isChannel = this._isChannelSelected();
@@ -1755,13 +1774,30 @@ export class ChatPage extends LitElement {
               ? html`
                   <button role="menuitem" @click=${() => this._convAction('manage-channels')}>Edit channel and region scope</button>`
               : html`
-                  <button role="menuitem" @click=${() => this._convAction('show-on-map')}>Show on map</button>
+                  ${this._contactHasLocation()
+                    ? html`<button role="menuitem" @click=${() => this._convAction('show-on-map')}>Show on map</button>`
+                    : html`<button role="menuitem" disabled title="This contact hasn't shared a location in its adverts">Show on map (no location shared)</button>`}
                   <button role="menuitem" @click=${() => this._convAction('trace')}>Trace route</button>
                   <button role="menuitem" @click=${() => this._convAction('manage-contacts')}>Manage contacts</button>`}
             <button role="menuitem" @click=${() => this._convAction('search')}>Search this conversation</button>
           </div>` : ''}
       </span>
     `;
+  }
+
+  @state() private _newChatOpen = false;
+
+  private _renderNewChat() {
+    if (!this._newChatOpen) return html``;
+    return html`<meshcore-new-chat-dialog
+      .hass=${this.hass}
+      .entryId=${this.config?.entry_id}
+      .contacts=${this.conversations.filter((c) => 'pubkey_prefix' in c) as Contact[]}
+      @new-chat-closed=${() => { this._newChatOpen = false; }}
+      @open-chat=${(e: CustomEvent<{ id: string }>) => {
+        this._newChatOpen = false;
+        this.selectedId = e.detail.id;
+      }}></meshcore-new-chat-dialog>`;
   }
 
   private _onManageRequested() {

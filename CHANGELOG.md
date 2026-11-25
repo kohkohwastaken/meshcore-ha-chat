@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.10
+
+- **Chat:** the ＋ next to **Direct messages** opens a **New message** picker. Choose one of your contacts, or a node heard nearby. Choosing a node you haven't added adds it to your radio and opens the chat. Search works by name or key.
+- **Chat:** the ＋ next to **Channels** goes straight to channel management.
+- **Chat:** **Show on map** is greyed out, with "(no location shared)", for contacts that haven't included a position in their adverts.
+
 ## 0.4.12-beta.9
 
 - **Repeaters:** after logging in, **Log in and refresh** now asks the repeater for its status through the MeshCore integration, so battery, signal and traffic actually update.
