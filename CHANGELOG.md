@@ -22,6 +22,7 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 ### Fixed
 - Tapping the route no longer closes the message menu.
 - Large location and route maps fill the whole box instead of only the top part.
+- Dragging a location map in a message no longer fades the message.
 - Hovering the route map (markers and the dots on the line) shows the repeater name ("Tea-913") instead of a time.
 
 ## 0.4.10

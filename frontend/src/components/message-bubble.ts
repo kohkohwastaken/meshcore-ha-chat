@@ -104,6 +104,9 @@ export class MessageBubble extends LitElement {
       font-size: 14px;
     }
 
+    .bubble.has-map:active {
+      opacity: 1;
+    }
     .bubble:active {
       opacity: 0.7;
     }
@@ -449,6 +452,8 @@ export class MessageBubble extends LitElement {
       outgoing: msg.isOutgoing,
       system: msg.isSystem,
       selected: msg.id === this.selectedId,
+      // Pressing to drag the map shouldn't dim the bubble.
+      'has-map': !msg.isSystem && parseLocation(msg.text) !== null,
     };
 
     const statusLabel = msg.isOutgoing && msg.deliveryStatus ? deliveryLabel(msg.deliveryStatus) : '';
