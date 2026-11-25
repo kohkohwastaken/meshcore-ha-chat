@@ -628,10 +628,31 @@ export class MeshCorePanel extends LitElement {
     super.connectedCallback();
     this._loadData();
     this._setupSubscriptions();
+    window.addEventListener('resize', this._fitHeight);
+    window.visualViewport?.addEventListener('resize', this._fitHeight);
+    requestAnimationFrame(this._fitHeight);
+    // The app's own layout can settle after first paint.
+    setTimeout(this._fitHeight, 500);
+    setTimeout(this._fitHeight, 1500);
   }
+
+  /**
+   * Size the panel to the space that is actually visible below its top
+   * edge. CSS viewport units are unreliable in the phone app's web view
+   * (100vh and 100dvh both came out taller than the screen), which let
+   * the whole panel, tab bar and all, scroll.
+   */
+  private _fitHeight = () => {
+    const vh = window.visualViewport?.height ?? window.innerHeight;
+    const top = Math.max(0, this.getBoundingClientRect().top);
+    const h = Math.round(vh - top);
+    if (h > 200) this.style.height = `${h}px`;
+  };
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener('resize', this._fitHeight);
+    window.visualViewport?.removeEventListener('resize', this._fitHeight);
     this._teardownSubscriptions();
     this._closeDeviceDropdown();
   }

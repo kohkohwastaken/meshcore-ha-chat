@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.7
+
+- **Phone app:** the panel now measures the visible space and sizes itself to fit, so the bottom tab bar can't be scrolled up any more. CSS screen-height units were still too tall in the app.
+
 ## 0.4.12-beta.6
 
 - **Chat list:** tap **Channels** or **Direct messages** to collapse that section. A collapsed section shows its unread count, or how many conversations it holds when nothing is unread. This browser remembers which sections are collapsed.
