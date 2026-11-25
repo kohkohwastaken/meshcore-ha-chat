@@ -512,6 +512,28 @@ export class NodesPage extends LitElement {
       overflow: hidden;
     }
 
+    .view-switch {
+      display: inline-flex;
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .view-switch button {
+      padding: 6px 12px;
+      border: none;
+      background: transparent;
+      color: var(--secondary-text-color, #727272);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .view-switch button.on {
+      background: var(--primary-color, #03a9f4);
+      color: #fff;
+    }
+
     .view-btn {
       padding: 6px 12px;
       border: 1px solid var(--divider-color, #e0e0e0);
@@ -718,14 +740,14 @@ export class NodesPage extends LitElement {
               <option value="name">Sort: name</option>
               <option value="prefix">Sort: key prefix</option>
             </select>
-            ${this._view === 'map' ? html`
+            ${html`
               <select class="sort-select" aria-label="Heard within" .value=${this._heard}
                 @change=${(e: Event) => setHeardWithin((e.target as HTMLSelectElement).value as HeardWithin)}>
                 <option value="0">Heard: any time</option>
                 <option value="1">Heard: 24 hours</option>
                 <option value="7">Heard: 7 days</option>
                 <option value="30">Heard: 30 days</option>
-              </select>` : nothing}
+              </select>`}
             <div class="more-wrap">
               <button class="sync-btn" aria-label="More actions" aria-haspopup="menu"
                 @click=${() => { this._moreOpen = !this._moreOpen; }}>⋯</button>
@@ -739,11 +761,12 @@ export class NodesPage extends LitElement {
                   `
                 : nothing}
             </div>
-            <button class="view-btn"
-              title=${this._view === 'map' ? 'Show nodes as a list' : 'Show nodes on a map'}
-              @click=${() => this._setView(this._view === 'map' ? 'list' : 'map')}>
-              ${this._view === 'map' ? '☰ List' : '🗺 Map'}
-            </button>
+            <div class="view-switch" role="radiogroup" aria-label="View">
+              <button role="radio" aria-checked=${this._view === 'map'} class=${this._view === 'map' ? 'on' : ''}
+                @click=${() => this._setView('map')}>Map</button>
+              <button role="radio" aria-checked=${this._view === 'list'} class=${this._view === 'list' ? 'on' : ''}
+                @click=${() => this._setView('list')}>List</button>
+            </div>
           </div>
         </div>
 
@@ -874,9 +897,9 @@ export class NodesPage extends LitElement {
 
   private static _storedView(): 'list' | 'map' {
     try {
-      return localStorage.getItem(VIEW_STORAGE_KEY) === 'map' ? 'map' : 'list';
+      return localStorage.getItem(VIEW_STORAGE_KEY) === 'list' ? 'list' : 'map';
     } catch {
-      return 'list';
+      return 'map';
     }
   }
 
@@ -1016,7 +1039,7 @@ export class NodesPage extends LitElement {
     // filtered dataset — not just the first page.
     return html`
       <div class="nodes-grid">
-        ${this._displayedContacts.map((c) => html`
+        ${this._displayedContacts.filter((c) => heardRecently((c as Contact).last_advert, this._heard)).map((c) => html`
           <div @click=${() => this._openNodeDetail(c)}>
             <meshcore-chat-contact-card .contact=${c as Contact}></meshcore-chat-contact-card>
           </div>

@@ -155,11 +155,11 @@ export class PreferencesPage extends LitElement {
         </div>
 
         <div class="card">
-          <h2>Map</h2>
+          <h2>Nodes</h2>
           <label class="row">
             <span class="text">
               <span class="title">Show nodes heard within</span>
-              <span class="help">Hides nodes that haven't advertised for a while. You can also change this from the Map toolbar.</span>
+              <span class="help">Hides nodes that haven't advertised for a while. You can also change this from the Nodes toolbar.</span>
             </span>
             <select aria-label="Show nodes heard within" .value=${this._heard}
               @change=${(e: Event) => { this._heard = (e.target as HTMLSelectElement).value as HeardWithin; setHeardWithin(this._heard); }}>

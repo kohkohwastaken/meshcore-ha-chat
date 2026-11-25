@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.3
+
+- The Map tab is called **Nodes** again. A **Map | List** switch picks the view, and Map is the default.
+- The "Heard" filter now applies to the list view too.
+- Settings → Map is now Settings → Nodes.
+
 ## 0.4.12-beta.2
 
 - **Repeaters:** a list of cards (status and when each was last heard). Tap one to open its page, with "‹ All devices" to go back. A **Manage devices** card opens the integration's options. When a repeater has no stats, **Log in and refresh** uses its saved password to ask for fresh status.
