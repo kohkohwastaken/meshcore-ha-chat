@@ -187,6 +187,11 @@ class UnreadTracker:
         except Exception as ex:
             _LOGGER.error("Failed to persist last-read cursors: %s", ex)
 
+    def forget(self, entity_id: str) -> None:
+        """Drop the read cursor for a deleted conversation."""
+        if self._last_read.pop(entity_id, None) is not None:
+            self._schedule_save()
+
     def clear(self) -> None:
         """No-op (kept for callsite compatibility).
 

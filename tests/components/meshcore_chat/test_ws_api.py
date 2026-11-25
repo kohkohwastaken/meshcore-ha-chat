@@ -4023,3 +4023,28 @@ async def test_ws_get_conversation_previews(
     }
     assert previews["binary_sensor.meshcore_abc123_def456_messages"]["outgoing"] is True
     assert previews["binary_sensor.meshcore_abc123_def456_messages"]["sender"] == ""
+
+
+async def test_ws_delete_conversation(
+    hass: HomeAssistant, companion_entry: MockConfigEntry
+) -> None:
+    """Deleting a conversation removes it from the store and forgets its cursor."""
+    store = companion_entry.runtime_data.store
+    store.delete_conversation = AsyncMock(return_value=True)
+    tracker = MagicMock()
+    hass.data[DOMAIN] = {"unread_tracker": tracker}
+    conn = _Connection()
+    eid = "binary_sensor.meshcore_abc123_def456_messages"
+    await _call_ws(ws_api.ws_delete_conversation, hass, conn, {"id": 1, "entity_id": eid})
+    store.delete_conversation.assert_awaited_once_with(eid)
+    tracker.forget.assert_called_once_with(eid)
+    assert conn.results[0][1] == {"success": True, "deleted": True}
+
+
+async def test_ws_delete_conversation_rejects_other_entities(
+    hass: HomeAssistant, companion_entry: MockConfigEntry
+) -> None:
+    """Only MeshCore conversation entities can be deleted."""
+    conn = _Connection()
+    await _call_ws(ws_api.ws_delete_conversation, hass, conn, {"id": 1, "entity_id": "light.kitchen"})
+    assert conn.results == []

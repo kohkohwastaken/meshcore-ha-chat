@@ -1148,3 +1148,14 @@ async def test_cleanup_save_failure_leaves_index_untouched(
     assert eid in s.get_message_index()  # index NOT mutated → retry next run
     assert "retention cleanup" in caplog.text
     await s.async_unload()
+
+
+async def test_delete_conversation_removes_index_and_messages(store: MessageStore) -> None:
+    """A deleted conversation has no stored messages or index entry."""
+    eid = "binary_sensor.meshcore_abc123_def456_messages"
+    await store.store_message(eid, {"id": "m1", "text": "hi", "timestamp": "2026-11-25T12:00:00"})
+    assert eid in store.get_message_index()
+    assert await store.delete_conversation(eid) is True
+    assert eid not in store.get_message_index()
+    assert eid not in store._loaded_conversations
+    assert await store.delete_conversation(eid) is False

@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.12
+
+- **Chat:** the contacts button is now a labelled **Contacts** pill.
+- **Chat:** Direct messages only lists conversations that have messages. Searching still finds every contact.
+- **Chat:** the ⋯ in a conversation header has **Delete chat** (direct messages) or **Clear chat history** (channels), with a confirmation. This removes the stored messages from Home Assistant. The contact or channel stays.
+
 ## 0.4.12-beta.11
 
 - **Chat:** a **Contacts** button next to the gear (and the ＋ by Direct messages) opens a **Contacts** panel:

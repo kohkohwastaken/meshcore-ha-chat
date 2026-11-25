@@ -122,6 +122,26 @@ export class ConversationList extends LitElement {
       flex-shrink: 0;
     }
 
+    .contacts-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 16px;
+      border: 1px solid var(--primary-color, #03a9f4);
+      background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.12);
+      color: var(--primary-color, #03a9f4);
+      font: inherit;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .contacts-pill:hover {
+      background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.22);
+    }
+
     .compose-btn:hover {
       background: rgba(0, 0, 0, 0.05);
       color: var(--primary-text-color);
@@ -402,13 +422,12 @@ export class ConversationList extends LitElement {
       <div class="sidebar-header">
         <span class="sidebar-title">Chats</span>
         <button
-          class="compose-btn"
-          title="Contacts"
-          aria-label="Contacts"
+          class="contacts-pill"
           @click=${() => this.dispatchEvent(new CustomEvent('new-chat-requested', { bubbles: true, composed: true }))}>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true">
             <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
           </svg>
+          Contacts
         </button>
         <button
           class="compose-btn"
@@ -541,7 +560,7 @@ export class ConversationList extends LitElement {
           ? ''
           : items.length
             ? items.map((c) => this._renderConversation(c, idx++))
-            : html`<div class="section-empty">None yet</div>`}
+            : html`<div class="section-empty">${key === 'dms' ? 'No conversations yet. Tap Contacts to start one.' : 'None yet'}</div>`}
       `;
     };
     return html`
@@ -647,9 +666,9 @@ export class ConversationList extends LitElement {
       if (q && !(name || '').toLowerCase().includes(q)) return false;
       const unread = this._getUnreadCount(id);
       if (this._activeFilter === 'unread' && unread <= 0) return false;
-      // Repeaters and room servers only show once you've messaged them.
-      if (isContact && INFRA_TYPES.has((conv as Contact).type)
-        && !this._previewFor(conv) && unread <= 0 && this.activeId !== id && !q) return false;
+      // Direct messages only appear once there's a conversation to show
+      // (searching still finds every contact).
+      if (isContact && !this._previewFor(conv) && unread <= 0 && this.activeId !== id && !q) return false;
       return true;
     });
   }

@@ -431,6 +431,7 @@ def async_register_ws_commands(hass: HomeAssistant) -> None:
     # Unread, identity, location, and contact commands
     websocket_api.async_register_command(hass, ws_get_unread_counts)
     websocket_api.async_register_command(hass, ws_get_conversation_previews)
+    websocket_api.async_register_command(hass, ws_delete_conversation)
     websocket_api.async_register_command(hass, ws_mark_read)
     websocket_api.async_register_command(hass, ws_regenerate_identity)
     websocket_api.async_register_command(hass, ws_import_identity)
@@ -2041,6 +2042,30 @@ async def ws_get_conversation_previews(hass, connection, msg):
             needle = f".meshcore_{prefix}_"
             previews = {k: v for k, v in previews.items() if needle in k}
     connection.send_result(msg["id"], {"previews": previews})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/delete_conversation",
+        vol.Required("entity_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_delete_conversation(hass, connection, msg):
+    """Delete a conversation's stored history (the contact or channel stays)."""
+    entity_id = msg["entity_id"]
+    if not entity_id.endswith("_messages") or ".meshcore_" not in entity_id:
+        connection.send_error(msg["id"], "invalid_format", "Not a MeshCore conversation")
+        return
+    store = _get_store(hass, None)
+    if store is None:
+        connection.send_error(msg["id"], "not_found", "Message store not available")
+        return
+    deleted = await store.delete_conversation(entity_id)
+    tracker = hass.data.get(DOMAIN, {}).get("unread_tracker")
+    if tracker is not None and hasattr(tracker, "forget"):
+        tracker.forget(entity_id)
+    connection.send_result(msg["id"], {"success": True, "deleted": deleted})
 
 
 # ─── Unread Tracking ─────────────────────────────────────────────────────

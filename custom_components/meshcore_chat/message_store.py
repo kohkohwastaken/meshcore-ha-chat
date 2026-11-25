@@ -588,6 +588,28 @@ class MessageStore:
 
     # ── save scheduling (debounced) ────────────────────────────────────────
 
+    async def delete_conversation(self, entity_id: str) -> bool:
+        """Delete a conversation's stored messages and its index entry.
+
+        Returns False when there was nothing stored for it.
+        """
+        timer = self._msg_save_timers.pop(entity_id, None)
+        if timer is not None:
+            timer.cancel()
+        existed = entity_id in self._message_index or entity_id in self._loaded_conversations
+        self._loaded_conversations.pop(entity_id, None)
+        self._conversation_last_access.pop(entity_id, None)
+        self._conversation_dirty.discard(entity_id)
+        store = self._store_for(entity_id)
+        try:
+            await store.async_remove()
+        except Exception as ex:  # pragma: no cover - defensive
+            _LOGGER.error("Error removing conversation %s: %s", entity_id, ex)
+        self._conversation_stores.pop(entity_id, None)
+        if self._message_index.pop(entity_id, None) is not None:
+            self._schedule_index_save()
+        return existed
+
     def _schedule_conversation_save(self, entity_id: str) -> None:
         """Debounce per-conversation store writes."""
         existing = self._msg_save_timers.get(entity_id)

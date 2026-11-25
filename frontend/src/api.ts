@@ -967,3 +967,15 @@ export async function getConversationPreviews(
     return result.previews || {};
   } catch { return {}; }
 }
+
+/** Delete a conversation's stored history. The contact or channel itself stays. */
+export async function deleteConversation(
+  hass: HomeAssistant, entityId: string,
+): Promise<{ success: boolean }> {
+  try {
+    const msg: Record<string, unknown> = { type: 'meshcore_chat/delete_conversation', entity_id: entityId };
+    return await hass.callWS<{ success: boolean }>(msg);
+  } catch {
+    return { success: false };
+  }
+}

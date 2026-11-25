@@ -5,7 +5,7 @@ import { MessageStore } from '../chat/message-store';
 import { UnreadController, markReadTailKey, pillLabel } from '../chat/unread-controller';
 import { buildRenderItems } from '../chat/message-parser';
 import { discoverChannelEntity, discoverContactEntity } from '../chat/entity-resolver';
-import { sendDirectMessage, sendChannelMessage, getConversationPreviews, type ConversationPreview } from '../api';
+import { sendDirectMessage, sendChannelMessage, getConversationPreviews, deleteConversation, type ConversationPreview } from '../api';
 import {
   AT_BOTTOM_THRESHOLD_PX,
   LAZY_LOAD_TRIGGER_PX,
@@ -20,6 +20,7 @@ import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
 import '../components/new-chat-dialog';
+import '../components/confirm-dialog';
 import '../components/message-panel';
 import '../components/location-map';
 import type { PickedLocation } from '../components/share-pickers';
@@ -611,6 +612,10 @@ export class ChatPage extends LitElement {
       cursor: pointer;
     }
 
+    .conv-menu button.danger {
+      color: var(--error-color, #db4437);
+    }
+
     .conv-menu button:disabled {
       color: var(--secondary-text-color);
       cursor: default;
@@ -967,7 +972,7 @@ export class ChatPage extends LitElement {
               @manage-requested=${() => this._onManageRequested()}
               @add-channel-requested=${() => { this._manageInitialTab = 'channels'; this._manageOpen = true; }}
               @new-chat-requested=${() => { this._newChatOpen = true; }}></meshcore-conversation-list>
-              ${this._renderNewChat()}
+              ${this._renderNewChat()}${this._renderDeleteConfirm()}
             ${this._manageOpen ? html`
               <meshcore-manage-dialog
                 .hass=${this.hass}
@@ -1006,7 +1011,7 @@ export class ChatPage extends LitElement {
           @manage-requested=${() => this._onManageRequested()}
               @add-channel-requested=${() => { this._manageInitialTab = 'channels'; this._manageOpen = true; }}
               @new-chat-requested=${() => { this._newChatOpen = true; }}></meshcore-conversation-list>
-              ${this._renderNewChat()}
+              ${this._renderNewChat()}${this._renderDeleteConfirm()}
         <div class="chat-main">
           ${this.selectedId ? html`
             <div class="narrow-header" style="display: flex; align-items: center; padding: 8px 16px;">
@@ -1719,6 +1724,42 @@ export class ChatPage extends LitElement {
   }
 
   @state() private _convMenuOpen = false;
+  @state() private _confirmDelete = false;
+
+  private async _deleteChat() {
+    this._confirmDelete = false;
+    const entityId = this._currentEntityId;
+    if (!this.hass || !entityId) return;
+    const isChannel = this._isChannelSelected();
+    const res = await deleteConversation(this.hass, entityId);
+    if (!res.success) {
+      alert("Couldn't delete this chat. Try again in a moment.");
+      return;
+    }
+    this.unread.clearEntity(entityId);
+    if (isChannel) {
+      await this._messageStore?.refresh();
+    } else {
+      this.selectedId = null;
+    }
+    this._refreshPreviews(0);
+  }
+
+  private _renderDeleteConfirm() {
+    if (!this._confirmDelete) return html``;
+    const isChannel = this._isChannelSelected();
+    const name = this._getConversationName();
+    return html`<meshcore-confirm-dialog
+      .open=${true}
+      .title=${isChannel ? `Clear the history of ${name}?` : `Delete your chat with ${name}?`}
+      .message=${isChannel
+        ? 'Every stored message in this channel is removed from Home Assistant. You stay in the channel.'
+        : 'Every stored message with this contact is removed from Home Assistant. They stay in your contacts.'}
+      .confirmLabel=${isChannel ? 'Clear history' : 'Delete chat'}
+      .dangerous=${true}
+      @confirm=${() => this._deleteChat()}
+      @cancel=${() => { this._confirmDelete = false; }}></meshcore-confirm-dialog>`;
+  }
 
   /** The selected direct-message contact, if a contact is selected. */
   private _selectedContactObj(): Contact | undefined {
@@ -1741,6 +1782,9 @@ export class ChatPage extends LitElement {
         break;
       case 'search':
         this._searchOpen = true;
+        break;
+      case 'delete':
+        this._confirmDelete = true;
         break;
       case 'trace':
       case 'show-on-map':
@@ -1781,6 +1825,7 @@ export class ChatPage extends LitElement {
                   <button role="menuitem" @click=${() => this._convAction('trace')}>Trace route</button>
                   <button role="menuitem" @click=${() => this._convAction('manage-contacts')}>Contacts</button>`}
             <button role="menuitem" @click=${() => this._convAction('search')}>Search this conversation</button>
+            <button role="menuitem" class="danger" @click=${() => this._convAction('delete')}>${isChannel ? 'Clear chat history' : 'Delete chat'}</button>
           </div>` : ''}
       </span>
     `;
