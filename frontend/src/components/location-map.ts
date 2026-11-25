@@ -18,11 +18,12 @@ export class MeshCoreLocationMap extends LitElement {
   @property({ type: String }) label = '';
   @state() private _ok: boolean | null = null;
   @state() private _large = false;
+  private _observer?: ResizeObserver;
 
   static styles = css`
     :host { display: block; }
     .frame { position: relative; width: 260px; max-width: 100%; height: 150px; border-radius: 10px; overflow: hidden; background: rgba(127,127,127,0.2); }
-    .frame ha-map, .large ha-map { position: absolute; inset: 0; display: block; }
+    .frame ha-map, .large ha-map { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
     .large { position: fixed; inset: 6vh 5vw; z-index: 1001; border-radius: 12px; overflow: hidden; background: #222; box-shadow: 0 8px 32px rgba(0,0,0,0.6); }
     .backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.6); }
     .ctl { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; flex-direction: column; gap: 6px; }
@@ -42,6 +43,8 @@ export class MeshCoreLocationMap extends LitElement {
   }
 
   disconnectedCallback() {
+    this._observer?.disconnect();
+    this._observer = undefined;
     window.removeEventListener('keydown', this._onKey, true);
     super.disconnectedCallback();
   }
@@ -78,10 +81,22 @@ export class MeshCoreLocationMap extends LitElement {
       if (engine) {
         const d = 0.003;
         map.fitBounds?.([[this.lat - d, this.lon - d], [this.lat + d, this.lon + d]], { zoom: 15 });
-        // The map can come up blank until it re-measures itself.
-        for (const ms of [300, 1200]) {
+        // The map measures itself once, often before its box has its final
+        // size (blank or cut-off map). Re-measure whenever the box changes,
+        // and a few times while it settles.
+        if (!this._observer) {
+          this._observer = new ResizeObserver(() => {
+            for (const m of this.renderRoot.querySelectorAll('ha-map')) {
+              (m as unknown as { _engine?: Engine })._engine?.invalidateSize?.();
+            }
+          });
+        }
+        this._observer.observe(map);
+        for (const ms of [200, 600, 1500, 3000]) {
           await new Promise((r) => setTimeout(r, ms));
+          if (!map.isConnected) return;
           engine.invalidateSize?.();
+          if (ms === 600) map.fitBounds?.([[this.lat - d, this.lon - d], [this.lat + d, this.lon + d]], { zoom: 15 });
         }
         return;
       }

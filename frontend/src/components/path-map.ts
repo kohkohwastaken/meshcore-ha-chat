@@ -92,6 +92,7 @@ export class PathMap extends LitElement {
     .wrap ha-map {
       display: block;
       height: 100%;
+      width: 100%;
     }
     .wrap.expanded {
       position: fixed;
@@ -305,8 +306,14 @@ export class PathMap extends LitElement {
   /** Show the map large, over the page; Escape or the backdrop closes it. */
   private _setExpanded(on: boolean) {
     this._expanded = on;
-    // Refit once the map has its new size.
-    setTimeout(() => this._fitNative(), 250);
+    // The map keeps its old size until told to re-measure; then refit.
+    for (const ms of [100, 400, 1000]) {
+      setTimeout(() => {
+        const map = this.renderRoot.querySelector('ha-map') as (HaMapElement & { _engine?: { invalidateSize?: () => void } }) | null;
+        map?._engine?.invalidateSize?.();
+        this._fitNative();
+      }, ms);
+    }
   }
 
   private _onKey = (e: KeyboardEvent) => {
