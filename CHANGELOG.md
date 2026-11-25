@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.14
+
+- **Chat list:** the **Contacts** pill sits on the **Direct messages** heading, next to its ＋. The channels gear sits on the **Channels** heading, next to its ＋.
+
 ## 0.4.12-beta.13
 
 - **Chat (desktop):** direct messages show again. The desktop chat list never received the last-message previews (only the phone layout did), so every conversation looked empty. That hid them, and the previews and times were missing too.
