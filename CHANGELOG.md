@@ -13,7 +13,7 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 - No "time since" in the panel and no Details section: everything is shown.
 
 ### Added
-- Shared locations show on a map in the chat, with a marker, that you can drag and zoom. The expand button opens a large map with re-centre and "open in maps app" (your phone's maps app on phones, OpenStreetMap elsewhere). The send confirmation shows the map too.
+- Shared locations show on a map in the chat, with a red drop pin, that you can drag and zoom. The expand button opens a large map with re-centre and "open in maps app" (your phone's maps app on phones, OpenStreetMap elsewhere). The send confirmation shows the map too.
 - Route map: a "Larger map" button opens it big over the page (Esc or tap outside to close). The old ⤢ button is now a re-centre icon, as that's what it does.
 - Your "You reacted…" line shows the reaction's delivery state (Repeated, Unheard…), with Resend when it wasn't heard. A resent reaction updates the same line.
 - Received messages show their hop count next to the time ("5m · 7 hops").

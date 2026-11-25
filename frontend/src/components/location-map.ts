@@ -5,6 +5,22 @@ import { loadHaMap, type HaMapElement } from '../utils/ha-map';
 
 type Engine = { invalidateSize?: () => void };
 
+const PIN_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true" style="position:absolute;left:-16px;top:-32px;width:32px;height:32px;'
+  + 'filter:drop-shadow(0 1px 2px rgba(0,0,0,.6))"><path fill="#e53935" stroke="#fff" stroke-width="1.2" '
+  + 'd="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="#fff"/></svg>';
+
+/**
+ * ha-map draws an editable location as a plain dot. Turn it into a drop pin
+ * whose tip sits on the spot.
+ */
+function pinMarker(map: HaMapElement): void {
+  const dot = map.shadowRoot?.querySelector('.editable-circle-center') as HTMLElement | null;
+  if (!dot || dot.dataset.mcPin) return;
+  dot.dataset.mcPin = '1';
+  Object.assign(dot.style, { width: '0', height: '0', background: 'none', border: 'none', boxShadow: 'none', overflow: 'visible' });
+  dot.innerHTML = PIN_SVG;
+}
+
 /**
  * A shared location on Home Assistant's own map, with a marker you can pan
  * and zoom around. The small map in the chat has a button to open a large
@@ -96,6 +112,7 @@ export class MeshCoreLocationMap extends LitElement {
           await new Promise((r) => setTimeout(r, ms));
           if (!map.isConnected) return;
           engine.invalidateSize?.();
+          pinMarker(map);
           if (ms === 600) map.fitBounds?.([[this.lat - d, this.lon - d], [this.lat + d, this.lon + d]], { zoom: 15 });
         }
         return;
