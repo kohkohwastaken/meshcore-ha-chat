@@ -2,6 +2,14 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.11
+
+- **Chat:** a **Contacts** button next to the gear (and the ＋ by Direct messages) opens a **Contacts** panel:
+  - **Your contacts**: tap one to message. ⋯ has Show on map (when it has a location), Trace route, Share contact (copies its contact code) and Remove from radio.
+  - **Heard nearby**: **Add**, or **Message** to add and start a chat.
+  - Search by name or key.
+- **Chat:** the gear now only manages channels. Its contacts section has moved into the Contacts panel.
+
 ## 0.4.12-beta.10
 
 - **Chat:** the ＋ next to **Direct messages** opens a **New message** picker. Choose one of your contacts, or a node heard nearby. Choosing a node you haven't added adds it to your radio and opens the chat. Search works by name or key.

@@ -24,6 +24,8 @@ export class ManageDialog extends LitElement {
    * scope chip opens the dialog on 'channels' so the user lands on
    * the channel whose scope they tapped. */
   @property({ type: String }) initialTab?: ManageTab;
+  /** Channels only: contacts now live in the Contacts panel on the Chat tab. */
+  @property({ type: Boolean }) channelsOnly = false;
 
   private _tabInitialized = false;
 
@@ -62,6 +64,10 @@ export class ManageDialog extends LitElement {
   @state() private _maxChannels = 4;
 
   static styles = css`
+    [hidden] {
+      display: none !important;
+    }
+
     :host {
       position: fixed;
       top: 0;
@@ -553,11 +559,11 @@ export class ManageDialog extends LitElement {
         aria-label="Manage contacts and channels"
         @click=${(e: Event) => e.stopPropagation()}>
         <div class="dialog-header">
-          <span class="dialog-title">Manage</span>
+          <span class="dialog-title">${this.channelsOnly ? 'Channels' : 'Manage'}</span>
           <button class="close-btn" aria-label="Close" @click=${this._close}>✕</button>
         </div>
 
-        <div class="tab-bar">
+        <div class="tab-bar" ?hidden=${this.channelsOnly}>
           <button
             class=${this._activeTab === 'contacts' ? 'active' : ''}
             @click=${() => this._switchTab('contacts')}>
@@ -570,7 +576,7 @@ export class ManageDialog extends LitElement {
           </button>
         </div>
 
-        ${this._activeTab === 'contacts'
+        ${this._activeTab === 'contacts' && !this.channelsOnly
           ? html`
               <div class="filter-bar">
                 <span class="filter-bar-label">Show</span>
@@ -620,7 +626,7 @@ export class ManageDialog extends LitElement {
                 <div class="loading-spinner"></div>
                 Loading...
               </div>`
-            : this._activeTab === 'contacts'
+            : this._activeTab === 'contacts' && !this.channelsOnly
               ? this._renderContacts()
               : this._renderChannels()}
         </div>

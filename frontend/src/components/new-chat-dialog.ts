@@ -1,8 +1,8 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Contact, HomeAssistant } from '../types';
-import { addContact, getContactsPaginated } from '../api';
-import { NODE_TYPE_NAMES } from '../utils/rich-messages';
+import { addContact, getContactsPaginated, removeContact } from '../api';
+import { NODE_TYPE_NAMES, formatContact } from '../utils/rich-messages';
 
 /** Contact types you can hold a conversation with (not sensors). */
 const CHATTABLE = new Set([1, 2, 3]);
@@ -41,6 +41,11 @@ export class NewChatDialog extends LitElement {
   @state() private _loadingHeard = false;
   @state() private _adding: string | null = null;
   @state() private _error = '';
+  @state() private _notice = '';
+  /** Row whose ⋯ menu is open (public key). */
+  @state() private _menuFor: string | null = null;
+  /** Row waiting for "Remove?" confirmation (public key). */
+  @state() private _confirmRemove: string | null = null;
   private _searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   static styles = css`
@@ -146,6 +151,95 @@ export class NewChatDialog extends LitElement {
       font-size: 12px;
       color: var(--secondary-text-color);
     }
+    .row-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .row.static {
+      cursor: default;
+    }
+    .row.static:hover {
+      background: none;
+    }
+    .more {
+      border: none;
+      background: none;
+      color: var(--secondary-text-color);
+      font-size: 20px;
+      padding: 4px 10px;
+      cursor: pointer;
+      border-radius: 6px;
+    }
+    .more:hover {
+      background: rgba(127, 127, 127, 0.12);
+    }
+    .menu {
+      position: absolute;
+      right: 8px;
+      top: calc(100% - 4px);
+      z-index: 5;
+      min-width: 210px;
+      background: var(--card-background-color, #fff);
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 8px;
+      padding: 4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+    .menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .menu button:hover:not(:disabled) {
+      background: rgba(127, 127, 127, 0.12);
+    }
+    .menu button:disabled {
+      color: var(--secondary-text-color);
+      cursor: default;
+    }
+    .menu button.danger {
+      color: var(--error-color, #db4437);
+    }
+    .actions, .confirm {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-shrink: 0;
+      font-size: 13px;
+    }
+    .mini {
+      padding: 5px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--divider-color, #e0e0e0);
+      background: none;
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .mini.primary {
+      background: var(--primary-color, #03a9f4);
+      border-color: var(--primary-color, #03a9f4);
+      color: #fff;
+    }
+    .mini.danger {
+      border-color: var(--error-color, #db4437);
+      color: var(--error-color, #db4437);
+    }
+    .notice {
+      margin: 0 16px 8px;
+      font-size: 13px;
+      color: var(--secondary-text-color);
+    }
     .add {
       flex-shrink: 0;
       font-size: 12px;
@@ -213,36 +307,126 @@ export class NewChatDialog extends LitElement {
     }));
   }
 
-  private async _addAndOpen(c: Contact) {
-    if (!this.hass || this._adding) return;
-    this._adding = c.public_key || c.pubkey_prefix;
+  private _key(c: Contact): string {
+    return c.public_key || c.pubkey_prefix;
+  }
+
+  private _hasLocation(c: Contact): boolean {
+    const lat = Number(c.adv_lat);
+    const lon = Number(c.adv_lon);
+    return Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
+  }
+
+  private _nodeAction(c: Contact, action: string) {
+    this._menuFor = null;
+    this.dispatchEvent(new CustomEvent('node-action', {
+      detail: { action, node: c }, bubbles: true, composed: true,
+    }));
+    this._close();
+  }
+
+  private async _share(c: Contact) {
+    this._menuFor = null;
+    const code = formatContact(c.public_key || c.pubkey_prefix, c.type, c.adv_name || '');
+    try {
+      await navigator.clipboard.writeText(code);
+      this._notice = `Copied ${c.adv_name || 'contact'}'s contact code. Paste it into a chat on its own to share it.`;
+    } catch {
+      this._notice = code;
+    }
+  }
+
+  private async _add(c: Contact) {
+    if (!this.hass || this._adding) return false;
+    this._adding = this._key(c);
     this._error = '';
-    const res = await addContact(this.hass, c.public_key || c.pubkey_prefix, c.adv_name, this.entryId);
+    const res = await addContact(this.hass, this._key(c), c.adv_name, this.entryId);
     this._adding = null;
     if (!res.success) {
       this._error = `Couldn't add ${c.adv_name || c.pubkey_prefix} to your radio. Try again in a moment.`;
+      return false;
+    }
+    this._heard = this._heard.filter((h) => this._key(h) !== this._key(c));
+    this.dispatchEvent(new CustomEvent('contacts-changed', { bubbles: true, composed: true }));
+    this._notice = `Added ${c.adv_name || c.pubkey_prefix} to your contacts.`;
+    return true;
+  }
+
+  private async _remove(c: Contact) {
+    if (!this.hass) return;
+    this._confirmRemove = null;
+    this._adding = this._key(c);
+    const res = await removeContact(this.hass, this._key(c), this.entryId);
+    this._adding = null;
+    if (!res.success) {
+      this._error = `Couldn't remove ${c.adv_name || c.pubkey_prefix}. Try again in a moment.`;
       return;
     }
     this.dispatchEvent(new CustomEvent('contacts-changed', { bubbles: true, composed: true }));
-    this._open(c);
+    this._notice = `Removed ${c.adv_name || c.pubkey_prefix}.`;
+    void this._loadHeard();
   }
 
-  private _row(c: Contact, added: boolean) {
+  private _avatar(c: Contact) {
     const infra = c.type === 2 || c.type === 3;
     const initials = (c.adv_name || '').replace(/[^\p{L}\p{N}]/gu, '').substring(0, 2).toUpperCase()
       || c.pubkey_prefix.substring(0, 2).toUpperCase();
-    const busy = this._adding === (c.public_key || c.pubkey_prefix);
+    return html`<span class="av ${infra ? 'infra' : ''}">${initials}</span>`;
+  }
+
+  private _text(c: Contact) {
     return html`
-      <button class="row" ?disabled=${busy}
-        @click=${() => (added ? this._open(c) : this._addAndOpen(c))}>
-        <span class="av ${infra ? 'infra' : ''}">${initials}</span>
-        <span class="txt">
-          <div class="name">${c.adv_name || c.pubkey_prefix}</div>
-          <div class="meta">${NODE_TYPE_NAMES[c.type] ?? 'Node'}${c.last_advert ? ` · heard ${ago(c.last_advert)}` : ''}</div>
+      <span class="txt">
+        <div class="name">${c.adv_name || c.pubkey_prefix}</div>
+        <div class="meta">${NODE_TYPE_NAMES[c.type] ?? 'Node'}${c.last_advert ? ` · heard ${ago(c.last_advert)}` : ''}</div>
+      </span>`;
+  }
+
+  /** One of your contacts: tap to message, ⋯ for the rest. */
+  private _mineRow(c: Contact) {
+    const key = this._key(c);
+    if (this._confirmRemove === key) {
+      return html`
+        <div class="row static">
+          ${this._avatar(c)}${this._text(c)}
+          <span class="confirm">Remove?
+            <button class="mini danger" @click=${() => this._remove(c)}>Yes</button>
+            <button class="mini" @click=${() => { this._confirmRemove = null; }}>No</button>
+          </span>
+        </div>`;
+    }
+    return html`
+      <div class="row-wrap">
+        <button class="row" ?disabled=${this._adding === key} @click=${() => this._open(c)}>
+          ${this._avatar(c)}${this._text(c)}
+        </button>
+        <button class="more" aria-label="More for ${c.adv_name}" aria-haspopup="menu"
+          @click=${() => { this._menuFor = this._menuFor === key ? null : key; }}>⋯</button>
+        ${this._menuFor === key ? html`
+          <div class="menu" role="menu">
+            <button role="menuitem" @click=${() => this._open(c)}>Message</button>
+            ${this._hasLocation(c)
+              ? html`<button role="menuitem" @click=${() => this._nodeAction(c, 'show-on-map')}>Show on map</button>`
+              : html`<button role="menuitem" disabled>Show on map (no location shared)</button>`}
+            <button role="menuitem" @click=${() => this._nodeAction(c, 'trace')}>Trace route</button>
+            <button role="menuitem" @click=${() => this._share(c)}>Share contact</button>
+            <button role="menuitem" class="danger" @click=${() => { this._menuFor = null; this._confirmRemove = key; }}>Remove from radio</button>
+          </div>` : nothing}
+      </div>`;
+  }
+
+  /** A node heard nearby that isn't a contact yet. */
+  private _heardRow(c: Contact) {
+    const busy = this._adding === this._key(c);
+    return html`
+      <div class="row static">
+        ${this._avatar(c)}${this._text(c)}
+        <span class="actions">
+          <button class="mini" ?disabled=${busy} @click=${() => this._add(c)}>${busy ? 'Adding…' : 'Add'}</button>
+          <button class="mini primary" ?disabled=${busy}
+            @click=${async () => { if (await this._add(c)) this._open(c); }}>Message</button>
         </span>
-        ${added ? nothing : html`<span class="add">${busy ? 'Adding…' : 'Add and message'}</span>`}
-      </button>
-    `;
+      </div>`;
   }
 
   render() {
@@ -252,25 +436,26 @@ export class NewChatDialog extends LitElement {
     const heard = matchContacts(this._heard, '').filter((c) => !addedKeys.has(c.pubkey_prefix));
     return html`
       <div class="overlay" @click=${this._close}>
-        <div class="card" role="dialog" aria-modal="true" aria-label="New message"
+        <div class="card" role="dialog" aria-modal="true" aria-label="Contacts"
           @click=${(e: Event) => e.stopPropagation()}>
           <div class="head">
-            <span>New message</span>
+            <span>Contacts</span>
             <button class="close" aria-label="Close" @click=${this._close}>×</button>
           </div>
           <input type="search" placeholder="Search by name or key" aria-label="Search by name or key"
             .value=${this._query} @input=${this._onInput} />
           ${this._error ? html`<div class="error">${this._error}</div>` : nothing}
+          ${this._notice ? html`<div class="notice">${this._notice}</div>` : nothing}
           <div class="list">
             <div class="sec">Your contacts</div>
             ${mine.length
-              ? mine.map((c) => this._row(c, true))
+              ? mine.map((c) => this._mineRow(c))
               : html`<div class="note">${this._query ? 'No contacts match.' : 'No contacts on your radio yet.'}</div>`}
             <div class="sec">Heard nearby</div>
             ${this._loadingHeard && !heard.length
               ? html`<div class="note">Looking…</div>`
               : heard.length
-                ? heard.map((c) => this._row(c, false))
+                ? heard.map((c) => this._heardRow(c))
                 : html`<div class="note">${this._query ? 'Nobody heard matches.' : 'No other nodes heard yet. Their adverts appear here.'}</div>`}
           </div>
         </div>

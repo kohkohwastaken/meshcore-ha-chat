@@ -974,6 +974,7 @@ export class ChatPage extends LitElement {
                 .entryId=${this.config?.entry_id}
                 .narrow=${this.narrow}
                 .initialTab=${this._manageInitialTab}
+                .channelsOnly=${this._manageInitialTab === 'channels'}
                 @manage-closed=${() => this._manageOpen = false}
                 @contacts-changed=${this._onContactsChanged}
                 @channels-changed=${this._onChannelsChanged}
@@ -1038,6 +1039,7 @@ export class ChatPage extends LitElement {
             .entryId=${this.config?.entry_id}
             .narrow=${this.narrow}
             .initialTab=${this._manageInitialTab}
+            .channelsOnly=${this._manageInitialTab === 'channels'}
             @manage-closed=${() => this._manageOpen = false}
             @contacts-changed=${this._onContactsChanged}
             @channels-changed=${this._onChannelsChanged}
@@ -1735,8 +1737,7 @@ export class ChatPage extends LitElement {
         this._manageOpen = true;
         break;
       case 'manage-contacts':
-        this._manageInitialTab = 'contacts';
-        this._manageOpen = true;
+        this._newChatOpen = true;
         break;
       case 'search':
         this._searchOpen = true;
@@ -1778,7 +1779,7 @@ export class ChatPage extends LitElement {
                     ? html`<button role="menuitem" @click=${() => this._convAction('show-on-map')}>Show on map</button>`
                     : html`<button role="menuitem" disabled title="This contact hasn't shared a location in its adverts">Show on map (no location shared)</button>`}
                   <button role="menuitem" @click=${() => this._convAction('trace')}>Trace route</button>
-                  <button role="menuitem" @click=${() => this._convAction('manage-contacts')}>Manage contacts</button>`}
+                  <button role="menuitem" @click=${() => this._convAction('manage-contacts')}>Contacts</button>`}
             <button role="menuitem" @click=${() => this._convAction('search')}>Search this conversation</button>
           </div>` : ''}
       </span>
@@ -1801,7 +1802,7 @@ export class ChatPage extends LitElement {
   }
 
   private _onManageRequested() {
-    this._manageInitialTab = 'contacts';
+    this._manageInitialTab = 'channels';
     this._manageOpen = true;
   }
 
