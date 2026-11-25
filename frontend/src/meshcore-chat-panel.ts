@@ -127,9 +127,9 @@ export class MeshCorePanel extends LitElement {
         /* 100dvh is the visible height. In the phone app plain 100vh is
            taller than the screen, so the whole panel (tab bar included)
            scrolled. 100vh stays as the fallback for older browsers. */
-        height: 100vh;
-        height: 100dvh;
+        height: 100%;
         overflow: hidden;
+        overscroll-behavior: none;
       }
 
       .panel {
@@ -539,7 +539,7 @@ export class MeshCorePanel extends LitElement {
           order: 10;
           border-bottom: none;
           border-top: 1px solid var(--divider-color, #e0e0e0);
-          padding-bottom: env(safe-area-inset-bottom, 0);
+          padding-bottom: var(--safe-area-inset-bottom, 0px);
         }
         .tab-bar button {
           flex-direction: column;

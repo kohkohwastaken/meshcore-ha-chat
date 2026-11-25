@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.8
+
+- **Phone app:** removed the empty strip under the bottom tab bar. The bar was adding the Android navigation bar's height as padding, even though the app already stops above it. It now uses Home Assistant's own safe-area value.
+
 ## 0.4.12-beta.7
 
 - **Phone app:** the panel now measures the visible space and sizes itself to fit, so the bottom tab bar can't be scrolled up any more. CSS screen-height units were still too tall in the app.
