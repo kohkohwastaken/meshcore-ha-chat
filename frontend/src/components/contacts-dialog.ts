@@ -53,7 +53,7 @@ function hasLocation(c: Contact): boolean {
 type Tab = 'contacts' | 'heard';
 
 /** Discovered nodes fetched per page as the list scrolls. */
-const PAGE = 100;
+const PAGE = 500;
 
 /**
  * Contacts popup: your contacts (grouped; message, or tap for details),
