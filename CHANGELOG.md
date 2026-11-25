@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.19
+
+- **Contacts:** the sort menu now has **A–Z, Z–A, Recently heard and Longest ago**, on both the Contacts and Discovered tabs. Discovered is sorted on the server, so the order holds across every batch as you scroll.
+
 ## 0.4.12-beta.18
 
 - **Contacts → Discovered:** loads 500 nodes at a time instead of 100.

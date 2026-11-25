@@ -52,6 +52,17 @@ function hasLocation(c: Contact): boolean {
 
 type Tab = 'contacts' | 'heard';
 
+type SortOrder = 'az' | 'za' | 'recent' | 'oldest';
+
+/** Sort a contact list locally; mirrors the server's ordering for Discovered. */
+export function sortContacts(list: Contact[], order: SortOrder): Contact[] {
+  const byName = (a: Contact, b: Contact) =>
+    (a.adv_name || '').trim().toLowerCase().localeCompare((b.adv_name || '').trim().toLowerCase());
+  const byHeard = (a: Contact, b: Contact) => (b.last_advert || 0) - (a.last_advert || 0);
+  const sorted = list.slice().sort(order === 'az' || order === 'za' ? byName : byHeard);
+  return order === 'za' || order === 'oldest' ? sorted.reverse() : sorted;
+}
+
 /** Discovered nodes fetched per page as the list scrolls. */
 const PAGE = 500;
 
@@ -68,7 +79,7 @@ export class ContactsDialog extends LitElement {
 
   @state() private _tab: Tab = 'contacts';
   @state() private _query = '';
-  @state() private _sort: 'name' | 'heard' = 'name';
+  @state() private _sort: SortOrder = 'az';
   /** Collapsed contact groups, remembered in this browser. */
   @state() private _collapsed = new Set<string>(readCollapsed());
   @state() private _heard: Contact[] = [];
@@ -421,7 +432,8 @@ export class ContactsDialog extends LitElement {
       search: query || undefined,
       limit: PAGE,
       offset: more ? this._heard.length : 0,
-      sortBy: 'last_heard',
+      sortBy: this._sort === 'az' || this._sort === 'za' ? 'name' : 'last_heard',
+      reverse: this._sort === 'za' || this._sort === 'oldest',
       entryId: this.entryId,
     });
     if (seq !== this._heardSeq) return; // a newer search replaced this one
@@ -599,9 +611,7 @@ export class ContactsDialog extends LitElement {
 
   private _renderList() {
     if (this._tab === 'contacts') {
-      const list = matchContacts(this.contacts, this._query).sort(this._sort === 'name'
-        ? (a, b) => (a.adv_name || '').localeCompare(b.adv_name || '')
-        : (a, b) => (b.last_advert || 0) - (a.last_advert || 0));
+      const list = sortContacts(matchContacts(this.contacts, this._query), this._sort);
       const groups = groupContacts(list);
       if (!groups.length) {
         return html`<div class="empty">${this._query ? 'No contacts match.' : 'No contacts on your radio yet. Add some from Discovered.'}</div>`;
@@ -695,13 +705,16 @@ export class ContactsDialog extends LitElement {
           <div class="tools">
             <input type="search" placeholder="Search by name or key" aria-label="Search by name or key"
               .value=${this._query} @input=${this._onSearch} />
-            ${this._tab === 'contacts'
-              ? html`<select aria-label="Sort" .value=${this._sort}
-                  @change=${(e: Event) => { this._sort = (e.target as HTMLSelectElement).value as 'name' | 'heard'; }}>
-                  <option value="name">A–Z</option>
-                  <option value="heard">Recently heard</option>
-                </select>`
-              : nothing}
+            <select aria-label="Sort" .value=${this._sort}
+              @change=${(e: Event) => {
+                this._sort = (e.target as HTMLSelectElement).value as SortOrder;
+                void this._loadHeard();
+              }}>
+              <option value="az">A–Z</option>
+              <option value="za">Z–A</option>
+              <option value="recent">Recently heard</option>
+              <option value="oldest">Longest ago</option>
+            </select>
           </div>
           <div class="body" @scroll=${this._onScroll}>${this._renderList()}</div>
           ${this._detail ? this._renderDetail(this._detail) : nothing}

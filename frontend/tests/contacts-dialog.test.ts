@@ -24,3 +24,22 @@ describe('groupContacts', () => {
     expect(g.map((x) => [x.label, x.items.length])).toEqual([['Companions', 2], ['Repeaters', 1]]);
   });
 });
+
+import { sortContacts } from '../src/components/contacts-dialog';
+
+describe('sortContacts', () => {
+  const list = [
+    { adv_name: 'bob', last_advert: 100 },
+    { adv_name: 'Alice', last_advert: 300 },
+    { adv_name: 'carl', last_advert: 200 },
+  ] as Contact[];
+  const names = (l: Contact[]) => l.map((x) => x.adv_name);
+  it('sorts by name both ways', () => {
+    expect(names(sortContacts(list, 'az'))).toEqual(['Alice', 'bob', 'carl']);
+    expect(names(sortContacts(list, 'za'))).toEqual(['carl', 'bob', 'Alice']);
+  });
+  it('sorts by last heard both ways', () => {
+    expect(names(sortContacts(list, 'recent'))).toEqual(['Alice', 'carl', 'bob']);
+    expect(names(sortContacts(list, 'oldest'))).toEqual(['bob', 'carl', 'Alice']);
+  });
+});

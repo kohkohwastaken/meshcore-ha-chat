@@ -552,6 +552,7 @@ def _compute_type_counts(contacts: list) -> dict:
         vol.Optional("sort_by", default="last_heard"): vol.In(
             ["last_heard", "name", "prefix"]
         ),
+        vol.Optional("reverse", default=False): bool,
     }
 )
 @websocket_api.async_response
@@ -615,6 +616,10 @@ async def ws_get_contacts_paginated(hass, connection, msg):
         # "last_heard" default — keyed on `lastmod` (not `last_advert`) so
         # firmware-emitted bogus year-2081+ values can't pin nodes to top.
         filtered.sort(key=lambda c: c.get("lastmod") or 0, reverse=True)
+
+    # Flip the chosen order (Z–A, or longest ago first).
+    if msg.get("reverse"):
+        filtered.reverse()
 
     total = len(filtered)
     page = filtered[offset : offset + limit]

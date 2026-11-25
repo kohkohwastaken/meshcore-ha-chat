@@ -4048,3 +4048,18 @@ async def test_ws_delete_conversation_rejects_other_entities(
     conn = _Connection()
     await _call_ws(ws_api.ws_delete_conversation, hass, conn, {"id": 1, "entity_id": "light.kitchen"})
     assert conn.results == []
+
+
+async def test_ws_get_contacts_paginated_reverse(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """``reverse`` flips the chosen order before paging."""
+    contacts = [
+        {"adv_name": "bob", "pubkey_prefix": "bb", "added_to_node": False},
+        {"adv_name": "alice", "pubkey_prefix": "aa", "added_to_node": False},
+    ]
+    with patch.object(ws_api, "_get_contacts_via_service", AsyncMock(return_value=contacts)):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_get_contacts_paginated, hass, conn, {
+            "id": 1, "category": "discovered", "limit": 50, "offset": 0,
+            "sort_by": "name", "reverse": True,
+        })
+    assert [c["adv_name"] for c in conn.results[0][1]["contacts"]] == ["bob", "alice"]

@@ -867,6 +867,8 @@ export async function getContactsPaginated(
     offset?: number;
     entryId?: string;
     sortBy?: 'last_heard' | 'name' | 'prefix';
+    /** Flip the order (Z–A, or longest ago first). */
+    reverse?: boolean;
   } = {},
 ): Promise<PaginatedContactsResponse> {
   try {
@@ -880,6 +882,7 @@ export async function getContactsPaginated(
     if (options.search) msg.search = options.search;
     if (options.entryId) msg.entry_id = options.entryId;
     if (options.sortBy) msg.sort_by = options.sortBy;
+    if (options.reverse) msg.reverse = true;
     return await hass.callWS<PaginatedContactsResponse>(msg);
   } catch {
     return { contacts: [], total: 0, counts: { clients: 0, repeaters: 0, room_servers: 0, sensors: 0 } };
