@@ -3,13 +3,12 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant } from '../types';
 import { loadHaMap, type HaMapElement } from '../utils/ha-map';
 
-type Engine = { setView?: (c: [number, number], z?: number) => void; getView?: () => { center: [number, number]; zoom: number } };
+type Engine = { invalidateSize?: () => void };
 
 /**
- * A shared location on Home Assistant's own map. Home Assistant's map can't
- * draw a lone point, so the map stays still and a pin sits at its centre;
- * zoom is by buttons, which keep the centre. Tapping the small map opens a
- * large one.
+ * A shared location on Home Assistant's own map, with a marker you can pan
+ * and zoom around. The small map in the chat has a button to open a large
+ * one; the large one can open the location in a maps app.
  */
 @customElement('meshcore-location-map')
 export class MeshCoreLocationMap extends LitElement {
@@ -19,20 +18,18 @@ export class MeshCoreLocationMap extends LitElement {
   @property({ type: String }) label = '';
   @state() private _ok: boolean | null = null;
   @state() private _large = false;
-  private _zoom = 15;
 
   static styles = css`
     :host { display: block; }
-    .frame { position: relative; width: 240px; max-width: 100%; height: 140px; border-radius: 10px; overflow: hidden; cursor: pointer; background: rgba(127,127,127,0.2); }
-    .frame ha-map { position: absolute; inset: 0; display: block; pointer-events: none; }
-    .pin { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -100%); width: 26px; height: 26px; pointer-events: none; z-index: 2;
-      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.6)); }
+    .frame { position: relative; width: 260px; max-width: 100%; height: 150px; border-radius: 10px; overflow: hidden; background: rgba(127,127,127,0.2); }
+    .frame ha-map, .large ha-map { position: absolute; inset: 0; display: block; }
     .large { position: fixed; inset: 6vh 5vw; z-index: 1001; border-radius: 12px; overflow: hidden; background: #222; box-shadow: 0 8px 32px rgba(0,0,0,0.6); }
-    .large ha-map { position: absolute; inset: 0; display: block; pointer-events: none; }
     .backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(0,0,0,0.6); }
-    .ctl { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; flex-direction: column; gap: 6px; }
-    .ctl button, .ctl a { width: 38px; height: 38px; border-radius: 8px; border: 1px solid #555; background: var(--card-background-color, #222);
-      color: var(--primary-text-color, #fff); font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; text-decoration: none; }
+    .ctl { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; flex-direction: column; gap: 6px; }
+    .ctl button, .ctl a { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--divider-color, #555);
+      background: var(--card-background-color, #222); color: var(--primary-text-color, #fff); cursor: pointer;
+      display: flex; align-items: center; justify-content: center; text-decoration: none; padding: 0; }
+    .ctl svg { width: 18px; height: 18px; }
     .cap { position: absolute; left: 10px; bottom: 10px; z-index: 3; background: var(--card-background-color, #222); color: var(--primary-text-color, #fff);
       border-radius: 8px; padding: 6px 10px; font-size: 13px; max-width: 70%; }
     .note { font-size: 12px; opacity: 0.7; }
@@ -58,39 +55,44 @@ export class MeshCoreLocationMap extends LitElement {
 
   updated() {
     for (const map of this.renderRoot.querySelectorAll('ha-map') as NodeListOf<HaMapElement>) {
-      if ((map as unknown as { _mcSet?: boolean })._mcSet) continue;
-      (map as unknown as { _mcSet?: boolean })._mcSet = true;
-      (map as unknown as { hass?: unknown }).hass = this.getHass?.();
+      const m = map as unknown as { _mcSet?: boolean; hass?: unknown; editableLocations?: unknown[] };
+      if (m._mcSet) continue;
+      m._mcSet = true;
+      m.hass = this.getHass?.();
       map.entities = [];
       map.autoFit = false;
-      void this._centre(map, map.closest('.large') ? this._zoom : 15);
+      // ha-map draws a lone marker from editableLocations (as its location
+      // editor does); "location" is [lat, lon].
+      m.editableLocations = [{
+        id: 'shared', location: [this.lat, this.lon], radius: 0, name: this.label || 'Location',
+        icon: 'mdi:map-marker', location_editable: false, radius_editable: false,
+      }];
+      void this._centre(map);
     }
   }
 
-  /** Centre the map on the location once its engine is up. */
-  private async _centre(map: HaMapElement, zoom: number) {
+  /** Centre on the location once the map is ready. */
+  private async _centre(map: HaMapElement) {
     for (let i = 0; i < 60; i++) {
       const engine = (map as unknown as { _engine?: Engine })._engine;
-      if (engine?.setView) {
-        // fitBounds is ha-map's own API and waits for the map to be ready.
-        const d = 0.002;
-        map.fitBounds?.([[this.lat - d, this.lon - d], [this.lat + d, this.lon + d]], { zoom });
-        await new Promise((r) => setTimeout(r, 400));
-        engine.setView([this.lat, this.lon], zoom);
+      if (engine) {
+        const d = 0.003;
+        map.fitBounds?.([[this.lat - d, this.lon - d], [this.lat + d, this.lon + d]], { zoom: 15 });
+        // The map can come up blank until it re-measures itself.
+        for (const ms of [300, 1200]) {
+          await new Promise((r) => setTimeout(r, ms));
+          engine.invalidateSize?.();
+        }
         return;
       }
       await new Promise((r) => setTimeout(r, 150));
     }
   }
 
-  private _zoomBy(d: number) {
-    this._zoom = Math.max(3, Math.min(19, this._zoom + d));
+  private _recentre() {
     const map = this.renderRoot.querySelector('.large ha-map') as HaMapElement | null;
-    if (map) void this._centre(map, this._zoom);
-  }
-
-  private _pin() {
-    return html`<svg class="pin" viewBox="0 0 24 24" aria-hidden="true"><path fill="#e53935" stroke="#fff" stroke-width="1.5" d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7z"/><circle cx="12" cy="9" r="2.6" fill="#fff"/></svg>`;
+    const d = 0.003;
+    map?.fitBounds?.([[this.lat - d, this.lon - d], [this.lat + d, this.lon + d]], { zoom: 15 });
   }
 
   /** On phones, geo: opens the phone's own maps app; elsewhere OpenStreetMap. */
@@ -104,23 +106,22 @@ export class MeshCoreLocationMap extends LitElement {
 
   render() {
     if (this._ok === false) return html`<div class="note">Map needs Home Assistant 2026.10 or newer.</div>`;
+    const icon = (d: string) => html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d=${d}></path></svg>`;
     return html`
-      <div class="frame" role="button" tabindex="0" aria-label="Open a larger map"
-        @click=${(e: Event) => { e.stopPropagation(); this._zoom = 15; this._large = true; }}
-        @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') { e.stopPropagation(); this._large = true; } }}>
-        ${this._ok ? html`<ha-map></ha-map>` : nothing}
-        ${this._pin()}
+      <div class="frame" @click=${(e: Event) => e.stopPropagation()} @hass-more-info=${(e: Event) => e.stopPropagation()}>
+        ${this._ok && !this._large ? html`<ha-map></ha-map>` : nothing}
+        <div class="ctl">
+          <button aria-label="Open a larger map" title="Larger map" @click=${() => { this._large = true; }}>${icon('M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7')}</button>
+        </div>
       </div>
       ${this._large ? html`
         <div class="backdrop" @click=${(e: Event) => { e.stopPropagation(); this._large = false; }}></div>
-        <div class="large" role="dialog" aria-label="Location" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="large" role="dialog" aria-label="Location" @click=${(e: Event) => e.stopPropagation()} @hass-more-info=${(e: Event) => e.stopPropagation()}>
           <ha-map></ha-map>
-          ${this._pin()}
           <div class="ctl">
-            <button aria-label="Close" @click=${() => { this._large = false; }}>✕</button>
-            <button aria-label="Zoom in" @click=${() => this._zoomBy(1)}>+</button>
-            <button aria-label="Zoom out" @click=${() => this._zoomBy(-1)}>−</button>
-            <a href=${this._externalUrl()} target="_blank" rel="noopener noreferrer" aria-label="Open in maps app" title="Open in maps app">↗</a>
+            <button aria-label="Close" title="Close" @click=${() => { this._large = false; }}>${icon('M6 6l12 12M18 6L6 18')}</button>
+            <button aria-label="Re-centre on the location" title="Re-centre" @click=${this._recentre}>${icon('M12 2v4M12 18v4M2 12h4M18 12h4M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z')}</button>
+            <a href=${this._externalUrl()} target="_blank" rel="noopener noreferrer" aria-label="Open in maps app" title="Open in maps app">${icon('M14 3h7v7M10 14L21 3M21 14v7H3V3h7')}</a>
           </div>
           <div class="cap">${this.label ? html`<b>${this.label}</b><br>` : ''}${this.lat.toFixed(5)}, ${this.lon.toFixed(5)}</div>
         </div>` : nothing}
