@@ -1005,7 +1005,18 @@ export class DevicesPage extends LitElement {
     try {
       const result = await executeRemote(this.hass, device.pubkey_prefix, 'ver', this.config?.entry_id);
       if (result.success && !/not confirmed/i.test(result.response || '')) {
-        this._showStatusMessage(`${device.name} answered: ${result.response || 'OK'}`, 'success');
+        // Logged in. The stats sensors only update from a status answer,
+        // so ask for one through the MeshCore integration.
+        this._showStatusMessage(`Logged in to ${device.name}. Asking for its stats…`, 'success');
+        try {
+          const call: Record<string, unknown> = { command: `req_status_sync ${device.pubkey_prefix}` };
+          if (this.config?.entry_id) call.entry_id = this.config.entry_id;
+          await this.hass.callService('meshcore', 'execute_command', call);
+          this._showStatusMessage(`${device.name} sent its stats`, 'success');
+        } catch (err) {
+          const e = err as { message?: string };
+          this._showStatusMessage(`${device.name} didn't send its stats: ${e?.message || 'no answer'}`, 'error');
+        }
         await this._loadManagedDevices();
       } else {
         this._showStatusMessage(
