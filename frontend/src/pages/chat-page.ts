@@ -999,6 +999,7 @@ export class ChatPage extends LitElement {
           .unread=${this.unread}
           .unreadCounts=${this.unread.counts}
           .nodePrefix=${this.config?.node_prefix || null}
+          .previews=${this._previews}
           @conversation-selected=${(e: CustomEvent) => {
             const newId = e.detail.id;
             if (newId === this.selectedId) {
