@@ -19,7 +19,7 @@ import { collectReactions, distanceMetres, formatContact, formatLocation, format
 import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
-import '../components/new-chat-dialog';
+import '../components/contacts-dialog';
 import '../components/confirm-dialog';
 import '../components/message-panel';
 import '../components/location-map';
@@ -1836,7 +1836,7 @@ export class ChatPage extends LitElement {
 
   private _renderNewChat() {
     if (!this._newChatOpen) return html``;
-    return html`<meshcore-new-chat-dialog
+    return html`<meshcore-contacts-dialog
       .hass=${this.hass}
       .entryId=${this.config?.entry_id}
       .contacts=${this.conversations.filter((c) => 'pubkey_prefix' in c) as Contact[]}
@@ -1844,7 +1844,7 @@ export class ChatPage extends LitElement {
       @open-chat=${(e: CustomEvent<{ id: string }>) => {
         this._newChatOpen = false;
         this.selectedId = e.detail.id;
-      }}></meshcore-new-chat-dialog>`;
+      }}></meshcore-contacts-dialog>`;
   }
 
   private _onManageRequested() {

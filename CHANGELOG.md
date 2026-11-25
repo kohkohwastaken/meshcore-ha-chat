@@ -2,6 +2,16 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.15
+
+- **Contacts** is redesigned as a popup (full screen on phones):
+  - Your own card at the top with **Share my contact**.
+  - **Contacts** and **Heard nearby** tabs, each with a count.
+  - Contacts are grouped into People, Room servers and Repeaters, sorted A–Z or by recently heard. Each row shows when they were last heard, the route and the distance, with 📍 if they've shared a location. 💬 opens the chat.
+  - Heard nearby is filtered by how recently each node was heard, and has an **Add** button. Adding no longer opens a chat.
+  - Tap anyone for details: Message (or Add), Show on map, Trace route, Share, their key, and Remove from radio (with a confirmation).
+- The ＋ next to **Direct messages** is gone, because the Contacts pill does the same job.
+
 ## 0.4.12-beta.14
 
 - **Chat list:** the **Contacts** pill sits on the **Direct messages** heading, next to its ＋. The channels gear sits on the **Channels** heading, next to its ＋.

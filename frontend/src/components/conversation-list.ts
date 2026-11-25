@@ -569,10 +569,9 @@ export class ConversationList extends LitElement {
           </svg>
           Contacts
         </button>`}
-          <button class="section-add" title=${add} aria-label=${add}
-            @click=${() => this.dispatchEvent(new CustomEvent(
-              key === 'channels' ? 'add-channel-requested' : 'new-chat-requested',
-              { bubbles: true, composed: true }))}>＋</button>
+          ${key === 'channels' ? html`<button class="section-add" title=${add} aria-label=${add}
+            @click=${() => this.dispatchEvent(new CustomEvent('add-channel-requested',
+              { bubbles: true, composed: true }))}>＋</button>` : ''}
           </span>
         </div>
         ${collapsed
