@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.5
+
+- **Phone app:** the bottom tab bar no longer scrolls up and leaves an empty space below it. The panel now uses the screen's visible height.
+- **Settings:** the page scrolls, so you can reach the bottom.
+
 ## 0.4.12-beta.4
 
 - **My radio:** the page now has the same gap at the top as the other tabs. The General and Location cards are now as wide as the cards above and below them (the same fix applies on Repeaters).

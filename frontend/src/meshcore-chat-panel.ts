@@ -124,7 +124,12 @@ export class MeshCorePanel extends LitElement {
       :host {
         display: block;
         width: 100%;
+        /* 100dvh is the visible height. In the phone app plain 100vh is
+           taller than the screen, so the whole panel (tab bar included)
+           scrolled. 100vh stays as the fallback for older browsers. */
         height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
       }
 
       .panel {
@@ -563,12 +568,14 @@ export class MeshCorePanel extends LitElement {
 
       .page-container {
         flex: 1;
+        min-height: 0;
         overflow: hidden;
         display: flex;
       }
 
       .page-container > * {
         flex: 1;
+        min-height: 0;
         overflow: hidden;
       }
 

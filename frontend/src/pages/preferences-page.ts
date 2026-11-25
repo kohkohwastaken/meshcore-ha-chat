@@ -22,10 +22,18 @@ export class PreferencesPage extends LitElement {
 
   static styles = css`
     :host {
-      display: block;
+      display: flex;
+      flex-direction: column;
       height: 100%;
-      overflow-y: auto;
+      min-height: 0;
       background: var(--primary-background-color);
+    }
+    /* The panel sets overflow: hidden on each page, so scroll inside. */
+    .scroll {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
     }
     .wrap {
       max-width: 760px;
@@ -96,7 +104,7 @@ export class PreferencesPage extends LitElement {
   render() {
     const now = new Date();
     return html`
-      <div class="wrap">
+      <div class="scroll"><div class="wrap">
         <div class="card">
           <h2>Messages</h2>
           <label class="row">
@@ -172,7 +180,7 @@ export class PreferencesPage extends LitElement {
         </div>
 
         <p class="foot">These preferences are saved in this browser.</p>
-      </div>
+      </div></div>
     `;
   }
 }
