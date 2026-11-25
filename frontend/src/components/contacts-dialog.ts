@@ -52,6 +52,9 @@ function hasLocation(c: Contact): boolean {
 
 type Tab = 'contacts' | 'heard';
 
+/** Discovered nodes fetched per page as the list scrolls. */
+const PAGE = 100;
+
 /**
  * Contacts popup: your contacts (grouped; message, or tap for details),
  * nodes heard nearby (add them), and your own card with Share my contact.
@@ -70,6 +73,8 @@ export class ContactsDialog extends LitElement {
   @state() private _collapsed = new Set<string>(readCollapsed());
   @state() private _heard: Contact[] = [];
   @state() private _loadingHeard = false;
+  @state() private _heardTotal = 0;
+  private _heardSeq = 0;
   @state() private _busy: string | null = null;
   @state() private _detail: Contact | null = null;
   @state() private _confirmRemove = false;
@@ -405,17 +410,32 @@ export class ContactsDialog extends LitElement {
     }
   }
 
-  private async _loadHeard() {
+  /** Load the first page (reset) or the next page of discovered nodes. */
+  private async _loadHeard(more = false) {
     if (!this.hass) return;
+    if (more && (this._loadingHeard || this._heard.length >= this._heardTotal)) return;
+    const query = this._query.trim();
+    const seq = ++this._heardSeq;
     this._loadingHeard = true;
     const res = await getContactsPaginated(this.hass, 'discovered', {
-      search: this._query.trim() || undefined,
-      limit: 500,
+      search: query || undefined,
+      limit: PAGE,
+      offset: more ? this._heard.length : 0,
       sortBy: 'last_heard',
       entryId: this.entryId,
     });
-    this._heard = res.contacts as Contact[];
+    if (seq !== this._heardSeq) return; // a newer search replaced this one
+    const page = res.contacts as Contact[];
+    this._heard = more ? [...this._heard, ...page] : page;
+    this._heardTotal = res.total ?? this._heard.length;
     this._loadingHeard = false;
+  }
+
+  /** Fetch the next page when the list is scrolled near its end. */
+  private _onScroll(e: Event) {
+    if (this._tab !== 'heard') return;
+    const el = e.target as HTMLElement;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 300) void this._loadHeard(true);
   }
 
   private _onSearch(e: Event) {
@@ -600,7 +620,10 @@ export class ContactsDialog extends LitElement {
     if (!list.length) {
       return html`<div class="empty">${this._query ? 'No discovered nodes match.' : 'No other nodes discovered yet. They appear here when your radio hears their adverts.'}</div>`;
     }
-    return list.map((c) => this._heardRow(c));
+    return html`${list.map((c) => this._heardRow(c))}
+      ${this._heard.length < this._heardTotal
+        ? html`<div class="empty">${this._loadingHeard ? 'Loading more…' : html`<button class="btn" @click=${() => this._loadHeard(true)}>Load more</button>`}</div>`
+        : nothing}`;
   }
 
   private _renderDetail(c: Contact) {
@@ -645,7 +668,7 @@ export class ContactsDialog extends LitElement {
 
   render() {
     const myCount = matchContacts(this.contacts, '').length;
-    const heardCount = this._heardList().length;
+    const heardCount = this._query ? this._heardList().length : Math.max(this._heardTotal, this._heardList().length);
     const meName = this._me?.name || 'Your radio';
     return html`
       <div class="overlay" @click=${this._close}>
@@ -680,7 +703,7 @@ export class ContactsDialog extends LitElement {
                 </select>`
               : nothing}
           </div>
-          <div class="body">${this._renderList()}</div>
+          <div class="body" @scroll=${this._onScroll}>${this._renderList()}</div>
           ${this._detail ? this._renderDetail(this._detail) : nothing}
           ${this._toast ? html`<div class="toast" role="status">${this._toast}</div>` : nothing}
         </div>

@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.17
+
+- **Contacts → Discovered:** no 500-node limit. The list loads 100 at a time and fetches more as you scroll, with a **Load more** button as a fallback. The tab shows the full count.
+
 ## 0.4.12-beta.16
 
 - **Contacts:** **Heard nearby** is now **Discovered**: every node your radio knows that isn't a contact, newest first, with no time filter.
