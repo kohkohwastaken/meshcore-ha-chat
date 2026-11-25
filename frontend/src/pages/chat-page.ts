@@ -663,6 +663,7 @@ export class ChatPage extends LitElement {
     super.connectedCallback();
     window.addEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
     window.addEventListener(DISPLAY_PREFS_EVENT, this._onLimitSettingChanged);
+    window.addEventListener('pointerdown', this._onOutsidePointer, true);
     if (this.config && !this._messageStore) {
       this._messageStore = new MessageStore(this.config);
       this._messageStore.setOnChange(() => this.requestUpdate());
@@ -706,6 +707,7 @@ export class ChatPage extends LitElement {
     super.disconnectedCallback();
     window.removeEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
     window.removeEventListener(DISPLAY_PREFS_EVENT, this._onLimitSettingChanged);
+    window.removeEventListener('pointerdown', this._onOutsidePointer, true);
     if (this._messageStore) {
       this._messageStore.destroy();
       this._messageStore = null;
@@ -1160,6 +1162,14 @@ export class ChatPage extends LitElement {
   }
 
   private _onLimitSettingChanged = () => this.requestUpdate();
+
+  /** A press anywhere outside the open + or emoji menu (and its button) closes it. */
+  private _onOutsidePointer = (e: Event) => {
+    if (!this._popup) return;
+    const inside = e.composedPath().some((n) => n instanceof HTMLElement
+      && (n.classList.contains('popup') || n.classList.contains('tool-button')));
+    if (!inside) this._popup = null;
+  };
 
   /** Notes under the box: too long, or a channel message whose repeats can't be detected. */
   private _renderComposerNotes(budget: MessageBudget) {
