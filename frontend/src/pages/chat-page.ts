@@ -5,7 +5,7 @@ import { MessageStore } from '../chat/message-store';
 import { UnreadController, markReadTailKey, pillLabel } from '../chat/unread-controller';
 import { buildRenderItems } from '../chat/message-parser';
 import { discoverChannelEntity, discoverContactEntity } from '../chat/entity-resolver';
-import { sendDirectMessage, sendChannelMessage } from '../api';
+import { sendDirectMessage, sendChannelMessage, getConversationPreviews, type ConversationPreview } from '../api';
 import {
   AT_BOTTOM_THRESHOLD_PX,
   LAZY_LOAD_TRIGGER_PX,
@@ -659,14 +659,28 @@ export class ChatPage extends LitElement {
     return this.narrow || this._viewportNarrow;
   }
 
+  @state() private _previews: Record<string, ConversationPreview> = {};
+  private _previewTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /** Refresh the conversation list's last-message previews (debounced). */
+  private _refreshPreviews(delay = 400) {
+    if (this._previewTimer) clearTimeout(this._previewTimer);
+    this._previewTimer = setTimeout(async () => {
+      this._previewTimer = null;
+      if (!this.hass) return;
+      this._previews = await getConversationPreviews(this.hass, this.config?.entry_id);
+    }, delay);
+  }
+
   connectedCallback() {
     super.connectedCallback();
+    this._refreshPreviews(0);
     window.addEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
     window.addEventListener(DISPLAY_PREFS_EVENT, this._onLimitSettingChanged);
     window.addEventListener('pointerdown', this._onOutsidePointer, true);
     if (this.config && !this._messageStore) {
       this._messageStore = new MessageStore(this.config);
-      this._messageStore.setOnChange(() => this.requestUpdate());
+      this._messageStore.setOnChange(() => { this.requestUpdate(); this._refreshPreviews(); });
     }
     // Subscribe to the panel-owned UnreadController. Lit
     // commits property bindings before `connectedCallback` runs (same
@@ -682,6 +696,7 @@ export class ChatPage extends LitElement {
         // re-render explicitly to keep the badge projection live.
         this.lastRead = this.unread.lastRead;
         this.requestUpdate();
+        this._refreshPreviews();
       });
       // The subscription only fires on FUTURE mutations — pull the
       // current cursor map in now so the first render is correct.
@@ -708,6 +723,7 @@ export class ChatPage extends LitElement {
     window.removeEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
     window.removeEventListener(DISPLAY_PREFS_EVENT, this._onLimitSettingChanged);
     window.removeEventListener('pointerdown', this._onOutsidePointer, true);
+    if (this._previewTimer) { clearTimeout(this._previewTimer); this._previewTimer = null; }
     if (this._messageStore) {
       this._messageStore.destroy();
       this._messageStore = null;
@@ -895,6 +911,7 @@ export class ChatPage extends LitElement {
               .unread=${this.unread}
               .unreadCounts=${this.unread.counts}
               .nodePrefix=${this.config?.node_prefix || null}
+              .previews=${this._previews}
               @conversation-selected=${(e: CustomEvent) => {
                 const newId = e.detail.id;
                 if (newId === this.selectedId) {

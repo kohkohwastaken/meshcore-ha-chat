@@ -10,8 +10,30 @@ import './pages/chat-page';
 import './pages/devices-page';
 import './pages/nodes-page';
 import './pages/settings-page';
+import './pages/preferences-page';
 import './components/trace-dialog';
 import './components/target-picker';
+
+type PanelTab = 'chat' | 'map' | 'radio' | 'repeaters' | 'settings';
+
+const TAB_KEY = 'meshcore-active-tab';
+const TABS: Array<{ id: PanelTab; label: string; short: string; icon: string }> = [
+  { id: 'chat', label: 'Chat', short: 'Chat', icon: 'M20 2H4a2 2 0 00-2 2v18l4-4h14a2 2 0 002-2V4a2 2 0 00-2-2zm0 14H5.17L4 17.17V4h16v12z' },
+  { id: 'map', label: 'Map', short: 'Map', icon: 'M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9a.5.5 0 00-.36.48V20.5a.5.5 0 00.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9a.5.5 0 00.36-.48V3.5a.5.5 0 00-.5-.5zM15 19l-6-2.11V5l6 2.11V19z' },
+  { id: 'radio', label: 'My radio', short: 'Radio', icon: 'M3.24 6.15A2 2 0 002 8v12a2 2 0 002 2h16a2 2 0 002-2V8a2 2 0 00-2-2H8.3l8.26-3.34L15.88 1 3.24 6.15zM7 20a3 3 0 110-6 3 3 0 010 6zm13-8h-2v-2h-2v2H4V8h16v4z' },
+  { id: 'repeaters', label: 'Repeaters', short: 'Repeaters', icon: 'M12 11a2 2 0 00-2 2c0 .74.4 1.38 1 1.72V22h2v-7.28A2 2 0 0012 11zm-6 2c0-3.31 2.69-6 6-6s6 2.69 6 6c0 1.66-.68 3.15-1.76 4.24l1.42 1.42A7.96 7.96 0 0020 13c0-4.42-3.58-8-8-8s-8 3.58-8 8c0 2.21.9 4.21 2.34 5.66l1.42-1.42A5.98 5.98 0 016 13zm6-10C6.48 3 2 7.48 2 13c0 2.76 1.12 5.26 2.93 7.07l1.42-1.42A8.97 8.97 0 013 13c0-4.97 4.03-9 9-9s9 4.03 9 9c0 2.49-1.01 4.74-2.64 6.37l1.42 1.42A10.95 10.95 0 0023 13c0-5.52-4.48-10-11-10z' },
+  { id: 'settings', label: 'Settings', short: 'Settings', icon: 'M19.14 12.94a7.07 7.07 0 000-1.88l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96a7.03 7.03 0 00-1.62-.94l-.36-2.54A.48.48 0 0013.93 2h-3.86a.48.48 0 00-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.72 8.47a.48.48 0 00.12.61l2.03 1.58a7.07 7.07 0 000 1.88l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.47.41h3.86c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32a.49.49 0 00-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1112 8.4a3.6 3.6 0 010 7.2z' },
+];
+
+function initialTab(): PanelTab {
+  try {
+    const v = sessionStorage.getItem(TAB_KEY);
+    if (TABS.some((t) => t.id === v)) return v as PanelTab;
+  } catch {
+    /* storage unavailable */
+  }
+  return 'chat';
+}
 
 @customElement('meshcore-chat-panel')
 export class MeshCorePanel extends LitElement {
@@ -20,7 +42,7 @@ export class MeshCorePanel extends LitElement {
   @property({ type: Object }) panel?: Record<string, unknown>;
 
   @state() private _config: PanelConfig | null = null;
-  @state() private _activeTab: 'chat' | 'devices' | 'nodes' | 'settings' = 'chat';
+  @state() private _activeTab: PanelTab = initialTab();
   // managedDevices removed — devices-page.ts fetches its own data
   @state() private _devices: MeshCoreDevice[] = [];
   @state() private _contacts: Contact[] = [];
@@ -460,26 +482,81 @@ export class MeshCorePanel extends LitElement {
 
       .tab-bar button {
         flex: 1;
-        padding: 12px 16px;
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 10px 12px;
         border: none;
         background: transparent;
         color: var(--secondary-text-color, #727272);
         font-size: 14px;
         font-weight: 500;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: color 0.2s, background 0.2s;
         border-bottom: 3px solid transparent;
         min-height: 48px;
       }
 
       .tab-bar button:hover {
         color: var(--primary-text-color);
-        background: rgba(0, 0, 0, 0.02);
+        background: rgba(127, 127, 127, 0.06);
       }
 
       .tab-bar button.active {
         color: var(--primary-color, #03a9f4);
         border-bottom-color: var(--primary-color, #03a9f4);
+      }
+
+      .tab-short {
+        display: none;
+      }
+
+      .tab-badge {
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 9px;
+        background: var(--primary-color, #03a9f4);
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+        line-height: 18px;
+        text-align: center;
+      }
+
+      /* Phones: a bottom bar with icons, like most chat apps. */
+      @media (max-width: 870px) {
+        .tab-bar {
+          order: 10;
+          border-bottom: none;
+          border-top: 1px solid var(--divider-color, #e0e0e0);
+          padding-bottom: env(safe-area-inset-bottom, 0);
+        }
+        .tab-bar button {
+          flex-direction: column;
+          gap: 2px;
+          padding: 6px 2px;
+          font-size: 11px;
+          min-height: 56px;
+          border-bottom: none;
+          border-top: 3px solid transparent;
+        }
+        .tab-bar button.active {
+          border-top-color: var(--primary-color, #03a9f4);
+        }
+        .tab-label {
+          display: none;
+        }
+        .tab-short {
+          display: inline;
+        }
+        .tab-badge {
+          position: absolute;
+          top: 4px;
+          left: calc(50% + 6px);
+        }
       }
 
       .page-container {
@@ -534,6 +611,8 @@ export class MeshCorePanel extends LitElement {
     this._unread.onMarkReadRequested((entityId) => {
       this._handleMarkReadRequested(entityId);
     });
+    // Keep the Chat tab's unread badge current.
+    this._unread.subscribe(() => this.requestUpdate());
   }
 
   connectedCallback() {
@@ -792,28 +871,21 @@ export class MeshCorePanel extends LitElement {
           ? html`<div class="error-banner">${this._error}</div>`
           : html``}
 
-        <div class="tab-bar">
-          <button
-            class=${this._activeTab === 'chat' ? 'active' : ''}
-            @click=${() => (this._activeTab = 'chat')}>
-            Chat
-          </button>
-          <button
-            class=${this._activeTab === 'devices' ? 'active' : ''}
-            @click=${() => (this._activeTab = 'devices')}>
-            Devices
-          </button>
-          <button
-            class=${this._activeTab === 'nodes' ? 'active' : ''}
-            @click=${() => (this._activeTab = 'nodes')}>
-            Nodes
-          </button>
-          <button
-            class=${this._activeTab === 'settings' ? 'active' : ''}
-            @click=${() => (this._activeTab = 'settings')}>
-            Settings
-          </button>
-        </div>
+        <nav class="tab-bar" aria-label="Sections">
+          ${TABS.map((t) => html`
+            <button
+              class=${this._activeTab === t.id ? 'active' : ''}
+              aria-current=${this._activeTab === t.id ? 'page' : 'false'}
+              @click=${() => this._setTab(t.id)}>
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><path d=${t.icon}></path></svg>
+              <span class="tab-label">${t.label}</span>
+              <span class="tab-short">${t.short}</span>
+              ${t.id === 'chat' && this._totalUnread() > 0
+                ? html`<span class="tab-badge">${this._totalUnread()}</span>`
+                : ''}
+            </button>
+          `)}
+        </nav>
 
         <div class="page-container">
           ${this._renderActivePage()}
@@ -840,6 +912,16 @@ export class MeshCorePanel extends LitElement {
     `;
   }
 
+  private _setTab(tab: PanelTab) {
+    this._activeTab = tab;
+    try { sessionStorage.setItem(TAB_KEY, tab); } catch { /* storage unavailable */ }
+  }
+
+  private _totalUnread(): number {
+    const counts = this._unread?.counts || {};
+    return Object.values(counts).reduce((a, b) => a + (b > 0 ? b : 0), 0);
+  }
+
   private _renderActivePage() {
     switch (this._activeTab) {
       case 'chat':
@@ -854,14 +936,14 @@ export class MeshCorePanel extends LitElement {
             @active-entity-changed=${this._onActiveEntityChanged}
             @contacts-changed=${() => this._loadDeviceData()}
             @channels-changed=${() => this._loadDeviceData()}></meshcore-chat-page>`;
-      case 'devices':
+      case 'repeaters':
         return html`
           <meshcore-devices-page
             .hass=${this.hass}
             .config=${this._config}
             .selectedDevice=${this._selectedDevice}
             .narrow=${this.narrow}></meshcore-devices-page>`;
-      case 'nodes':
+      case 'map':
         return html`
           <meshcore-nodes-page
             .hass=${this.hass}
@@ -871,7 +953,7 @@ export class MeshCorePanel extends LitElement {
             .narrow=${this.narrow}
             @node-action=${this._handleNodeAction}
             @contacts-changed=${() => this._loadDeviceData()}></meshcore-nodes-page>`;
-      case 'settings':
+      case 'radio':
         return html`
           <meshcore-settings-page
             .hass=${this.hass}
@@ -880,6 +962,8 @@ export class MeshCorePanel extends LitElement {
             .narrow=${this.narrow}
             @companion-trace-requested=${this._onCompanionTraceRequested}
             @device-renamed=${this._onDeviceRenamed}></meshcore-settings-page>`;
+      case 'settings':
+        return html`<meshcore-preferences-page></meshcore-preferences-page>`;
     }
   }
 
@@ -1083,7 +1167,7 @@ export class MeshCorePanel extends LitElement {
       case 'message':
         if (pubkeyPrefix) {
           this._pendingChatTarget = pubkeyPrefix;
-          this._activeTab = 'chat';
+          this._setTab('chat');
         }
         break;
 

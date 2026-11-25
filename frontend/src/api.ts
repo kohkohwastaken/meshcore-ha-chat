@@ -948,3 +948,22 @@ export async function searchStoredMessages(
     return { results: [], count: 0 };
   }
 }
+
+export interface ConversationPreview {
+  ts: string;
+  sender: string;
+  text: string;
+  outgoing: boolean;
+}
+
+/** Last message of every stored conversation, keyed by entity_id. */
+export async function getConversationPreviews(
+  hass: HomeAssistant, entryId?: string,
+): Promise<Record<string, ConversationPreview>> {
+  try {
+    const msg: Record<string, unknown> = { type: 'meshcore_chat/get_conversation_previews' };
+    if (entryId) msg.entry_id = entryId;
+    const result = await hass.callWS<{ previews?: Record<string, ConversationPreview> }>(msg);
+    return result.previews || {};
+  } catch { return {}; }
+}

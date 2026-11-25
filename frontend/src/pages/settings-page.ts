@@ -17,8 +17,6 @@ import { attachDialogA11y } from '../utils/dialog-a11y';
 import type { CompanionDeviceDescriptor } from '../components/node-summary';
 import { panelStyles } from '../styles';
 import { loadMeshcoreEntityRegistry, type EntityInfo } from '../utils/classify-entity';
-import { setTrackableChannelLimit, trackableChannelLimit } from '../utils/message-limit';
-import { clockFormat, dateFormat, formatClock, formatDate, setClockFormat, setDateFormat, setTimestampFormat, timestampFormat, type ClockFormat, type DateFormat, type TimestampFormat } from '../utils/display-prefs';
 
 interface ConfirmAction {
   title: string;
@@ -321,6 +319,49 @@ export class SettingsPage extends LitElement {
         .settings-grid {
           grid-template-columns: 1fr;
         }
+      }
+
+      .settings-container > * {
+        max-width: 1100px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
+      details.fold > summary {
+        cursor: pointer;
+        list-style: none;
+        margin-bottom: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      details.fold > summary::-webkit-details-marker { display: none; }
+
+      details.fold > summary::before {
+        content: '▸';
+        color: var(--secondary-text-color);
+        transition: transform 0.15s;
+      }
+
+      details.fold[open] > summary::before { transform: rotate(90deg); }
+
+      details.fold[open] > summary { margin-bottom: 16px; }
+
+      details.danger-fold > summary { color: var(--error-color, #db4437); }
+
+      .fold-warning {
+        background: rgba(255, 152, 0, 0.12);
+        color: var(--warning-color, #ff9800);
+        border-radius: 8px;
+        padding: 8px 12px;
+        font-size: 13px;
+        margin-bottom: 16px;
+      }
+
+      .danger-stack {
+        display: grid;
+        gap: 12px;
       }
 
       .card-title {
@@ -772,65 +813,6 @@ export class SettingsPage extends LitElement {
     }
   }
 
-  @state() private _trackableLimit = trackableChannelLimit();
-  @state() private _tsFormat: TimestampFormat = timestampFormat();
-  @state() private _clock: ClockFormat = clockFormat();
-  @state() private _date: DateFormat = dateFormat();
-
-  private _renderMessageSettings() {
-    return html`
-      <label class="message-setting">
-        <input type="checkbox" .checked=${this._trackableLimit}
-          @change=${(e: Event) => {
-            this._trackableLimit = (e.target as HTMLInputElement).checked;
-            setTrackableChannelLimit(this._trackableLimit);
-          }} />
-        <span>
-          <span class="message-setting-title">Keep channel messages trackable</span>
-          <span class="message-setting-help">Limits channel messages to 155 bytes including your radio's name, so repeats of every message you send can be detected. Off allows the full 160 bytes, but messages over 155 always show as Unheard. Saved in this browser.</span>
-        </span>
-      </label>
-      <label class="message-setting">
-        <span>
-          <span class="message-setting-title">Message times</span>
-          <span class="message-setting-help">Under each message. Clock time adds the date for older days. Saved in this browser.</span>
-        </span>
-        <select .value=${this._tsFormat} aria-label="Message times" style="margin-left:auto;align-self:center;padding:6px 8px;border-radius:8px;border:1px solid var(--divider-color,#555);background:var(--card-background-color);color:var(--primary-text-color);font:inherit;max-width:55%"
-          @change=${(e: Event) => { this._tsFormat = (e.target as HTMLSelectElement).value as TimestampFormat; setTimestampFormat(this._tsFormat); }}>
-          <option value="relative">Time since (5m)</option>
-          <option value="time">Clock time</option>
-          <option value="datetime">Date and time</option>
-        </select>
-      </label>
-      <label class="message-setting">
-        <span>
-          <span class="message-setting-title">Clock</span>
-          <span class="message-setting-help">12 or 24 hour, or your device's own setting.</span>
-        </span>
-        <select .value=${this._clock} aria-label="Clock" style="margin-left:auto;align-self:center;padding:6px 8px;border-radius:8px;border:1px solid var(--divider-color,#555);background:var(--card-background-color);color:var(--primary-text-color);font:inherit;max-width:55%"
-          @change=${(e: Event) => { this._clock = (e.target as HTMLSelectElement).value as ClockFormat; setClockFormat(this._clock); }}>
-          <option value="system">System default (${formatClock(new Date(), false, 'system')})</option>
-          <option value="12">12 hour (${formatClock(new Date(), false, '12')})</option>
-          <option value="24">24 hour (${formatClock(new Date(), false, '24')})</option>
-        </select>
-      </label>
-      <label class="message-setting">
-        <span>
-          <span class="message-setting-title">Date</span>
-          <span class="message-setting-help">How dates are written.</span>
-        </span>
-        <select .value=${this._date} aria-label="Date" style="margin-left:auto;align-self:center;padding:6px 8px;border-radius:8px;border:1px solid var(--divider-color,#555);background:var(--card-background-color);color:var(--primary-text-color);font:inherit;max-width:55%"
-          @change=${(e: Event) => { this._date = (e.target as HTMLSelectElement).value as DateFormat; setDateFormat(this._date); }}>
-          <option value="system">System default (${formatDate(new Date(), true, 'system')})</option>
-          <option value="d-mon">${formatDate(new Date(), true, 'd-mon')}</option>
-          <option value="dmy">${formatDate(new Date(), true, 'dmy')} (day/month)</option>
-          <option value="mdy">${formatDate(new Date(), true, 'mdy')} (month/day)</option>
-          <option value="iso">${formatDate(new Date(), true, 'iso')} (ISO)</option>
-        </select>
-      </label>
-    `;
-  }
-
   render() {
     if (this._loading) {
       return html`
@@ -865,36 +847,34 @@ export class SettingsPage extends LitElement {
           <!-- Companion Device Card (full width at top) -->
           ${this.selectedDevice ? this._renderCompanionCard() : nothing}
 
-          <!-- Two-column grid for settings cards -->
           <div class="settings-grid">
-            <!-- Companion Information -->
             <div class="device-section">
               <div class="card-title">General</div>
               ${this._renderDeviceInfo()}
             </div>
 
-            <!-- Radio & RF Settings -->
-            <div class="device-section">
-              <div class="card-title">Radio</div>
-              ${this._renderRadioSettings()}
-            </div>
-
-            <!-- Location -->
             <div class="device-section">
               <div class="card-title">Location</div>
               ${this._renderLocation()}
             </div>
-
-            <!-- Messages (per browser) -->
-            <div class="device-section">
-              <div class="card-title">Messages</div>
-              ${this._renderMessageSettings()}
-            </div>
-
-
-
           </div>
 
+          <details class="device-section fold">
+            <summary class="card-title">Advanced radio settings</summary>
+            <div class="fold-warning">
+              Changing these can take you off the mesh. Everyone you talk to must use the same
+              frequency, bandwidth, spreading factor and coding rate.
+            </div>
+            ${this._renderRadioSettings()}
+          </details>
+
+          <details class="device-section fold danger-fold">
+            <summary class="card-title">Danger zone</summary>
+            <div class="danger-stack">
+              ${this._renderRename()}
+              ${this._renderIdentityManagement()}
+            </div>
+          </details>
         </div>
       </div>
 
@@ -1169,7 +1149,13 @@ export class SettingsPage extends LitElement {
         </div>
       ` : ''}
 
-      <div class="danger-zone" style="margin-top: 16px;">
+    `;
+  }
+
+  private _renderRename() {
+    if (!this._deviceConfig) return;
+    return html`
+      <div class="danger-zone" style="margin-top: 0;">
         <div class="danger-zone-title">Rename Device</div>
         <div style="font-size: 12px; color: var(--secondary-text-color); margin-bottom: 8px;">
           Changing the device name will change all entity IDs. Automations, scripts, and dashboards using current entity IDs will need to be updated.

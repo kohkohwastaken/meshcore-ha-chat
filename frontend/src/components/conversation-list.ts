@@ -2,9 +2,39 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Contact, Channel } from '../types';
 import type { UnreadController } from '../chat/unread-controller';
+import type { ConversationPreview } from '../api';
+import { parseContact, parseLocation, parseReaction } from '../utils/rich-messages';
 // manage-dialog is loaded by chat-page
 
-type ChatFilter = 'all' | 'unread' | 'dms' | 'channels';
+type ChatFilter = 'all' | 'unread';
+
+/** Contact types that are infrastructure rather than people. */
+const INFRA_TYPES = new Set([2, 3]);
+
+/** One line describing a conversation's last message. */
+export function previewLine(p: ConversationPreview | undefined, isChannel: boolean): string {
+  if (!p || !p.text) return '';
+  let body = p.text;
+  const reaction = parseReaction(body);
+  if (reaction) body = `Reacted ${reaction.emoji}`;
+  else if (parseLocation(body)) body = '📍 Location';
+  else if (parseContact(body)) body = '👤 Contact';
+  body = body.replace(/\s+/g, ' ').trim();
+  if (p.outgoing) return `You: ${body}`;
+  return isChannel && p.sender ? `${p.sender}: ${body}` : body;
+}
+
+/** Short age for the conversation list ("now", "5m", "3h", "2d"). */
+export function shortAge(ts: string, now = Date.now()): string {
+  const t = Date.parse(ts);
+  if (!Number.isFinite(t)) return '';
+  const m = Math.max(0, (now - t) / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${Math.floor(m)}m`;
+  if (m < 1440) return `${Math.floor(m / 60)}h`;
+  if (m < 10080) return `${Math.floor(m / 1440)}d`;
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
 
 @customElement('meshcore-conversation-list')
 export class ConversationList extends LitElement {
@@ -23,6 +53,10 @@ export class ConversationList extends LitElement {
    */
   @property({ type: Object }) unreadCounts: Record<string, number> = {};
   @property({ type: String }) nodePrefix: string | null = null;
+  /** Last message per conversation entity_id (from the backend index). */
+  @property({ attribute: false }) previews: Record<string, ConversationPreview> = {};
+
+  @state() private _query = '';
 
   @state() private _activeFilter: ChatFilter = 'all';
   @state() private _filteredConversations: Array<Contact | Channel> = [];
@@ -168,9 +202,69 @@ export class ConversationList extends LitElement {
       background: var(--accent-color, #ff9800);
     }
 
+    .conversation-avatar.infra {
+      background: #8e5bb5;
+    }
+
     .conversation-info {
       flex: 1;
       overflow: hidden;
+    }
+
+    .conversation-top {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+    }
+
+    .conversation-top .conversation-name {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .conversation-age {
+      flex-shrink: 0;
+      font-size: 11px;
+      color: var(--secondary-text-color, #727272);
+    }
+
+    .list-search {
+      margin: 8px 12px 0;
+      padding: 7px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--divider-color, #e0e0e0);
+      background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: 13px;
+    }
+
+    .list-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px 4px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--secondary-text-color, #727272);
+    }
+
+    .section-add {
+      border: none;
+      background: none;
+      color: var(--primary-color, #03a9f4);
+      font-size: 16px;
+      cursor: pointer;
+      padding: 0 4px;
+      line-height: 1;
+    }
+
+    .section-empty {
+      padding: 4px 14px 8px;
+      font-size: 12px;
+      color: var(--secondary-text-color, #727272);
     }
 
     .conversation-name {
@@ -237,7 +331,9 @@ export class ConversationList extends LitElement {
   updated(changedProperties: Map<string, unknown>) {
     if (
       changedProperties.has('conversations') ||
-      changedProperties.has('_activeFilter')
+      changedProperties.has('_activeFilter') ||
+      changedProperties.has('_query') ||
+      changedProperties.has('previews')
     ) {
       this._updateFiltered();
     }
@@ -257,26 +353,23 @@ export class ConversationList extends LitElement {
           </svg>
         </button>
       </div>
+      <input
+        class="list-search"
+        type="search"
+        placeholder="Search chats"
+        aria-label="Search chats"
+        .value=${this._query}
+        @input=${(e: Event) => { this._query = (e.target as HTMLInputElement).value; }} />
       <div class="filter-bar" role="tablist" aria-label="Conversation filter">
         ${this._renderFilterBtn('all', 'All')}
         ${this._renderFilterBtn('unread', 'Unread')}
-        ${this._renderFilterBtn('dms', 'DMs')}
-        ${this._renderFilterBtn('channels', 'Channels')}
       </div>
       <div
         class="conversation-list"
         role="listbox"
         aria-label="Conversations"
         @keydown=${this._onListKeyDown}>
-        ${this._filteredConversations.length > 0
-          ? this._filteredConversations.map((conv, idx) => this._renderConversation(conv, idx))
-          : html`
-              <div class="empty-state">
-                <div class="empty-text">
-                  ${this._emptyMessage()}
-                </div>
-              </div>
-            `}
+        ${this._renderSections()}
       </div>
     `;
   }
@@ -344,11 +437,53 @@ export class ConversationList extends LitElement {
     `;
   }
 
+  private _sections(): { channels: Array<Contact | Channel>; dms: Array<Contact | Channel> } {
+    const channels = this._filteredConversations.filter((c) => !('pubkey_prefix' in c));
+    const dms = this._filteredConversations
+      .filter((c) => 'pubkey_prefix' in c)
+      .sort((a, b) => (this._previewFor(b)?.ts || '').localeCompare(this._previewFor(a)?.ts || ''));
+    return { channels, dms };
+  }
+
+  private _renderSections() {
+    const { channels, dms } = this._sections();
+    if (!channels.length && !dms.length) {
+      return html`<div class="empty-state"><div class="empty-text">${this._emptyMessage()}</div></div>`;
+    }
+    // Rows are indexed across both sections so roving focus still works.
+    let idx = 0;
+    const section = (title: string, items: Array<Contact | Channel>, add: string) => html`
+      <div class="list-section">
+        <span>${title}</span>
+        <button class="section-add" title=${add} aria-label=${add}
+          @click=${() => this.dispatchEvent(new CustomEvent('manage-requested', { bubbles: true, composed: true }))}>＋</button>
+      </div>
+      ${items.length
+        ? items.map((c) => this._renderConversation(c, idx++))
+        : html`<div class="section-empty">None yet</div>`}
+    `;
+    return html`
+      ${section('Channels', channels, 'Add a channel')}
+      ${section('Direct messages', dms, 'Add a contact')}
+    `;
+  }
+
+  /** Same entity_id matching as the unread badges. */
+  private _previewFor(conv: Contact | Channel): ConversationPreview | undefined {
+    const isContact = 'pubkey_prefix' in conv;
+    const entries = Object.entries(this.previews || {});
+    if (isContact) {
+      const p6 = (conv as Contact).pubkey_prefix.substring(0, 6);
+      return entries.find(([k]) => k.endsWith(`_${p6}_messages`))?.[1];
+    }
+    const idx = (conv as Channel).channel_idx;
+    const needle = this.nodePrefix ? `meshcore_${this.nodePrefix}_ch_${idx}_messages` : `_ch_${idx}_messages`;
+    return entries.find(([k]) => k.endsWith(needle))?.[1];
+  }
+
   private _emptyMessage(): string {
     switch (this._activeFilter) {
       case 'unread': return 'No unread conversations';
-      case 'dms': return 'No direct messages';
-      case 'channels': return 'No channels';
       default: return 'No conversations yet';
     }
   }
@@ -357,10 +492,15 @@ export class ConversationList extends LitElement {
     const isContact = 'pubkey_prefix' in conv;
     const id = isContact ? (conv as Contact).pubkey_prefix : String((conv as Channel).channel_idx);
     const name = isContact ? (conv as Contact).adv_name : (conv as Channel).name;
-    const detail = isContact ? (conv as Contact).pubkey_prefix : `Channel ${(conv as Channel).channel_idx}`;
+    const preview = this._previewFor(conv);
+    const line = previewLine(preview, !isContact);
+    const detail = line || (isContact ? (conv as Contact).pubkey_prefix : 'No messages yet');
+    const age = preview ? shortAge(preview.ts) : '';
+    const infra = isContact && INFRA_TYPES.has((conv as Contact).type);
     const avatar = isContact
-      ? (conv as Contact).pubkey_prefix.substring(0, 2).toUpperCase()
-      : `#${(conv as Channel).channel_idx}`;
+      ? (conv as Contact).adv_name.replace(/[^\p{L}\p{N}]/gu, '').substring(0, 2).toUpperCase()
+        || (conv as Contact).pubkey_prefix.substring(0, 2).toUpperCase()
+      : '#';
 
     const isActive = this.activeId === id;
 
@@ -389,14 +529,17 @@ export class ConversationList extends LitElement {
         @click=${() => this.dispatchEvent(
           new CustomEvent('conversation-selected', { detail: { id, isContact } }),
         )}>
-        <div class="conversation-avatar ${isContact ? '' : 'channel'}">${avatar}</div>
+        <div class="conversation-avatar ${isContact ? (infra ? 'infra' : '') : 'channel'}">${avatar}</div>
         <div class="conversation-info">
-          <div class="conversation-name">${name}</div>
+          <div class="conversation-top">
+            <span class="conversation-name">${name}</span>
+            ${age ? html`<span class="conversation-age">${age}</span>` : ''}
+          </div>
           <div class="conversation-detail">${detail}</div>
         </div>
         ${unread > 0
           ? html`<div class="unread-badge" aria-hidden="true">${unread}</div>`
-          : html`<span class="chevron" aria-hidden="true">›</span>`}
+          : ''}
       </div>
     `;
   }
@@ -414,30 +557,21 @@ export class ConversationList extends LitElement {
   }
 
   private _updateFiltered() {
-    // Apply category filter
-    switch (this._activeFilter) {
-      case 'all':
-        this._filteredConversations = [...this.conversations];
-        break;
-      case 'unread':
-        this._filteredConversations = this.conversations.filter((conv) => {
-          const isContact = 'pubkey_prefix' in conv;
-          const id = isContact ? (conv as Contact).pubkey_prefix : String((conv as Channel).channel_idx);
-          return this._getUnreadCount(id) > 0;
-        });
-        break;
-      case 'dms':
-        this._filteredConversations = this.conversations.filter(
-          (conv) => 'pubkey_prefix' in conv,
-        );
-        break;
-      case 'channels':
-        this._filteredConversations = this.conversations.filter(
-          (conv) => !('pubkey_prefix' in conv),
-        );
-        break;
-    }
+    const q = this._query.trim().toLowerCase();
+    this._filteredConversations = this.conversations.filter((conv) => {
+      const isContact = 'pubkey_prefix' in conv;
+      const id = isContact ? (conv as Contact).pubkey_prefix : String((conv as Channel).channel_idx);
+      const name = isContact ? (conv as Contact).adv_name : (conv as Channel).name;
+      if (q && !(name || '').toLowerCase().includes(q)) return false;
+      const unread = this._getUnreadCount(id);
+      if (this._activeFilter === 'unread' && unread <= 0) return false;
+      // Repeaters and room servers only show once you've messaged them.
+      if (isContact && INFRA_TYPES.has((conv as Contact).type)
+        && !this._previewFor(conv) && unread <= 0 && this.activeId !== id && !q) return false;
+      return true;
+    });
   }
+
 }
 
 declare global {

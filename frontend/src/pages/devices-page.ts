@@ -129,6 +129,12 @@ export class DevicesPage extends LitElement {
         background: var(--primary-background-color, #fafafa);
       }
 
+      .content-area > * {
+        max-width: 1100px;
+        margin-left: auto;
+        margin-right: auto;
+      }
+
       .content-area::-webkit-scrollbar { width: 6px; }
       .content-area::-webkit-scrollbar-track { background: transparent; }
       .content-area::-webkit-scrollbar-thumb {
@@ -340,6 +346,21 @@ export class DevicesPage extends LitElement {
         flex-wrap: wrap;
         gap: 6px;
         margin-top: 16px;
+      }
+
+      .actions-row.top {
+        margin: 0 0 12px;
+      }
+
+      .status-note {
+        background: rgba(255, 152, 0, 0.1);
+        border-left: 3px solid var(--warning-color, #ff9800);
+        border-radius: 6px;
+        padding: 8px 12px;
+        font-size: 13px;
+        color: var(--primary-text-color);
+        margin-bottom: 12px;
+        line-height: 1.45;
       }
 
       .action-btn {
@@ -927,6 +948,23 @@ export class DevicesPage extends LitElement {
           </div>
         </div>
 
+        <div class="actions-row top">
+          <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._executeRemoteAction(device, 'advert')}>Flood advert</button>
+          <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._executeRemoteAction(device, 'clock sync')}>Sync clock</button>
+          <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._openCommandDialog(device, false)}>Command…</button>
+        </div>
+
+        ${!isOnline
+          ? html`
+              <div class="status-note">
+                ${statusClass === 'offline'
+                  ? html`<b>${device.name} isn't answering.</b> It may be out of range or turned off. Stats will update when it next responds.`
+                  : html`<b>No stats yet.</b> ${device.name} hasn't answered a status request, so battery, signal and traffic are blank.
+                      Check it's in range and that its login password is set in the integration's options.`}
+              </div>
+            `
+          : nothing}
+
         ${entities.length > 0
           ? html`
               <meshcore-node-summary
@@ -942,11 +980,6 @@ export class DevicesPage extends LitElement {
           : nothing}
 
         ${showNeighbors ? this._renderInlineNeighbors(device, neighborState) : nothing}
-
-        <div class="actions-row">
-          <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._executeRemoteAction(device, 'advert')}>Flood Advert</button>
-          <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._executeRemoteAction(device, 'clock sync')}>Sync Clock</button>
-        </div>
       </div>
     `;
   }

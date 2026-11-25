@@ -3987,3 +3987,39 @@ async def test_ws_set_device_config_path_hash_mode_ok_counts_success(
     assert len(conn.results) == 1
     _, result = conn.results[0]
     assert "path_hash_mode" in result["changed"]
+
+
+# ─── Conversation previews ───────────────────────────────────────────────
+
+
+async def test_ws_get_conversation_previews(
+    hass: HomeAssistant, companion_entry: MockConfigEntry
+) -> None:
+    """The store index comes back as one preview per conversation."""
+    store = companion_entry.runtime_data.store
+    store.get_message_index = MagicMock(
+        return_value={
+            "binary_sensor.meshcore_abc123_ch_0_messages": {
+                "last_message_ts": "2026-11-25T12:00:00",
+                "last_sender": "Dave",
+                "last_preview": "hello",
+                "last_outgoing": False,
+            },
+            "binary_sensor.meshcore_abc123_def456_messages": {
+                "last_message_ts": "2026-11-25T12:01:00",
+                "last_preview": "hi",
+                "last_outgoing": True,
+            },
+        }
+    )
+    conn = _Connection()
+    await _call_ws(ws_api.ws_get_conversation_previews, hass, conn, {"id": 1})
+    previews = conn.results[0][1]["previews"]
+    assert previews["binary_sensor.meshcore_abc123_ch_0_messages"] == {
+        "ts": "2026-11-25T12:00:00",
+        "sender": "Dave",
+        "text": "hello",
+        "outgoing": False,
+    }
+    assert previews["binary_sensor.meshcore_abc123_def456_messages"]["outgoing"] is True
+    assert previews["binary_sensor.meshcore_abc123_def456_messages"]["sender"] == ""

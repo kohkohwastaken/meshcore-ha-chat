@@ -430,6 +430,7 @@ def async_register_ws_commands(hass: HomeAssistant) -> None:
 
     # Unread, identity, location, and contact commands
     websocket_api.async_register_command(hass, ws_get_unread_counts)
+    websocket_api.async_register_command(hass, ws_get_conversation_previews)
     websocket_api.async_register_command(hass, ws_mark_read)
     websocket_api.async_register_command(hass, ws_regenerate_identity)
     websocket_api.async_register_command(hass, ws_import_identity)
@@ -2001,6 +2002,45 @@ async def ws_cleanup_stale_neighbors(hass, connection, msg):
             ex,
             handler="ws_cleanup_stale_neighbors",
         )
+
+
+# ─── Conversation previews ───────────────────────────────────────────────
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/get_conversation_previews",
+        vol.Optional("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_get_conversation_previews(hass, connection, msg):
+    """Return the last message of every stored conversation.
+
+    Read straight from the message store's in-memory index, so it costs
+    nothing to call. Keyed by entity_id, like ``get_unread_counts``, and
+    filtered to one radio when ``entry_id`` is given.
+    """
+    store = _get_store(hass, None)
+    previews: dict[str, dict] = {}
+    if store is not None:
+        for entity_id, info in store.get_message_index().items():
+            previews[entity_id] = {
+                "ts": info.get("last_message_ts", ""),
+                "sender": info.get("last_sender", ""),
+                "text": info.get("last_preview", ""),
+                "outgoing": bool(info.get("last_outgoing", False)),
+            }
+    entry_id = msg.get("entry_id")
+    if entry_id is not None:
+        coord = _resolve_coordinator(hass, entry_id)
+        prefix = (getattr(coord, "pubkey", "") or "")[:6] if coord else ""
+        if coord is None:
+            previews = {}
+        elif prefix:
+            needle = f".meshcore_{prefix}_"
+            previews = {k: v for k, v in previews.items() if needle in k}
+    connection.send_result(msg["id"], {"previews": previews})
 
 
 # ─── Unread Tracking ─────────────────────────────────────────────────────

@@ -51,6 +51,7 @@ export class NodesPage extends LitElement {
   // ─── Two-level filter state ─────────────────────────────────────────
   @state() private _primaryFilter: PrimaryCategory = 'all';
   @state() private _typeFilter: NodeType | null = null;
+  @state() private _moreOpen = false;
   @state() private _searchQuery = '';
 
   // ─── Results state ──────────────────────────────────────────────────
@@ -283,6 +284,46 @@ export class NodesPage extends LitElement {
       display: flex;
       align-items: center;
       gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .header-actions .search-bar {
+      min-width: 180px;
+    }
+
+    .more-wrap {
+      position: relative;
+    }
+
+    .more-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      z-index: 1000;
+      min-width: 220px;
+      background: var(--card-background-color, #fff);
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 8px;
+      padding: 4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    .more-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .more-menu button:hover {
+      background: rgba(127, 127, 127, 0.12);
     }
 
     .sync-btn {
@@ -476,18 +517,6 @@ export class NodesPage extends LitElement {
     return html`
       <div class="nodes-layout">
         <div class="nodes-header">
-          <!-- Level 1 filters -->
-          <div class="l1-filters">
-            ${this._renderL1Button('all', 'All')}
-            ${this._renderL1Button('added', '★ Added')}
-            ${this._renderL1Button('discovered', 'Discovered')}
-          </div>
-
-          <!-- Level 2 filters: node type, combined with Level 1 (AND) -->
-          <div class="l2-bar">
-            ${this._renderL2Buttons()}
-          </div>
-
           <!-- Search + actions row -->
           <div class="header-actions">
             <div class="search-bar" style="flex: 1;">
@@ -501,25 +530,47 @@ export class NodesPage extends LitElement {
                 ? html`<button class="clear-search" @click=${() => { this._searchQuery = ''; this._loadPage(true); }}>✕</button>`
                 : nothing}
             </div>
-            <select class="sort-select"
+            <select class="sort-select" aria-label="Which nodes"
+              .value=${this._primaryFilter}
+              @change=${(e: Event) => this._setPrimaryFilter((e.target as HTMLSelectElement).value as PrimaryCategory)}>
+              <option value="all">All (${this._l1Counts.all})</option>
+              <option value="added">★ Added (${this._l1Counts.added})</option>
+              <option value="discovered">Discovered (${this._l1Counts.discovered})</option>
+            </select>
+            <select class="sort-select" aria-label="Node type"
+              .value=${this._typeFilter ?? ''}
+              @change=${(e: Event) => {
+                const v = (e.target as HTMLSelectElement).value as NodeType | '';
+                if (!v) { if (this._typeFilter) this._setTypeFilter(this._typeFilter); }
+                else if (v !== this._typeFilter) this._setTypeFilter(v);
+              }}>
+              <option value="">All types</option>
+              ${(['clients', 'repeaters', 'room_servers', 'sensors'] as NodeType[]).map((t) => html`
+                <option value=${t}>${TYPE_LABELS[t]} (${this._typeCounts[t]})</option>`)}
+            </select>
+            <select class="sort-select" aria-label="Sort by"
               .value=${this._sortBy}
               @change=${(e: Event) => {
                 this._sortBy = (e.target as HTMLSelectElement).value as 'last_heard' | 'name' | 'prefix';
                 this._loadPage(true);
               }}>
-              <option value="last_heard">Last Heard</option>
-              <option value="name">Name</option>
-              <option value="prefix">Pub Prefix</option>
+              <option value="last_heard">Sort: last heard</option>
+              <option value="name">Sort: name</option>
+              <option value="prefix">Sort: key prefix</option>
             </select>
-            <button class="clear-btn"
-              @click=${() => this._clearStaleContacts()}
-              title="Remove discovered contacts older than the configured threshold">
-              Clear Stale
-            </button>
-            <button class="sync-btn"
-              @click=${() => this._syncAll()}>
-              ⟳ Sync
-            </button>
+            <div class="more-wrap">
+              <button class="sync-btn" aria-label="More actions" aria-haspopup="menu"
+                @click=${() => { this._moreOpen = !this._moreOpen; }}>⋯</button>
+              ${this._moreOpen
+                ? html`
+                    <div class="more-menu" role="menu">
+                      <button role="menuitem" @click=${() => { this._moreOpen = false; this._syncAll(); }}>⟳ Sync contacts from radio</button>
+                      <button role="menuitem" title="Remove discovered contacts older than the configured threshold"
+                        @click=${() => { this._moreOpen = false; this._clearStaleContacts(); }}>Clear stale nodes</button>
+                    </div>
+                  `
+                : nothing}
+            </div>
             <button class="view-btn"
               title=${this._view === 'map' ? 'Show nodes as a list' : 'Show nodes on a map'}
               @click=${() => this._setView(this._view === 'map' ? 'list' : 'map')}>
@@ -548,40 +599,6 @@ export class NodesPage extends LitElement {
       </meshcore-node-detail-dialog>
 
     `;
-  }
-
-  // ─── Level 1 button rendering ─────────────────────────────────────
-
-  private _renderL1Button(category: PrimaryCategory, label: string) {
-    const count = this._l1Counts[category];
-    const isActive = this._primaryFilter === category;
-    const classes = `l1-btn ${category} ${isActive ? 'active' : ''}`;
-
-    return html`
-      <button
-        class=${classes}
-        @click=${() => this._setPrimaryFilter(category)}>
-        ${label} <span class="l1-count">(${count})</span>
-      </button>
-    `;
-  }
-
-  // ─── Level 2 button rendering ─────────────────────────────────────
-
-  private _renderL2Buttons() {
-    const types: NodeType[] = ['clients', 'repeaters', 'room_servers', 'sensors'];
-    return types
-      .filter((t) => this._typeCounts[t] > 0 || this._typeFilter === t)
-      .map((t) => {
-        const isActive = this._typeFilter === t;
-        return html`
-          <button
-            class=${`l2-btn ${t} ${isActive ? 'active' : ''}`}
-            @click=${() => this._setTypeFilter(t)}>
-            ${TYPE_LABELS[t]} <span class="l2-count">(${this._typeCounts[t]})</span>
-          </button>
-        `;
-      });
   }
 
   // ─── Filter actions ───────────────────────────────────────────────

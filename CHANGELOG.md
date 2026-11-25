@@ -2,6 +2,31 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.1
+
+### New layout
+- Five tabs, each with one job: **Chat**, **Map** (was Nodes), **My radio** (your companion radio's status, actions and settings), **Repeaters** (was Devices) and **Settings** (this panel's own preferences).
+- On phones the tabs move to a bottom bar with icons. The Chat tab shows your total unread count.
+- The panel remembers which tab you were on while the browser tab stays open.
+
+### Chat list
+- Separate **Channels** and **Direct messages** sections, with a search box and All / Unread.
+- Each conversation shows its last message and how long ago it was sent ("Dave: anyone hearing Winterfield? · 2m"). Reactions, locations and contacts are summarised.
+- Direct messages are sorted by most recent.
+- Repeaters and room servers only appear once you've messaged them (searching still finds them).
+
+### My radio
+- Radio settings (frequency, bandwidth, spreading factor, coding rate, TX power, path hash) are behind an **Advanced radio settings** expander with a warning.
+- Rename, Regenerate identity and Import private key are together in a collapsed **Danger zone**.
+- Message, time and date preferences moved to the new Settings tab.
+
+### Repeaters
+- Flood advert, Sync clock and a new Command… button sit at the top of each repeater.
+- When a repeater hasn't answered, a note explains why its stats are blank instead of showing dashes.
+
+### Map
+- One toolbar: search, which nodes (All / Added / Discovered), type, sort, and a ⋯ menu for Sync and Clear stale.
+
 ## 0.4.11
 
 ### Message menu

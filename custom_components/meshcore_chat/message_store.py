@@ -332,7 +332,8 @@ class MessageStore:
             "message_count": len(messages),
             "last_message_ts": newest.get("timestamp", ""),
             "last_sender": newest.get("sender", ""),
-            "last_preview": (newest.get("text", "") or "")[:50],
+            "last_preview": (newest.get("text", "") or "")[:80],
+            "last_outgoing": bool(newest.get("outgoing", False)),
         }
         self._schedule_index_save()
 
