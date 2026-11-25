@@ -3,6 +3,7 @@ import { customElement, property, state } from 'lit/decorators.js';
 import type { ChatMessage, MessageGroup, HomeAssistant } from '../types';
 import { formatTimestamp } from '../chat/message-parser';
 import { canResend, deliveryLabel } from '../utils/delivery-label';
+import './location-map';
 import type { QuotedMessage } from '../utils/reply-links';
 import { NODE_TYPE_NAMES, parseContact, parseLocation, type ReactionChip } from '../utils/rich-messages';
 import { addContact } from '../api';
@@ -159,6 +160,7 @@ export class MessageBubble extends LitElement {
     }
 
     .card { display: flex; flex-direction: column; gap: 2px; min-width: 160px; }
+    .loc-card meshcore-location-map { margin-bottom: 6px; }
     .card.attached { margin-top: 6px; padding-top: 6px; border-top: 1px solid rgba(127, 127, 127, 0.35); }
     .card-title { font-weight: 600; word-break: break-word; }
     .card-meta { font-size: 0.8em; opacity: 0.8; }
@@ -480,11 +482,10 @@ export class MessageBubble extends LitElement {
   private _renderBody(msg: ChatMessage) {
     const loc = msg.isSystem ? null : parseLocation(msg.text);
     if (loc) {
-      const osm = `https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lon}#map=16/${loc.lat}/${loc.lon}`;
-      return html`<div class="card">
+      return html`<div class="card loc-card">
+        <meshcore-location-map .getHass=${this.getHass} .lat=${loc.lat} .lon=${loc.lon} .label=${loc.label}></meshcore-location-map>
         <div class="card-title">📍 ${loc.label || 'Location'}</div>
         <div class="card-meta">${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}</div>
-        <a class="card-link" href=${osm} target="_blank" rel="noopener noreferrer" @click=${(e: Event) => e.stopPropagation()}>Open map</a>
       </div>`;
     }
     const contact = msg.isSystem ? null : parseContact(msg.text);

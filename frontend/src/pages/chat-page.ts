@@ -20,6 +20,7 @@ import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
 import '../components/message-panel';
+import '../components/location-map';
 import type { PickedLocation } from '../components/share-pickers';
 import { DISPLAY_PREFS_EVENT, timestampFormat } from '../utils/display-prefs';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
@@ -1230,6 +1231,7 @@ export class ChatPage extends LitElement {
         <div class="confirm-backdrop" @click=${() => { this._confirmLocation = false; }}>
           <div class="confirm" role="dialog" aria-label="Send location?" @click=${(e: Event) => e.stopPropagation()}>
             <div class="confirm-title">Send this location?</div>
+            <meshcore-location-map style="margin-bottom:10px" .getHass=${this._getHass} .lat=${this._location.lat} .lon=${this._location.lon} .label=${this._inputText.trim()}></meshcore-location-map>
             <div class="confirm-text">${this._location.source} · ${this._location.lat.toFixed(5)}, ${this._location.lon.toFixed(5)}<br>
               ${this._isChannelSelected() ? 'Everyone on this channel will see it.' : 'They will see where this is.'}</div>
             <div class="confirm-actions">
