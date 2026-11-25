@@ -198,6 +198,17 @@ export class NodesMap extends LitElement {
     if (bounds) this._map()?.fitBounds?.(bounds, { zoom: 15, pad: 0.1 });
   }
 
+  /** Centre the map on one node. Returns false if it has no position. */
+  focusNode(node: Contact): boolean {
+    const p = position(node);
+    const map = this._map();
+    if (!p || !map?.fitBounds) return false;
+    this._fitted = true;
+    const d = 0.01;
+    map.fitBounds([[p.lat - d, p.lon - d], [p.lat + d, p.lon + d]], { zoom: 13 });
+    return true;
+  }
+
   private _toggleGroups() {
     this._groups = !this._groups;
     try {

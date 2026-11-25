@@ -45,6 +45,8 @@ export class MeshCorePanel extends LitElement {
   @state() private _activeTab: PanelTab = initialTab();
   // managedDevices removed — devices-page.ts fetches its own data
   @state() private _devices: MeshCoreDevice[] = [];
+  /** Node to centre on when the Map tab opens (from "Show on map"). */
+  @state() private _mapFocus: Contact | null = null;
   @state() private _contacts: Contact[] = [];
   @state() private _channels: Channel[] = [];
   @state() private _selectedEntryId: string | null = null;
@@ -934,6 +936,7 @@ export class MeshCorePanel extends LitElement {
             .selectedId=${this._pendingChatTarget}
             .narrow=${this.narrow}
             @active-entity-changed=${this._onActiveEntityChanged}
+            @node-action=${this._handleNodeAction}
             @contacts-changed=${() => this._loadDeviceData()}
             @channels-changed=${() => this._loadDeviceData()}></meshcore-chat-page>`;
       case 'repeaters':
@@ -951,6 +954,7 @@ export class MeshCorePanel extends LitElement {
             .contacts=${this._contacts}
             .channels=${this._channels}
             .narrow=${this.narrow}
+            .focusNode=${this._mapFocus}
             @node-action=${this._handleNodeAction}
             @contacts-changed=${() => this._loadDeviceData()}></meshcore-nodes-page>`;
       case 'radio':
@@ -1164,6 +1168,11 @@ export class MeshCorePanel extends LitElement {
     const entryId = this._selectedEntryId || undefined;
 
     switch (action) {
+      case 'show-on-map':
+        this._mapFocus = { ...node };
+        this._setTab('map');
+        break;
+
       case 'message':
         if (pubkeyPrefix) {
           this._pendingChatTarget = pubkeyPrefix;

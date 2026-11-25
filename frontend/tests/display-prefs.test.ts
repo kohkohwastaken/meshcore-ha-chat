@@ -41,3 +41,19 @@ describe('clock and date formats', () => {
     expect(formatFullDateTime(d)).toBe('2026-11-04, 19:06:48');
   });
 });
+
+import { heardRecently } from '../src/utils/display-prefs';
+
+describe('heardRecently', () => {
+  const now = Date.parse('2026-11-25T12:00:00Z');
+  const secsAgo = (d: number) => (now - d * 86400000) / 1000;
+  it('passes everything for any time', () => {
+    expect(heardRecently(undefined, '0', now)).toBe(true);
+  });
+  it('filters by days', () => {
+    expect(heardRecently(secsAgo(0.5), '1', now)).toBe(true);
+    expect(heardRecently(secsAgo(2), '1', now)).toBe(false);
+    expect(heardRecently(secsAgo(6), '7', now)).toBe(true);
+    expect(heardRecently(undefined, '7', now)).toBe(false);
+  });
+});

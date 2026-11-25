@@ -2,6 +2,14 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.2
+
+- **Repeaters:** a list of cards (status and when each was last heard). Tap one to open its page, with "‹ All devices" to go back. A **Manage devices** card opens the integration's options. When a repeater has no stats, **Log in and refresh** uses its saved password to ask for fresh status.
+- **Map:** on desktop, a list of nodes sits beside the map. Clicking one centres the map on it. Clicking a node opens a small card with Message, Trace, Add and Details.
+- **Map:** a "Heard" filter (any time, 24 hours, 7 days, 30 days) in the toolbar. Set its default in Settings → Map.
+- **Chat:** a ⋯ menu in the conversation header. For channels: edit the channel and its region scope. For direct messages: Show on map, Trace route and Manage contacts. Both have Search.
+- **My radio:** **Share my contact** shows a contact code and a link others can use to add you. A **Command…** button was also added.
+
 ## 0.4.12-beta.1
 
 ### New layout

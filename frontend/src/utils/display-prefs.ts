@@ -96,3 +96,16 @@ export function formatDate(d: Date, withYear = true, fmt: DateFormat = dateForma
 export function formatFullDateTime(d: Date): string {
   return `${formatDate(d, true)}, ${formatClock(d, true)}`;
 }
+
+/** Map tab: only show nodes heard within this many days (0 = any time). */
+export type HeardWithin = '0' | '1' | '7' | '30';
+const HEARD_KEY = 'meshcore-map-heard-within';
+export const heardWithin = () => read<HeardWithin>(HEARD_KEY, ['0', '1', '7', '30'], '0');
+export const setHeardWithin = (v: HeardWithin) => write(HEARD_KEY, v);
+
+/** True when a node last heard at `lastAdvertSecs` passes the "heard within" filter. */
+export function heardRecently(lastAdvertSecs: number | undefined, within: HeardWithin, now = Date.now()): boolean {
+  if (within === '0') return true;
+  if (!lastAdvertSecs) return false;
+  return now - lastAdvertSecs * 1000 <= Number(within) * 86400000;
+}

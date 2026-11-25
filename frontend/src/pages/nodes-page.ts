@@ -1,3 +1,6 @@
+import { NODE_TYPE_NAMES } from '../utils/rich-messages';
+import { TYPE_COLORS } from '../utils/ha-map';
+import { DISPLAY_PREFS_EVENT, heardRecently, heardWithin, setHeardWithin, type HeardWithin } from '../utils/display-prefs';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Contact, Channel, HomeAssistant, PanelConfig } from '../types';
@@ -19,6 +22,20 @@ const MAP_PAGE_SIZE = 500;
 const VIEW_STORAGE_KEY = 'meshcore-nodes-view';
 
 type NodeType = 'clients' | 'repeaters' | 'room_servers' | 'sensors';
+
+function hasPosition(c: Contact): boolean {
+  const lat = Number(c.adv_lat);
+  const lon = Number(c.adv_lon);
+  return Number.isFinite(lat) && Number.isFinite(lon) && !(lat === 0 && lon === 0);
+}
+
+function agoShort(ms: number): string {
+  const m = Math.max(0, (Date.now() - ms) / 60000);
+  if (m < 1) return 'now';
+  if (m < 60) return `${Math.floor(m)}m ago`;
+  if (m < 1440) return `${Math.floor(m / 60)}h ago`;
+  return `${Math.floor(m / 1440)}d ago`;
+}
 const NODE_TYPE_MAP: Record<NodeType, number> = {
   clients: 1,
   repeaters: 2,
@@ -52,6 +69,18 @@ export class NodesPage extends LitElement {
   @state() private _primaryFilter: PrimaryCategory = 'all';
   @state() private _typeFilter: NodeType | null = null;
   @state() private _moreOpen = false;
+  @state() private _heard: HeardWithin = heardWithin();
+  private _onPrefs = () => { this._heard = heardWithin(); };
+
+  /** Map nodes after the "heard within" filter. */
+  private _heardMapContacts(): Contact[] {
+    return this._mapContacts.filter((c) => heardRecently(c.last_advert, this._heard));
+  }
+  /** Node to centre on and show a card for (set by "Show on map"). */
+  @property({ attribute: false }) focusNode: Contact | null = null;
+  private _focusedFor: Contact | null = null;
+  /** Node whose card is shown over the map. */
+  @state() private _mapCard: Contact | null = null;
   @state() private _searchQuery = '';
 
   // ─── Results state ──────────────────────────────────────────────────
@@ -364,6 +393,119 @@ export class NodesPage extends LitElement {
       background: var(--primary-background-color, #fafafa);
     }
 
+    .map-split {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      gap: 12px;
+    }
+
+    .map-list {
+      width: 280px;
+      flex-shrink: 0;
+      overflow-y: auto;
+      background: var(--card-background-color, #fff);
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 12px;
+      padding: 4px;
+    }
+
+    @media (max-width: 870px) {
+      .map-list { display: none; }
+    }
+
+    .map-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 8px 10px;
+      border: none;
+      border-radius: 8px;
+      background: none;
+      color: var(--primary-text-color);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .map-row:hover, .map-row.on {
+      background: rgba(127, 127, 127, 0.12);
+    }
+
+    .map-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .map-row-text {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+    }
+
+    .map-row-name {
+      font-size: 13px;
+      font-weight: 500;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .map-row-meta {
+      font-size: 12px;
+      color: var(--secondary-text-color);
+    }
+
+    .map-wrap {
+      position: relative;
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .map-wrap > meshcore-nodes-map {
+      flex: 1;
+    }
+
+    .map-card {
+      position: absolute;
+      left: 12px;
+      bottom: 36px;
+      z-index: 500;
+      width: min(300px, calc(100% - 24px));
+      background: var(--card-background-color, #fff);
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    }
+
+    .map-card-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .map-card-close {
+      border: none;
+      background: none;
+      color: var(--secondary-text-color);
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    .map-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+
     .content-area.map-view {
       display: flex;
       flex-direction: column;
@@ -465,6 +607,7 @@ export class NodesPage extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener(DISPLAY_PREFS_EVENT, this._onPrefs);
     // Use matchMedia for reliable viewport-based narrow detection
     // 870px matches HA's own narrow threshold (companion app WebViews report wider CSS viewports)
     this._mediaQuery = window.matchMedia('(max-width: 870px)');
@@ -476,6 +619,7 @@ export class NodesPage extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener(DISPLAY_PREFS_EVENT, this._onPrefs);
     this._mediaQuery?.removeEventListener('change', this._onMediaChange);
     if (this._searchTimer) {
       clearTimeout(this._searchTimer);
@@ -493,6 +637,20 @@ export class NodesPage extends LitElement {
 
   updated(changedProperties: Map<string, unknown>) {
     super.updated(changedProperties);
+    if (this.focusNode && this.focusNode !== this._focusedFor) {
+      const node = this.focusNode;
+      this._focusedFor = node;
+      if (this._view !== 'map') this._setView('map');
+      this._mapCard = node;
+      // The map loads asynchronously; try a few times until it can centre.
+      let tries = 0;
+      const attempt = () => {
+        const map = this.renderRoot.querySelector('meshcore-nodes-map') as (HTMLElement & { focusNode?: (n: Contact) => boolean }) | null;
+        if (map?.focusNode?.(node) || ++tries > 10) return;
+        setTimeout(attempt, 400);
+      };
+      setTimeout(attempt, 300);
+    }
     // Sync the narrow attribute on the host so :host([narrow]) CSS selectors work
     if (this._isNarrow) {
       this.setAttribute('narrow', '');
@@ -515,7 +673,9 @@ export class NodesPage extends LitElement {
 
   render() {
     return html`
-      <div class="nodes-layout">
+      <div class="nodes-layout" @pointerdown=${(e: Event) => {
+        if (this._moreOpen && !e.composedPath().some((n) => n instanceof HTMLElement && n.classList.contains('more-wrap'))) this._moreOpen = false;
+      }}>
         <div class="nodes-header">
           <!-- Search + actions row -->
           <div class="header-actions">
@@ -558,6 +718,14 @@ export class NodesPage extends LitElement {
               <option value="name">Sort: name</option>
               <option value="prefix">Sort: key prefix</option>
             </select>
+            ${this._view === 'map' ? html`
+              <select class="sort-select" aria-label="Heard within" .value=${this._heard}
+                @change=${(e: Event) => setHeardWithin((e.target as HTMLSelectElement).value as HeardWithin)}>
+                <option value="0">Heard: any time</option>
+                <option value="1">Heard: 24 hours</option>
+                <option value="7">Heard: 7 days</option>
+                <option value="30">Heard: 30 days</option>
+              </select>` : nothing}
             <div class="more-wrap">
               <button class="sync-btn" aria-label="More actions" aria-haspopup="menu"
                 @click=${() => { this._moreOpen = !this._moreOpen; }}>⋯</button>
@@ -756,14 +924,74 @@ export class NodesPage extends LitElement {
   }
 
   private _renderMap() {
+    const q = this._searchQuery.trim().toLowerCase();
+    const shown = this._heardMapContacts();
+    const list = shown
+      .filter((c) => !q || (c.adv_name || '').toLowerCase().includes(q) || (c.pubkey_prefix || '').toLowerCase().startsWith(q))
+      .slice()
+      .sort((a, b) => (b.last_advert || 0) - (a.last_advert || 0))
+      .slice(0, 300);
+    const card = this._mapCard;
     return html`
-      <meshcore-nodes-map
-        .hass=${this.hass}
-        .nodes=${this._mapContacts}
-        .home=${this._home}
-        ?loading=${this._mapLoading}
-        @node-selected=${(e: CustomEvent<{ node: Contact }>) => this._openNodeDetail(e.detail.node)}>
-      </meshcore-nodes-map>
+      <div class="map-split">
+        <div class="map-list" role="list" aria-label="Nodes">
+          ${list.map((c) => html`
+            <button role="listitem" class="map-row ${card?.public_key === c.public_key ? 'on' : ''}"
+              @click=${() => this._focusOnMap(c)}>
+              <span class="map-dot" style="background:${TYPE_COLORS[c.type] ?? '#9e9e9e'}"></span>
+              <span class="map-row-text">
+                <span class="map-row-name">${c.added_to_node ? '★ ' : ''}${c.adv_name || c.pubkey_prefix}</span>
+                <span class="map-row-meta">${NODE_TYPE_NAMES[c.type] ?? 'Node'}${c.last_advert ? ` · ${agoShort(c.last_advert * 1000)}` : ''}${hasPosition(c) ? '' : ' · no location'}</span>
+              </span>
+            </button>`)}
+          ${list.length === 0 ? html`<div class="map-row-meta" style="padding:12px">No nodes match</div>` : nothing}
+        </div>
+        <div class="map-wrap">
+          <meshcore-nodes-map
+            .hass=${this.hass}
+            .nodes=${shown}
+            .home=${this._home}
+            ?loading=${this._mapLoading}
+            @node-selected=${(e: CustomEvent<{ node: Contact }>) => { this._mapCard = e.detail.node; }}>
+          </meshcore-nodes-map>
+          ${card ? this._renderMapCard(card) : nothing}
+        </div>
+      </div>
+    `;
+  }
+
+  private _focusOnMap(c: Contact) {
+    this._mapCard = c;
+    const map = this.renderRoot.querySelector('meshcore-nodes-map') as (HTMLElement & { focusNode?: (n: Contact) => boolean }) | null;
+    map?.focusNode?.(c);
+  }
+
+  private _mapCardAction(c: Contact, action: string) {
+    this._selectedNode = c;
+    this._dispatchNodeAction(action);
+  }
+
+  private _renderMapCard(c: Contact) {
+    const hops = typeof c.out_path_len === 'number' && c.out_path_len >= 0 ? `${c.out_path_len} hop${c.out_path_len === 1 ? '' : 's'}` : 'flood';
+    const canMessage = c.type !== 4;
+    return html`
+      <div class="map-card" role="dialog" aria-label=${c.adv_name || 'Node'}>
+        <div class="map-card-head">
+          <b>${c.adv_name || c.pubkey_prefix}</b>
+          <button class="map-card-close" aria-label="Close" @click=${() => { this._mapCard = null; }}>✕</button>
+        </div>
+        <div class="map-row-meta">
+          ${NODE_TYPE_NAMES[c.type] ?? 'Node'} · ${hops}${c.last_advert ? ` · heard ${agoShort(c.last_advert * 1000)}` : ''}
+        </div>
+        <div class="map-card-actions">
+          ${canMessage && c.added_to_node ? html`<button class="sync-btn" @click=${() => this._mapCardAction(c, 'message')}>Message</button>` : nothing}
+          <button class="sync-btn" @click=${() => this._mapCardAction(c, 'trace')}>Trace</button>
+          ${c.added_to_node
+            ? nothing
+            : html`<button class="sync-btn" @click=${() => this._mapCardAction(c, 'add-contact')}>☆ Add</button>`}
+          <button class="sync-btn" @click=${() => this._openNodeDetail(c)}>Details…</button>
+        </div>
+      </div>
     `;
   }
 

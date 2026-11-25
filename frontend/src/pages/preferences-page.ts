@@ -4,7 +4,8 @@ import { setTrackableChannelLimit, trackableChannelLimit } from '../utils/messag
 import {
   clockFormat, dateFormat, formatClock, formatDate, setClockFormat, setDateFormat,
   setTimestampFormat, timestampFormat,
-  type ClockFormat, type DateFormat, type TimestampFormat,
+  heardWithin, setHeardWithin,
+  type ClockFormat, type DateFormat, type HeardWithin, type TimestampFormat,
 } from '../utils/display-prefs';
 
 /**
@@ -17,6 +18,7 @@ export class PreferencesPage extends LitElement {
   @state() private _ts: TimestampFormat = timestampFormat();
   @state() private _clock: ClockFormat = clockFormat();
   @state() private _date: DateFormat = dateFormat();
+  @state() private _heard: HeardWithin = heardWithin();
 
   static styles = css`
     :host {
@@ -148,6 +150,23 @@ export class PreferencesPage extends LitElement {
               <option value="dmy">${formatDate(now, true, 'dmy')} (day/month)</option>
               <option value="mdy">${formatDate(now, true, 'mdy')} (month/day)</option>
               <option value="iso">${formatDate(now, true, 'iso')} (ISO)</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="card">
+          <h2>Map</h2>
+          <label class="row">
+            <span class="text">
+              <span class="title">Show nodes heard within</span>
+              <span class="help">Hides nodes that haven't advertised for a while. You can also change this from the Map toolbar.</span>
+            </span>
+            <select aria-label="Show nodes heard within" .value=${this._heard}
+              @change=${(e: Event) => { this._heard = (e.target as HTMLSelectElement).value as HeardWithin; setHeardWithin(this._heard); }}>
+              <option value="0">Any time</option>
+              <option value="1">24 hours</option>
+              <option value="7">7 days</option>
+              <option value="30">30 days</option>
             </select>
           </label>
         </div>

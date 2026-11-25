@@ -578,6 +578,42 @@ export class ChatPage extends LitElement {
       flex-shrink: 1;
     }
 
+    .conv-menu-wrap {
+      position: relative;
+      display: inline-flex;
+    }
+
+    .conv-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 4px);
+      z-index: 50;
+      min-width: 230px;
+      background: var(--card-background-color, #fff);
+      border: 1px solid var(--divider-color, #e0e0e0);
+      border-radius: 8px;
+      padding: 4px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    }
+
+    .conv-menu button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      padding: 8px 12px;
+      border: none;
+      border-radius: 6px;
+      background: none;
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .conv-menu button:hover {
+      background: rgba(127, 127, 127, 0.12);
+    }
+
     .chat-header-actions {
       display: flex;
       align-items: center;
@@ -894,7 +930,7 @@ export class ChatPage extends LitElement {
                 <button class="back-button" @click=${() => (this._narrowShowMessages = false)}>← Back</button>
                 <span class="narrow-conv-name">${this._getConversationName()}${this._renderScopeChip()}</span>
                 <div class="chat-header-actions">
-                  <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>
+                  <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderConvMenu()}
                 </div>
               </div>
               ${this._renderChatArea()}
@@ -965,7 +1001,7 @@ export class ChatPage extends LitElement {
                 ${this._getConversationName()}${this._renderScopeChip()}
               </div>
               <div class="chat-header-actions">
-                <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>
+                <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderConvMenu()}
               </div>
             </div>
           ` : ''}
@@ -1182,6 +1218,9 @@ export class ChatPage extends LitElement {
 
   /** A press anywhere outside the open + or emoji menu (and its button) closes it. */
   private _onOutsidePointer = (e: Event) => {
+    if (this._convMenuOpen && !e.composedPath().some((n) => n instanceof HTMLElement && n.classList.contains('conv-menu-wrap'))) {
+      this._convMenuOpen = false;
+    }
     if (!this._popup) return;
     const inside = e.composedPath().some((n) => n instanceof HTMLElement
       && (n.classList.contains('popup') || n.classList.contains('tool-button')));
@@ -1663,6 +1702,66 @@ export class ChatPage extends LitElement {
     if (!this.selectedId) return false;
     // Channel indices are purely numeric; anything else is a contact pubkey
     return !/^\d+$/.test(this.selectedId);
+  }
+
+  @state() private _convMenuOpen = false;
+
+  /** The selected direct-message contact, if a contact is selected. */
+  private _selectedContactObj(): Contact | undefined {
+    if (this._isChannelSelected()) return undefined;
+    return this.conversations.find(
+      (c) => 'pubkey_prefix' in c && (c as Contact).pubkey_prefix === this.selectedId,
+    ) as Contact | undefined;
+  }
+
+  private _convAction(action: string) {
+    this._convMenuOpen = false;
+    const contact = this._selectedContactObj();
+    switch (action) {
+      case 'manage-channels':
+        this._manageInitialTab = 'channels';
+        this._manageOpen = true;
+        break;
+      case 'manage-contacts':
+        this._manageInitialTab = 'contacts';
+        this._manageOpen = true;
+        break;
+      case 'search':
+        this._searchOpen = true;
+        break;
+      case 'trace':
+      case 'show-on-map':
+        if (contact) {
+          this.dispatchEvent(new CustomEvent('node-action', {
+            detail: { action, node: contact }, bubbles: true, composed: true,
+          }));
+        }
+        break;
+    }
+  }
+
+  /** ⋯ in the conversation header. */
+  private _renderConvMenu() {
+    const isChannel = this._isChannelSelected();
+    return html`
+      <span class="conv-menu-wrap">
+        <button class="header-action-btn" title="More" aria-label="More" aria-haspopup="menu"
+          @click=${() => { this._convMenuOpen = !this._convMenuOpen; }}>
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 8a2 2 0 100-4 2 2 0 000 4zm0 2a2 2 0 100 4 2 2 0 000-4zm0 6a2 2 0 100 4 2 2 0 000-4z"/></svg>
+        </button>
+        ${this._convMenuOpen ? html`
+          <div class="conv-menu" role="menu">
+            ${isChannel
+              ? html`
+                  <button role="menuitem" @click=${() => this._convAction('manage-channels')}>Edit channel and region scope</button>`
+              : html`
+                  <button role="menuitem" @click=${() => this._convAction('show-on-map')}>Show on map</button>
+                  <button role="menuitem" @click=${() => this._convAction('trace')}>Trace route</button>
+                  <button role="menuitem" @click=${() => this._convAction('manage-contacts')}>Manage contacts</button>`}
+            <button role="menuitem" @click=${() => this._convAction('search')}>Search this conversation</button>
+          </div>` : ''}
+      </span>
+    `;
   }
 
   private _onManageRequested() {

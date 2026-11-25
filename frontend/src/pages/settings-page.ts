@@ -1,3 +1,4 @@
+import { formatContact } from '../utils/rich-messages';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant, PanelConfig, DeviceConfig, MeshCoreDevice } from '../types';
@@ -966,6 +967,8 @@ export class SettingsPage extends LitElement {
       <!-- Rename Success Modal (persistent dialog) -->
       ${this._renderRenameSuccessModal()}
 
+      ${this._shareOpen ? this._renderShareModal() : nothing}
+
       <!-- Status Toast -->
       ${this._statusMessage ? html`
         <div class="status-toast ${this._statusMessage.type}">
@@ -1061,6 +1064,8 @@ export class SettingsPage extends LitElement {
           <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._executeCompanionAction('send_advert', {flood: true}, 'Flood Advert')}>Flood Advert</button>
           <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._executeCompanionAction('set_time', {val: Math.floor(Date.now() / 1000)}, 'Sync Clock')}>Sync Clock</button>
           <button class="action-btn" ?disabled=${!isOnline} @click=${this._onCompanionTrace}>Trace</button>
+          <button class="action-btn" @click=${this._openCommandDialogForCompanion}>Command…</button>
+          <button class="action-btn" @click=${() => { this._shareOpen = true; }}>Share my contact</button>
         </div>
       </div>
     `;
@@ -1517,6 +1522,42 @@ export class SettingsPage extends LitElement {
     } finally {
       if (current()) this._saving = false;
     }
+  }
+
+  @state() private _shareOpen = false;
+
+  /** "Share my contact": the codes other people paste or open to add this radio. */
+  private _renderShareModal() {
+    const cfg = this._deviceConfig;
+    if (!cfg) return nothing;
+    const code = formatContact(cfg.pubkey, 1, cfg.name);
+    const link = `meshcore://contact/add?name=${encodeURIComponent(cfg.name)}&public_key=${cfg.pubkey.toLowerCase()}&type=1`;
+    const row = (label: string, value: string, help: string) => html`
+      <div style="margin-bottom:14px">
+        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${label}</div>
+        <div style="display:flex;gap:6px">
+          <input class="form-input" style="flex:1;font-family:monospace;font-size:12px" readonly .value=${value}
+            @focus=${(e: Event) => (e.target as HTMLInputElement).select()} />
+          <button class="action-btn" @click=${() => this._copyToClipboard(value)}>Copy</button>
+        </div>
+        <div style="font-size:12px;color:var(--secondary-text-color);margin-top:4px">${help}</div>
+      </div>`;
+    return html`
+      <div class="modal-overlay" @click=${() => { this._shareOpen = false; }}>
+        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Share my contact"
+             style="max-width:480px" @click=${(e: Event) => e.stopPropagation()}>
+          <div class="modal-header">
+            <span class="modal-title">Share my contact</span>
+            <button class="modal-close" aria-label="Close" @click=${() => { this._shareOpen = false; }}>&times;</button>
+          </div>
+          <div class="modal-body" style="padding:16px 20px">
+            ${row('Contact code', code, 'Paste into a MeshCore chat on its own and others can tap it to add you.')}
+            ${row('Link', link, 'Opens in the MeshCore apps to add you as a contact.')}
+            <div style="font-size:12px;color:var(--secondary-text-color)">Sending a Flood advert also lets nearby radios discover you.</div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   private async _copyToClipboard(text: string) {

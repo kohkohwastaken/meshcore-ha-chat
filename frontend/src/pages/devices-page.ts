@@ -19,6 +19,9 @@ export class DevicesPage extends LitElement {
   @property({ type: Boolean }) narrow = false;
   @property({ type: Object }) selectedDevice?: MeshCoreDevice;
 
+  /** Which managed device's page is open (null = the list). */
+  @state() private _openPrefix: string | null = null;
+  @state() private _loggingIn: string | null = null;
   @state() private _managedDevices: { repeaters: ManagedDevice[]; clients: ManagedDevice[] } = {
     repeaters: [],
     clients: [],
@@ -346,6 +349,55 @@ export class DevicesPage extends LitElement {
         flex-wrap: wrap;
         gap: 6px;
         margin-top: 16px;
+      }
+
+      .device-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .device-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        text-align: left;
+        padding: 14px 16px;
+        border: 1px solid var(--divider-color, #e0e0e0);
+        border-radius: 12px;
+        background: var(--card-background-color, #fff);
+        color: var(--primary-text-color);
+        font: inherit;
+        cursor: pointer;
+      }
+
+      .device-card:hover {
+        border-color: var(--primary-color, #03a9f4);
+      }
+
+      .device-card.add {
+        border-style: dashed;
+        opacity: 0.85;
+      }
+
+      .device-card-text {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .device-card-chevron {
+        font-size: 20px;
+        color: var(--secondary-text-color);
+      }
+
+      .back-btn {
+        border: none;
+        background: none;
+        color: var(--primary-color, #03a9f4);
+        font: inherit;
+        font-size: 14px;
+        cursor: pointer;
+        padding: 4px 0 12px;
       }
 
       .actions-row.top {
@@ -721,8 +773,7 @@ export class DevicesPage extends LitElement {
           ${this._loading
             ? html`<div class="loading-state"><div class="loading-spinner"></div> Loading devices...</div>`
             : html`
-                ${this._renderDeviceSections(this._managedDevices.repeaters, 'repeater')}
-                ${this._renderDeviceSections(this._managedDevices.clients, 'client')}
+                ${this._renderOpenOrList()}
                 ${this._managedDevices.repeaters.length === 0 && this._managedDevices.clients.length === 0
                   ? html`
                       <div class="empty-state">
@@ -860,11 +911,21 @@ export class DevicesPage extends LitElement {
 
   // ─── Managed Device Sections ──────────────────────────────────────
 
-  private _renderDeviceSections(devices: ManagedDevice[], type: 'repeater' | 'client') {
-    return devices.map(device => this._renderDeviceSection(device, type));
+  private _renderOpenOrList() {
+    const { repeaters, clients } = this._managedDevices;
+    if (repeaters.length + clients.length === 0) return nothing;
+    const rep = repeaters.find((d) => d.pubkey_prefix === this._openPrefix);
+    const cli = clients.find((d) => d.pubkey_prefix === this._openPrefix);
+    if (rep || cli) {
+      return html`
+        <button class="back-btn" @click=${() => { this._openPrefix = null; }}>‹ All devices</button>
+        ${this._renderDeviceSection((rep || cli)!, rep ? 'repeater' : 'client')}
+      `;
+    }
+    return this._renderDeviceList();
   }
 
-  private _renderDeviceSection(device: ManagedDevice, type: 'repeater' | 'client') {
+  private _status(device: ManagedDevice): { statusClass: 'online' | 'offline' | 'unknown'; statusLabel: string } {
     // Derive status from the entity if available, fall back to ws_api status field
     let statusClass: 'online' | 'offline' | 'unknown' = 'unknown';
     let statusLabel = 'Unknown';
@@ -876,6 +937,90 @@ export class DevicesPage extends LitElement {
       statusClass = device.status === 'online' ? 'online' : device.status === 'offline' ? 'offline' : 'unknown';
       statusLabel = device.status === 'online' ? 'Online' : device.status === 'offline' ? 'Offline' : 'Unknown';
     }
+    return { statusClass, statusLabel };
+  }
+
+  /** One card per managed device; tapping a card opens its page. */
+  private _renderDeviceList() {
+    const all = [
+      ...this._managedDevices.repeaters.map((d) => ({ d, type: 'repeater' as const })),
+      ...this._managedDevices.clients.map((d) => ({ d, type: 'client' as const })),
+    ];
+    return html`
+      <div class="device-list">
+        ${all.map(({ d, type }) => {
+          const { statusClass, statusLabel } = this._status(d);
+          const contact = this._contactsByPrefix[d.pubkey_prefix?.toLowerCase()];
+          const heard = contact?.last_advert ? this._ago(contact.last_advert * 1000) : '';
+          return html`
+            <button class="device-card" @click=${() => { this._openPrefix = d.pubkey_prefix; }}>
+              <div class="section-icon ${type}">
+                ${type === 'repeater'
+                  ? html`<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 5c-3.87 0-7 3.13-7 7h2c0-2.76 2.24-5 5-5s5 2.24 5 5h2c0-3.87-3.13-7-7-7zm0-4C5.93 1 1 5.93 1 12h2c0-4.97 4.03-9 9-9s9 4.03 9 9h2c0-6.07-4.93-11-11-11zm0 8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/></svg>`
+                  : html`<svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`}
+              </div>
+              <div class="device-card-text">
+                <div class="device-name">${d.name}</div>
+                <div class="device-meta">
+                  <span>${type === 'repeater' ? 'Repeater' : 'Client'}</span>
+                  ${heard ? html`<span>Heard ${heard}</span>` : nothing}
+                </div>
+              </div>
+              <span class="status-badge ${statusClass}"><span class="status-dot ${statusClass}"></span>${statusLabel}</span>
+              <span class="device-card-chevron" aria-hidden="true">›</span>
+            </button>
+          `;
+        })}
+        <button class="device-card add" @click=${this._openManage}>
+          <div class="section-icon">＋</div>
+          <div class="device-card-text">
+            <div class="device-name">Manage devices</div>
+            <div class="device-meta"><span>Add or remove repeaters and clients, set passwords and neighbours</span></div>
+          </div>
+        </button>
+      </div>
+    `;
+  }
+
+  private _ago(ms: number): string {
+    const m = Math.max(0, (Date.now() - ms) / 60000);
+    if (m < 1) return 'just now';
+    if (m < 60) return `${Math.floor(m)}m ago`;
+    if (m < 1440) return `${Math.floor(m / 60)}h ago`;
+    return `${Math.floor(m / 1440)}d ago`;
+  }
+
+  /** Manage devices lives in the integration's options flow. */
+  private _openManage = () => {
+    const entry = this.config?.entry_id;
+    history.pushState(null, '', entry ? `/config/integrations/integration/meshcore#config_entry=${entry}` : '/config/integrations/integration/meshcore');
+    window.dispatchEvent(new CustomEvent('location-changed'));
+  };
+
+  /** Log in (with the saved password) and ask for fresh status. */
+  private async _loginAndRefresh(device: ManagedDevice) {
+    if (!this.hass) return;
+    this._loggingIn = device.pubkey_prefix;
+    try {
+      const result = await executeRemote(this.hass, device.pubkey_prefix, 'ver', this.config?.entry_id);
+      if (result.success && !/not confirmed/i.test(result.response || '')) {
+        this._showStatusMessage(`${device.name} answered: ${result.response || 'OK'}`, 'success');
+        await this._loadManagedDevices();
+      } else {
+        this._showStatusMessage(
+          device.password
+            ? `${device.name} didn't confirm the login. Check it's in range and the password is right.`
+            : `${device.name} has no saved password. Add one under Manage devices.`,
+          'error',
+        );
+      }
+    } finally {
+      this._loggingIn = null;
+    }
+  }
+
+  private _renderDeviceSection(device: ManagedDevice, type: 'repeater' | 'client') {
+    const { statusClass, statusLabel } = this._status(device);
     const isOnline = statusClass === 'online';
     const deviceKey = this._getManagedDeviceKey(device, type);
     const entities = this._getDeviceEntities(device, type);
@@ -959,8 +1104,13 @@ export class DevicesPage extends LitElement {
               <div class="status-note">
                 ${statusClass === 'offline'
                   ? html`<b>${device.name} isn't answering.</b> It may be out of range or turned off. Stats will update when it next responds.`
-                  : html`<b>No stats yet.</b> ${device.name} hasn't answered a status request, so battery, signal and traffic are blank.
-                      Check it's in range and that its login password is set in the integration's options.`}
+                  : html`<b>No stats yet.</b> ${device.name} hasn't answered a status request, so battery, signal and traffic are blank.`}
+                <div style="margin-top:8px">
+                  <button class="action-btn" ?disabled=${this._loggingIn === device.pubkey_prefix}
+                    @click=${() => this._loginAndRefresh(device)}>
+                    ${this._loggingIn === device.pubkey_prefix ? 'Logging in…' : 'Log in and refresh'}
+                  </button>
+                </div>
               </div>
             `
           : nothing}
