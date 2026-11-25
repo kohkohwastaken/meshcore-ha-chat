@@ -322,7 +322,13 @@ export class SettingsPage extends LitElement {
         }
       }
 
+      .settings-container {
+        padding: 16px;
+        box-sizing: border-box;
+      }
+
       .settings-container > * {
+        box-sizing: border-box;
         max-width: 1100px;
         margin-left: auto;
         margin-right: auto;
@@ -869,13 +875,6 @@ export class SettingsPage extends LitElement {
             ${this._renderRadioSettings()}
           </details>
 
-          <details class="device-section fold danger-fold">
-            <summary class="card-title">Danger zone</summary>
-            <div class="danger-stack">
-              ${this._renderRename()}
-              ${this._renderIdentityManagement()}
-            </div>
-          </details>
         </div>
       </div>
 
@@ -931,6 +930,11 @@ export class SettingsPage extends LitElement {
                 Reboot Device
               </button>
 
+              <button class="modal-action danger" @click=${() => { this._closeSettingsModal(); this._renameOpen = true; }}>
+                <span class="modal-action-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04a1 1 0 000-1.41l-2.34-2.34a1 1 0 00-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg></span>
+                Rename Device
+              </button>
+
               <button class="modal-action danger" @click=${this._openKeyManagementModal}>
                 <span class="modal-action-icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12.65 10a6 6 0 110 4H10v2H8v-2H6v-2h6.65zM17 14a2 2 0 100-4 2 2 0 000 4z"/></svg></span>
                 Key Management
@@ -968,6 +972,18 @@ export class SettingsPage extends LitElement {
       ${this._renderRenameSuccessModal()}
 
       ${this._shareOpen ? this._renderShareModal() : nothing}
+
+      ${this._renameOpen ? html`
+        <div class="modal-overlay" @click=${() => { this._renameOpen = false; }}>
+          <div class="modal-card" role="dialog" aria-modal="true" aria-label="Rename device"
+               style="max-width: 440px;" @click=${(e: Event) => e.stopPropagation()}>
+            <div class="modal-header">
+              <span class="modal-title">Rename Device</span>
+              <button class="modal-close" aria-label="Close" @click=${() => { this._renameOpen = false; }}>&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 16px 20px;">${this._renderRename()}</div>
+          </div>
+        </div>` : nothing}
 
       <!-- Status Toast -->
       ${this._statusMessage ? html`
@@ -1525,6 +1541,7 @@ export class SettingsPage extends LitElement {
   }
 
   @state() private _shareOpen = false;
+  @state() private _renameOpen = false;
 
   /** "Share my contact": the codes other people paste or open to add this radio. */
   private _renderShareModal() {
@@ -1579,6 +1596,7 @@ export class SettingsPage extends LitElement {
   }
 
   private _handleNameSave() {
+    this._renameOpen = false;
     const newName = this._editValues['name'];
     const oldName = this._deviceConfig?.name;
     if (newName === undefined || newName === oldName) return;

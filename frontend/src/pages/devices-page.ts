@@ -133,6 +133,7 @@ export class DevicesPage extends LitElement {
       }
 
       .content-area > * {
+        box-sizing: border-box;
         max-width: 1100px;
         margin-left: auto;
         margin-right: auto;

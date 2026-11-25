@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.4
+
+- **My radio:** the page now has the same gap at the top as the other tabs. The General and Location cards are now as wide as the cards above and below them (the same fix applies on Repeaters).
+- **My radio:** the Danger zone is gone. Rename Device has moved into the settings cog, next to Key Management and Reboot.
+
 ## 0.4.12-beta.3
 
 - The Map tab is called **Nodes** again. A **Map | List** switch picks the view, and Map is the default.
@@ -31,7 +36,6 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 
 ### My radio
 - Radio settings (frequency, bandwidth, spreading factor, coding rate, TX power, path hash) are behind an **Advanced radio settings** expander with a warning.
-- Rename, Regenerate identity and Import private key are together in a collapsed **Danger zone**.
 - Message, time and date preferences moved to the new Settings tab.
 
 ### Repeaters
