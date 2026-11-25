@@ -11,6 +11,17 @@ type ChatFilter = 'all' | 'unread';
 /** Contact types that are infrastructure rather than people. */
 const INFRA_TYPES = new Set([2, 3]);
 
+const COLLAPSE_KEY = 'meshcore-collapsed-sections';
+
+function readCollapsed(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]');
+    return Array.isArray(v) ? v.filter((x) => x === 'channels' || x === 'dms') : [];
+  } catch {
+    return [];
+  }
+}
+
 /** One line describing a conversation's last message. */
 export function previewLine(p: ConversationPreview | undefined, isChannel: boolean): string {
   if (!p || !p.text) return '';
@@ -57,6 +68,15 @@ export class ConversationList extends LitElement {
   @property({ attribute: false }) previews: Record<string, ConversationPreview> = {};
 
   @state() private _query = '';
+  /** Collapsed sections, remembered in this browser. */
+  @state() private _collapsed = new Set<string>(readCollapsed());
+
+  private _toggleSection(key: string) {
+    const next = new Set(this._collapsed);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    this._collapsed = next;
+    try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...next])); } catch { /* storage unavailable */ }
+  }
 
   @state() private _activeFilter: ChatFilter = 'all';
   @state() private _filteredConversations: Array<Contact | Channel> = [];
@@ -249,6 +269,44 @@ export class ConversationList extends LitElement {
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--secondary-text-color, #727272);
+    }
+
+    .section-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      background: none;
+      padding: 4px 0;
+      color: inherit;
+      font: inherit;
+      letter-spacing: inherit;
+      text-transform: inherit;
+      cursor: pointer;
+    }
+
+    .section-caret {
+      display: inline-block;
+      transition: transform 0.15s;
+    }
+
+    .section-caret.open {
+      transform: rotate(90deg);
+    }
+
+    .section-unread {
+      background: var(--primary-color, #03a9f4);
+      color: #fff;
+      border-radius: 9px;
+      padding: 0 6px;
+      font-size: 11px;
+      letter-spacing: 0;
+      line-height: 18px;
+    }
+
+    .section-count {
+      font-weight: 400;
+      letter-spacing: 0;
     }
 
     .section-add {
@@ -452,19 +510,32 @@ export class ConversationList extends LitElement {
     }
     // Rows are indexed across both sections so roving focus still works.
     let idx = 0;
-    const section = (title: string, items: Array<Contact | Channel>, add: string) => html`
-      <div class="list-section">
-        <span>${title}</span>
-        <button class="section-add" title=${add} aria-label=${add}
-          @click=${() => this.dispatchEvent(new CustomEvent('manage-requested', { bubbles: true, composed: true }))}>＋</button>
-      </div>
-      ${items.length
-        ? items.map((c) => this._renderConversation(c, idx++))
-        : html`<div class="section-empty">None yet</div>`}
-    `;
+    const section = (key: 'channels' | 'dms', title: string, items: Array<Contact | Channel>, add: string) => {
+      const collapsed = this._collapsed.has(key);
+      const unread = items.reduce((n, c) => n + this._getUnreadCount(
+        'pubkey_prefix' in c ? (c as Contact).pubkey_prefix : String((c as Channel).channel_idx)), 0);
+      return html`
+        <div class="list-section">
+          <button class="section-toggle" aria-expanded=${collapsed ? 'false' : 'true'}
+            @click=${() => this._toggleSection(key)}>
+            <span class="section-caret ${collapsed ? '' : 'open'}" aria-hidden="true">▸</span>
+            <span>${title}</span>
+            ${collapsed && unread > 0 ? html`<span class="section-unread">${unread}</span>` : ''}
+            ${collapsed && unread === 0 ? html`<span class="section-count">${items.length}</span>` : ''}
+          </button>
+          <button class="section-add" title=${add} aria-label=${add}
+            @click=${() => this.dispatchEvent(new CustomEvent('manage-requested', { bubbles: true, composed: true }))}>＋</button>
+        </div>
+        ${collapsed
+          ? ''
+          : items.length
+            ? items.map((c) => this._renderConversation(c, idx++))
+            : html`<div class="section-empty">None yet</div>`}
+      `;
+    };
     return html`
-      ${section('Channels', channels, 'Add a channel')}
-      ${section('Direct messages', dms, 'Add a contact')}
+      ${section('channels', 'Channels', channels, 'Add a channel')}
+      ${section('dms', 'Direct messages', dms, 'Add a contact')}
     `;
   }
 
