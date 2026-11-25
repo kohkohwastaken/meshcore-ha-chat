@@ -17,9 +17,9 @@ export function matchContacts(list: Contact[], query: string): Contact[] {
       || (c.pubkey_prefix || '').toLowerCase().startsWith(q));
 }
 
-/** Contacts grouped for display: people, then room servers, then repeaters. */
+/** Contacts grouped for display: companions, then room servers, then repeaters. */
 export function groupContacts(list: Contact[]): Array<{ label: string; items: Contact[] }> {
-  const groups: Array<[number, string]> = [[1, 'People'], [3, 'Room servers'], [2, 'Repeaters']];
+  const groups: Array<[number, string]> = [[1, 'Companions'], [3, 'Room servers'], [2, 'Repeaters']];
   return groups
     .map(([type, label]) => ({ label, items: list.filter((c) => c.type === type) }))
     .filter((g) => g.items.length > 0);
@@ -33,6 +33,17 @@ function ago(secs?: number): string {
   return `${Math.floor(m / 1440)}d ago`;
 }
 
+const GROUPS_KEY = 'meshcore-contact-groups-collapsed';
+
+function readCollapsed(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(GROUPS_KEY) || '[]');
+    return Array.isArray(v) ? v.filter((x) => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
 function hasLocation(c: Contact): boolean {
   const lat = Number(c.adv_lat);
   const lon = Number(c.adv_lon);
@@ -40,7 +51,6 @@ function hasLocation(c: Contact): boolean {
 }
 
 type Tab = 'contacts' | 'heard';
-type Within = '1' | '7' | '30' | '0';
 
 /**
  * Contacts popup: your contacts (grouped; message, or tap for details),
@@ -56,7 +66,8 @@ export class ContactsDialog extends LitElement {
   @state() private _tab: Tab = 'contacts';
   @state() private _query = '';
   @state() private _sort: 'name' | 'heard' = 'name';
-  @state() private _within: Within = '7';
+  /** Collapsed contact groups, remembered in this browser. */
+  @state() private _collapsed = new Set<string>(readCollapsed());
   @state() private _heard: Contact[] = [];
   @state() private _loadingHeard = false;
   @state() private _busy: string | null = null;
@@ -167,12 +178,28 @@ export class ContactsDialog extends LitElement {
       padding: 0 8px 12px;
     }
     .grp {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      border: none;
+      background: none;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
       font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: var(--secondary-text-color);
       padding: 10px 8px 4px;
+    }
+    .caret {
+      display: inline-block;
+      transition: transform 0.15s;
+    }
+    .caret.open {
+      transform: rotate(90deg);
     }
     .row {
       display: flex;
@@ -383,7 +410,7 @@ export class ContactsDialog extends LitElement {
     this._loadingHeard = true;
     const res = await getContactsPaginated(this.hass, 'discovered', {
       search: this._query.trim() || undefined,
-      limit: 60,
+      limit: 500,
       sortBy: 'last_heard',
       entryId: this.entryId,
     });
@@ -540,11 +567,14 @@ export class ContactsDialog extends LitElement {
   }
 
   private _heardList(): Contact[] {
-    const limit = this._within === '0' ? Infinity : Number(this._within) * 86400;
-    const nowSecs = Date.now() / 1000;
-    return matchContacts(this._heard, '')
-      .filter((c) => !this._isMine(c))
-      .filter((c) => limit === Infinity || (!!c.last_advert && nowSecs - c.last_advert <= limit));
+    return matchContacts(this._heard, '').filter((c) => !this._isMine(c));
+  }
+
+  private _toggleGroup(label: string) {
+    const next = new Set(this._collapsed);
+    if (next.has(label)) next.delete(label); else next.add(label);
+    this._collapsed = next;
+    try { localStorage.setItem(GROUPS_KEY, JSON.stringify([...next])); } catch { /* storage unavailable */ }
   }
 
   private _renderList() {
@@ -554,16 +584,21 @@ export class ContactsDialog extends LitElement {
         : (a, b) => (b.last_advert || 0) - (a.last_advert || 0));
       const groups = groupContacts(list);
       if (!groups.length) {
-        return html`<div class="empty">${this._query ? 'No contacts match.' : 'No contacts on your radio yet. Add some from Heard nearby.'}</div>`;
+        return html`<div class="empty">${this._query ? 'No contacts match.' : 'No contacts on your radio yet. Add some from Discovered.'}</div>`;
       }
-      return groups.map((g) => html`
-        <div class="grp">${g.label} · ${g.items.length}</div>
-        ${g.items.map((c) => this._contactRow(c))}`);
+      return groups.map((g) => {
+        const shut = this._collapsed.has(g.label) && !this._query;
+        return html`
+          <button class="grp" aria-expanded=${shut ? 'false' : 'true'} @click=${() => this._toggleGroup(g.label)}>
+            <span class="caret ${shut ? '' : 'open'}" aria-hidden="true">▸</span>${g.label} · ${g.items.length}
+          </button>
+          ${shut ? nothing : g.items.map((c) => this._contactRow(c))}`;
+      });
     }
     const list = this._heardList();
     if (this._loadingHeard && !list.length) return html`<div class="empty">Looking…</div>`;
     if (!list.length) {
-      return html`<div class="empty">${this._query ? 'Nobody heard matches.' : 'Nobody heard in this time. Try a wider "heard within".'}</div>`;
+      return html`<div class="empty">${this._query ? 'No discovered nodes match.' : 'No other nodes discovered yet. They appear here when your radio hears their adverts.'}</div>`;
     }
     return list.map((c) => this._heardRow(c));
   }
@@ -576,7 +611,7 @@ export class ContactsDialog extends LitElement {
       <div class="detail">
         <div class="head">
           <button class="icon-btn" aria-label="Back" @click=${() => { this._detail = null; }}>‹</button>
-          <b>${mine ? 'Contact' : 'Heard nearby'}</b>
+          <b>${mine ? 'Contact' : 'Discovered'}</b>
           <button class="icon-btn" aria-label="Close" @click=${this._close}>×</button>
         </div>
         <div class="detail-body">
@@ -590,7 +625,7 @@ export class ContactsDialog extends LitElement {
             <button class="btn" ?disabled=${!hasLocation(c)} title=${hasLocation(c) ? '' : "This node hasn't shared a location"}
               @click=${() => this._nodeAction(c, 'show-on-map')}>🗺 Show on map</button>
             <button class="btn" @click=${() => this._nodeAction(c, 'trace')}>↯ Trace route</button>
-            <button class="btn" @click=${() => this._share(c)}>⧉ Share</button>
+            <button class="btn" @click=${() => this._share(c)}>⧉ Copy contact</button>
           </div>
           <div class="kv"><span>Last heard</span><span>${c.last_advert ? ago(c.last_advert) : 'Not yet'}</span></div>
           <div class="kv"><span>Route</span><span>${this._route(c)}</span></div>
@@ -626,13 +661,13 @@ export class ContactsDialog extends LitElement {
               <div class="name">${meName} <span class="meta">(you)</span></div>
               <div class="meta">${this._me?.pubkey ? this._me.pubkey.substring(0, 12) : ''}</div>
             </span>
-            <button class="btn" @click=${this._shareMe}>Share my contact</button>
+            <button class="btn" @click=${this._shareMe}>Copy my contact</button>
           </div>
           <div class="tabs" role="tablist">
             <button role="tab" class=${this._tab === 'contacts' ? 'on' : ''} aria-selected=${this._tab === 'contacts'}
               @click=${() => { this._tab = 'contacts'; }}>Contacts · ${myCount}</button>
             <button role="tab" class=${this._tab === 'heard' ? 'on' : ''} aria-selected=${this._tab === 'heard'}
-              @click=${() => { this._tab = 'heard'; }}>Heard nearby · ${heardCount}</button>
+              @click=${() => { this._tab = 'heard'; }}>Discovered · ${heardCount}</button>
           </div>
           <div class="tools">
             <input type="search" placeholder="Search by name or key" aria-label="Search by name or key"
@@ -643,13 +678,7 @@ export class ContactsDialog extends LitElement {
                   <option value="name">A–Z</option>
                   <option value="heard">Recently heard</option>
                 </select>`
-              : html`<select aria-label="Heard within" .value=${this._within}
-                  @change=${(e: Event) => { this._within = (e.target as HTMLSelectElement).value as Within; }}>
-                  <option value="1">24 hours</option>
-                  <option value="7">7 days</option>
-                  <option value="30">30 days</option>
-                  <option value="0">Any time</option>
-                </select>`}
+              : nothing}
           </div>
           <div class="body">${this._renderList()}</div>
           ${this._detail ? this._renderDetail(this._detail) : nothing}

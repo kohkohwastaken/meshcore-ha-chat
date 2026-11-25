@@ -21,6 +21,6 @@ import { groupContacts } from '../src/components/contacts-dialog';
 describe('groupContacts', () => {
   it('groups people, room servers, then repeaters and skips empty groups', () => {
     const g = groupContacts([c('R', 'r1', 2), c('P', 'p1', 1), c('Q', 'q1', 1)]);
-    expect(g.map((x) => [x.label, x.items.length])).toEqual([['People', 2], ['Repeaters', 1]]);
+    expect(g.map((x) => [x.label, x.items.length])).toEqual([['Companions', 2], ['Repeaters', 1]]);
   });
 });

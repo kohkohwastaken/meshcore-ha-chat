@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.16
+
+- **Contacts:** **Heard nearby** is now **Discovered**: every node your radio knows that isn't a contact, newest first, with no time filter.
+- **Contacts:** "People" is now **Companions**. The Companions, Room servers and Repeaters headings collapse, and this browser remembers which are collapsed.
+- **Contacts:** "Share my contact" is now **Copy my contact**, and "Share" is now **Copy contact**. Both copy the contact code.
+
 ## 0.4.12-beta.15
 
 - **Contacts** is redesigned as a popup (full screen on phones):
