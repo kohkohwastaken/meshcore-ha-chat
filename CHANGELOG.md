@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.9
+
+- **Repeaters:** after logging in, **Log in and refresh** now asks the repeater for its status through the MeshCore integration, so battery, signal and traffic actually update.
+
 ## 0.4.12-beta.8
 
 - **Phone app:** removed the empty strip under the bottom tab bar. The bar was adding the Android navigation bar's height as padding, even though the app already stops above it. It now uses Home Assistant's own safe-area value.
