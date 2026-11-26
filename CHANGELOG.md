@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.36
+
+- New sidebar icon: a speech bubble with "MC HAC" in MeshCore-style lettering, instead of the walkie-talkie. It follows your theme's icon colours.
+- New README banner with the same logo.
+
 ## 0.4.12-beta.35
 
 - Repeaters: device cards and Manage devices are laid out in a row again (icon, name and details, status, ›) instead of stacked in the middle of a wide card.

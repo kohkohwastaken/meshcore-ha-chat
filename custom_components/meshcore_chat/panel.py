@@ -16,6 +16,7 @@ import hashlib
 from pathlib import Path
 
 from homeassistant.components.frontend import (
+    add_extra_js_url,
     async_register_built_in_panel,
     async_remove_panel as frontend_async_remove_panel,
 )
@@ -44,7 +45,11 @@ PANEL_URL = "/meshcore_chat_panel/meshcore-chat-panel.js"
 # assets); a wrapper directory would add nothing.
 PANEL_FRONTEND_PATH = str(Path(__file__).parent / "meshcore-chat-panel.js")
 
-PANEL_ICON = "mdi:radio-handheld"
+# The MeshCore Chat logo (a speech bubble with "MC HAC"), registered as a
+# custom icon set by meshcore-chat-icons.js, which every page loads.
+PANEL_ICON = "meshcore_chat:logo"
+ICONS_URL = "/meshcore_chat_panel/meshcore-chat-icons.js"
+ICONS_PATH = str(Path(__file__).parent / "meshcore-chat-icons.js")
 PANEL_TITLE = "MeshCore Chat"
 
 # Sidebar URL slug — the panel will be reachable at /meshcore-chat in the HA UI.
@@ -76,8 +81,12 @@ async def async_register_panel(hass: HomeAssistant) -> None:
     global _static_path_registered
     if not _static_path_registered:
         await hass.http.async_register_static_paths(
-            [StaticPathConfig(PANEL_URL, PANEL_FRONTEND_PATH, cache_headers=False)]
+            [
+                StaticPathConfig(PANEL_URL, PANEL_FRONTEND_PATH, cache_headers=False),
+                StaticPathConfig(ICONS_URL, ICONS_PATH, cache_headers=False),
+            ]
         )
+        add_extra_js_url(hass, ICONS_URL)
         _static_path_registered = True
         _LOGGER.debug("Registered MeshCore Chat panel static path %s", PANEL_URL)
     version = await hass.async_add_executor_job(_bundle_version)
