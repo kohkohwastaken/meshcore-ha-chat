@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.21
+
+- **Share window:** **Copy image** puts the QR code on the clipboard as a picture, ready to paste into another app. **Save image** downloads it as a PNG. Where a browser can't copy images, Copy image saves the picture instead.
+
 ## 0.4.12-beta.20
 
 - **Contacts:** "Copy my contact" is **Share my contact** again. It now opens a **Share** window, as does **Share** in each contact's details:

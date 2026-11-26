@@ -1,6 +1,6 @@
 {
   "name": "meshcore-chat-panel",
-  "version": "0.4.12-beta.20",
+  "version": "0.4.12-beta.21",
   "private": true,
   "description": "MeshCore sidebar panel for Home Assistant",
   "scripts": {

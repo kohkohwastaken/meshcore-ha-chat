@@ -85,11 +85,17 @@ export class ShareContactDialog extends LitElement {
       background: #fff;
       border-radius: 8px;
     }
+    .qr-actions {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
     .qr-note {
       text-align: center;
       font-size: 12px;
       color: var(--secondary-text-color);
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .opt {
       padding: 10px 0;
@@ -177,6 +183,64 @@ export class ShareContactDialog extends LitElement {
     }
   }
 
+  /** Draw the QR code as a PNG (white border, crisp squares). */
+  private async _qrPng(text: string, scale = 8): Promise<Blob | null> {
+    const m = qrModules(text);
+    const pad = 4;
+    const size = (m.length + pad * 2) * scale;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, size, size);
+    ctx.fillStyle = '#000';
+    m.forEach((row, r) => row.forEach((dark, c) => {
+      if (dark) ctx.fillRect((c + pad) * scale, (r + pad) * scale, scale, scale);
+    }));
+    return new Promise((resolve) => canvas.toBlob((b) => resolve(b), 'image/png'));
+  }
+
+  private _fileName(): string {
+    const safe = (this.target.name || 'contact').replace(/[^\p{L}\p{N}_-]+/gu, '-').replace(/^-|-$/g, '');
+    return `meshcore-${safe || 'contact'}-qr.png`;
+  }
+
+  /** Copy the QR code as an image so it can be pasted into another app. */
+  private async _copyQr(text: string) {
+    const blob = await this._qrPng(text);
+    if (!blob) return;
+    const CI = (window as unknown as { ClipboardItem?: new (items: Record<string, Blob>) => unknown }).ClipboardItem;
+    try {
+      if (!CI || !navigator.clipboard?.write) throw new Error('unsupported');
+      await navigator.clipboard.write([new CI({ 'image/png': blob }) as ClipboardItem]);
+      this._note = 'QR code copied as an image.';
+    } catch {
+      this._saveBlob(blob);
+      this._note = "This browser can't copy images, so the QR code was saved as a picture instead.";
+    }
+  }
+
+  private async _saveQr(text: string) {
+    const blob = await this._qrPng(text);
+    if (blob) {
+      this._saveBlob(blob);
+      this._note = 'QR code saved.';
+    }
+  }
+
+  private _saveBlob(blob: Blob) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = this._fileName();
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   /** Send the advert over the air to radios in direct range (zero hop). */
   private async _sendOverAir() {
     if (!this.hass) return;
@@ -231,6 +295,10 @@ export class ShareContactDialog extends LitElement {
 
           ${this._qr(link)}
           <div class="qr-note">Scan with a MeshCore app to add ${t.self ? 'you' : t.name}.</div>
+          <div class="qr-actions">
+            <button class="btn" @click=${() => this._copyQr(link)}>Copy image</button>
+            <button class="btn" @click=${() => this._saveQr(link)}>Save image</button>
+          </div>
 
           <div class="opt">
             <div class="opt-title">Chat code</div>
