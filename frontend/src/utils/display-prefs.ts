@@ -97,15 +97,48 @@ export function formatFullDateTime(d: Date): string {
   return `${formatDate(d, true)}, ${formatClock(d, true)}`;
 }
 
-/** Map tab: only show nodes heard within this many days (0 = any time). */
-export type HeardWithin = '0' | '1' | '7' | '30';
+/** Nodes tab: only show nodes heard within this many days (0 = any time), or since a custom date. */
+export type HeardWithin = '0' | '1' | '7' | '30' | '365' | 'custom';
 const HEARD_KEY = 'meshcore-map-heard-within';
-export const heardWithin = () => read<HeardWithin>(HEARD_KEY, ['0', '1', '7', '30'], '0');
+const HEARD_SINCE_KEY = 'meshcore-map-heard-since';
+export const heardWithin = () => read<HeardWithin>(HEARD_KEY, ['0', '1', '7', '30', '365', 'custom'], '0');
 export const setHeardWithin = (v: HeardWithin) => write(HEARD_KEY, v);
 
-/** True when a node last heard at `lastAdvertSecs` passes the "heard within" filter. */
-export function heardRecently(lastAdvertSecs: number | undefined, within: HeardWithin, now = Date.now()): boolean {
+/** The custom "heard since" date (YYYY-MM-DD), or '' when unset. */
+export function heardSince(): string {
+  try {
+    const v = localStorage.getItem(HEARD_SINCE_KEY) || '';
+    return /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+  } catch {
+    return '';
+  }
+}
+
+export function setHeardSince(date: string): void {
+  try {
+    localStorage.setItem(HEARD_SINCE_KEY, date);
+  } catch {
+    /* storage unavailable */
+  }
+  window.dispatchEvent(new Event(DISPLAY_PREFS_EVENT));
+}
+
+/** The heard-within choices, for the Nodes toolbar and Settings. */
+export const HEARD_OPTIONS: Array<[HeardWithin, string]> = [
+  ['0', 'Any time'], ['1', '24 hours'], ['7', '7 days'], ['30', '30 days'], ['365', '1 year'], ['custom', 'Since a date…'],
+];
+
+/**
+ * True when a node last heard at `lastAdvertSecs` passes the filter.
+ * `since` (YYYY-MM-DD, local midnight) is used for 'custom'.
+ */
+export function heardRecently(lastAdvertSecs: number | undefined, within: HeardWithin, now = Date.now(), since = heardSince()): boolean {
   if (within === '0') return true;
+  if (within === 'custom') {
+    if (!since) return true;
+    const from = new Date(`${since}T00:00:00`).getTime();
+    return !!lastAdvertSecs && lastAdvertSecs * 1000 >= from;
+  }
   if (!lastAdvertSecs) return false;
   return now - lastAdvertSecs * 1000 <= Number(within) * 86400000;
 }

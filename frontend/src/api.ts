@@ -862,6 +862,8 @@ export async function getContactsPaginated(
   category: PrimaryCategory = 'all',
   options: {
     nodeType?: number;
+    /** Several types at once (any of them). */
+    nodeTypes?: number[];
     search?: string;
     limit?: number;
     offset?: number;
@@ -879,6 +881,7 @@ export async function getContactsPaginated(
       offset: options.offset ?? 0,
     };
     if (options.nodeType !== undefined) msg.node_type = options.nodeType;
+    if (options.nodeTypes?.length) msg.node_types = options.nodeTypes;
     if (options.search) msg.search = options.search;
     if (options.entryId) msg.entry_id = options.entryId;
     if (options.sortBy) msg.sort_by = options.sortBy;
@@ -1016,5 +1019,27 @@ export async function addContactManual(
   } catch (err) {
     const e = err as { message?: string };
     return { success: false, error: e?.message || 'No answer from Home Assistant' };
+  }
+}
+
+/** Remove nodes not heard for `days`, by type and source. `dryRun` only counts. */
+export async function clearStaleNodes(
+  hass: HomeAssistant,
+  opts: { days: number; types: number[]; discovered: boolean; manual: boolean; dryRun?: boolean },
+  entryId?: string,
+): Promise<{ discovered: number; manual: number } | null> {
+  try {
+    const msg: Record<string, unknown> = {
+      type: 'meshcore_chat/clear_stale_nodes',
+      days: opts.days,
+      types: opts.types,
+      discovered: opts.discovered,
+      manual: opts.manual,
+      dry_run: !!opts.dryRun,
+    };
+    if (entryId) msg.entry_id = entryId;
+    return await hass.callWS<{ discovered: number; manual: number }>(msg);
+  } catch {
+    return null;
   }
 }

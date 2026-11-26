@@ -444,6 +444,7 @@ def async_register_ws_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_add_contact)
     websocket_api.async_register_command(hass, ws_add_contact_manual)
     websocket_api.async_register_command(hass, ws_get_unverified_contacts)
+    websocket_api.async_register_command(hass, ws_clear_stale_nodes)
     websocket_api.async_register_command(hass, ws_remove_contact)
     websocket_api.async_register_command(hass, ws_trace)
     websocket_api.async_register_command(hass, ws_get_blocked_contacts)
@@ -553,6 +554,7 @@ def _compute_type_counts(contacts: list) -> dict:
             ["all", "added", "discovered"]
         ),
         vol.Optional("node_type"): int,
+        vol.Optional("node_types"): [int],
         vol.Optional("search"): str,
         vol.Optional("limit", default=50): int,
         vol.Optional("offset", default=0): int,
@@ -610,6 +612,11 @@ async def ws_get_contacts_paginated(hass, connection, msg):
             filtered = [c for c in filtered if c.get("type", 0) in (0, 1)]
         else:
             filtered = [c for c in filtered if c.get("type") == node_type]
+    # Several types at once (clients are 0 or 1, as above).
+    node_types = msg.get("node_types")
+    if node_types:
+        wanted = {1 if t <= 1 else t for t in node_types}
+        filtered = [c for c in filtered if (1 if (c.get("type") or 0) <= 1 else c.get("type")) in wanted]
 
     # Sort BEFORE pagination so the visible page reflects the true top-N.
     if sort_by == "name":
@@ -2745,6 +2752,108 @@ class _OutcomeConnection:
 
     def __getattr__(self, name):
         return getattr(self._connection, name)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/clear_stale_nodes",
+        vol.Required("days"): vol.All(vol.Coerce(float), vol.Range(min=0)),
+        vol.Optional("types", default=[1, 2, 3, 4]): [vol.All(int, vol.Range(min=0, max=4))],
+        vol.Optional("discovered", default=True): bool,
+        vol.Optional("manual", default=False): bool,
+        vol.Optional("dry_run", default=False): bool,
+        vol.Optional("entry_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_clear_stale_nodes(hass, connection, msg):
+    """Remove nodes not heard for ``days``, filtered by type and by source.
+
+    ``discovered``: nodes your radio has heard but you haven't added; aged on
+    ``lastmod`` (when your radio last heard them, by its own clock).
+    ``manual``: contacts you added by hand that have never been heard from
+    (still unverified); aged on when you added them. They are removed from
+    the radio. Contacts you added from the mesh are never touched.
+    ``dry_run`` only counts.
+    """
+    coordinator = _get_coordinator(hass, msg.get("entry_id"))
+    if not coordinator:
+        connection.send_error(msg["id"], "not_found", "No active MeshCore coordinator")
+        return
+    now = time.time()
+    threshold = msg["days"] * 86400
+    types = {1 if t == 0 else t for t in msg["types"]}
+
+    def type_ok(c) -> bool:
+        t = c.get("type") or 1
+        return (1 if t == 0 else t) in types
+
+    stale_discovered: list[str] = []
+    if msg["discovered"]:
+        for public_key, c in coordinator._discovered_contacts.items():
+            if c.get("added_to_node") or not type_ok(c):
+                continue
+            lastmod = c.get("lastmod") or 0
+            if not lastmod or now - lastmod > threshold:
+                stale_discovered.append(public_key)
+
+    stale_manual: list[str] = []
+    if msg["manual"]:
+        _mstore, manual = await _manual_contacts(hass)
+        contacts = getattr(coordinator, "_contacts", {}) or {}
+        for public_key, added in manual.items():
+            c = contacts.get(public_key[:12]) or {"type": 1}
+            if type_ok(c) and now - float(added) > threshold:
+                stale_manual.append(public_key)
+
+    if msg["dry_run"]:
+        connection.send_result(msg["id"], {
+            "discovered": len(stale_discovered), "manual": len(stale_manual),
+        })
+        return
+
+    entity_registry = er.async_get(hass)
+    entry_id = coordinator.config_entry.entry_id
+    for i, public_key in enumerate(stale_discovered):
+        coordinator._discovered_contacts.pop(public_key, None)
+        tracked = getattr(coordinator, "tracked_diagnostic_binary_contacts", None)
+        if tracked is not None:
+            tracked.discard(public_key)
+        entity_id = entity_registry.async_get_entity_id(
+            "binary_sensor", MESHCORE_DOMAIN, f"{entry_id}_contact_{public_key[:12]}",
+        )
+        if entity_id:
+            entity_registry.async_remove(entity_id)
+        if (i + 1) % 10 == 0:
+            await asyncio.sleep(0)
+    if stale_discovered:
+        for name in ("_save_discovered_contacts", "_publish_contacts", "invalidate_contacts"):
+            fn = getattr(coordinator, name, None)
+            if callable(fn):
+                fn()
+
+    removed_manual = 0
+    if stale_manual:
+        mstore, manual = await _manual_contacts(hass)
+        remove = _unwrap_ws(ws_remove_contact)
+        for public_key in stale_manual:
+            outcome = _OutcomeConnection(connection)
+            try:
+                await remove(hass, outcome, {
+                    "id": msg["id"], "type": "meshcore_chat/remove_contact", "public_key": public_key,
+                    **({"entry_id": msg["entry_id"]} if "entry_id" in msg else {}),
+                })
+            except Exception as ex:  # noqa: BLE001 - counted as not removed
+                outcome.error = ("command_failed", str(ex))
+            if outcome.error is None:
+                manual.pop(public_key, None)
+                removed_manual += 1
+        await mstore.async_save(manual)
+
+    connection.send_result(msg["id"], {
+        "discovered": len(stale_discovered), "manual": removed_manual,
+    })
 
 
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")

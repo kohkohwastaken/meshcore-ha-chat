@@ -4210,3 +4210,44 @@ async def test_unverified_kept_for_channel_messages(hass: HomeAssistant, compani
     event.data = {"event_type": "EventType.CHANNEL_MSG_RECV", "payload": {"pubkey_prefix": key[:12]}}
     await ws_api.async_clear_unverified_from_event(hass, event)
     assert key in manual
+
+
+async def test_ws_clear_stale_nodes_filters_by_type_and_age(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """Only discovered nodes of the chosen types, unheard for longer than the threshold, go."""
+    import time as _time
+    now = _time.time()
+    coordinator = MagicMock()
+    coordinator.config_entry.entry_id = "e1"
+    coordinator._contacts = {}
+    coordinator._discovered_contacts = {
+        "a" * 64: {"type": 2, "lastmod": now - 40 * 86400},   # old repeater
+        "b" * 64: {"type": 1, "lastmod": now - 40 * 86400},   # old companion
+        "c" * 64: {"type": 2, "lastmod": now - 86400},        # recent repeater
+        "d" * 64: {"type": 2, "lastmod": now - 40 * 86400, "added_to_node": True},
+    }
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_clear_stale_nodes, hass, conn, {
+            "id": 1, "days": 30, "types": [2], "discovered": True, "manual": False, "dry_run": True,
+        })
+        assert conn.results[0][1] == {"discovered": 1, "manual": 0}
+        conn = _Connection()
+        await _call_ws(ws_api.ws_clear_stale_nodes, hass, conn, {
+            "id": 2, "days": 30, "types": [2], "discovered": True, "manual": False, "dry_run": False,
+        })
+    assert sorted(k[0] for k in coordinator._discovered_contacts) == ["b", "c", "d"]
+
+
+async def test_ws_get_contacts_paginated_several_types(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """node_types picks any of several types."""
+    contacts = [
+        {"adv_name": "c", "pubkey_prefix": "11", "added_to_node": False, "type": 1},
+        {"adv_name": "r", "pubkey_prefix": "22", "added_to_node": False, "type": 2},
+        {"adv_name": "s", "pubkey_prefix": "33", "added_to_node": False, "type": 4},
+    ]
+    with patch.object(ws_api, "_get_contacts_via_service", AsyncMock(return_value=contacts)):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_get_contacts_paginated, hass, conn, {
+            "id": 1, "category": "all", "limit": 50, "offset": 0, "sort_by": "name", "node_types": [1, 4],
+        })
+    assert [c["adv_name"] for c in conn.results[0][1]["contacts"]] == ["c", "s"]

@@ -4,7 +4,7 @@ import { setTrackableChannelLimit, trackableChannelLimit } from '../utils/messag
 import {
   clockFormat, dateFormat, formatClock, formatDate, setClockFormat, setDateFormat,
   setTimestampFormat, timestampFormat,
-  heardWithin, setHeardWithin, plainReactionMode, setPlainReactionMode, showPendingReactions, setShowPendingReactions,
+  HEARD_OPTIONS, heardSince, heardWithin, setHeardSince, setHeardWithin, plainReactionMode, setPlainReactionMode, showPendingReactions, setShowPendingReactions,
   type ClockFormat, type DateFormat, type HeardWithin, type PlainReactionPref, type TimestampFormat,
 } from '../utils/display-prefs';
 
@@ -224,12 +224,14 @@ export class PreferencesPage extends LitElement {
             </span>
             <select aria-label="Show nodes heard within" .value=${this._heard}
               @change=${(e: Event) => { this._heard = (e.target as HTMLSelectElement).value as HeardWithin; setHeardWithin(this._heard); }}>
-              <option value="0">Any time</option>
-              <option value="1">24 hours</option>
-              <option value="7">7 days</option>
-              <option value="30">30 days</option>
+              ${HEARD_OPTIONS.map(([v, l]) => html`<option value=${v}>${l}</option>`)}
             </select>
           </label>
+          ${this._heard === 'custom' ? html`<label class="row">
+            <span class="text"><span class="title">Heard since</span></span>
+            <input type="date" .value=${heardSince()} max=${new Date().toISOString().slice(0, 10)}
+              @change=${(e: Event) => { setHeardSince((e.target as HTMLInputElement).value); this.requestUpdate(); }} />
+          </label>` : ''}
         </div>
 
         <p class="foot">These preferences are saved in this browser.</p>

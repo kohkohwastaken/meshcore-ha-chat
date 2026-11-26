@@ -1,12 +1,12 @@
 import { NODE_TYPE_NAMES } from '../utils/rich-messages';
 import { TYPE_COLORS } from '../utils/ha-map';
 import { UNVERIFIED_EVENT, loadUnverified, unverifiedSince, watchUnverified } from '../utils/unverified';
-import { DISPLAY_PREFS_EVENT, heardRecently, heardWithin, setHeardWithin, type HeardWithin } from '../utils/display-prefs';
+import { DISPLAY_PREFS_EVENT, HEARD_OPTIONS, heardRecently, heardSince, heardWithin, setHeardSince, setHeardWithin, type HeardWithin } from '../utils/display-prefs';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Contact, Channel, HomeAssistant, PanelConfig } from '../types';
 import {
-  getContactsPaginated, getNodeCounts, clearDiscoveredContacts,
+  getContactsPaginated, getNodeCounts, clearStaleNodes,
 } from '../api';
 import type {
   PrimaryCategory, TypeCounts, NodeCounts,
@@ -68,10 +68,21 @@ export class NodesPage extends LitElement {
 
   // ─── Two-level filter state ─────────────────────────────────────────
   @state() private _primaryFilter: PrimaryCategory = 'all';
-  @state() private _typeFilter: NodeType | null = null;
+  /** Node types shown; empty means all of them. */
+  @state() private _types: NodeType[] = [];
+  @state() private _typesOpen = false;
+
+  /** The one type picked, when exactly one is (for labels). */
+  private get _typeFilter(): NodeType | null {
+    return this._types.length === 1 ? this._types[0] : null;
+  }
+
+  private _typeParams(): number[] | undefined {
+    return this._types.length ? this._types.map((t) => NODE_TYPE_MAP[t]) : undefined;
+  }
   @state() private _moreOpen = false;
   @state() private _heard: HeardWithin = heardWithin();
-  private _onPrefs = () => { this._heard = heardWithin(); };
+  private _onPrefs = () => { this._heard = heardWithin(); this.requestUpdate(); };
 
   /** Map nodes after the "heard within" filter. */
   private _heardMapContacts(): Contact[] {
@@ -350,6 +361,118 @@ export class NodesPage extends LitElement {
       font: inherit;
       font-size: 13px;
       cursor: pointer;
+    }
+
+    .stale-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      background: rgba(0, 0, 0, 0.5);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .stale-card {
+      background: var(--card-background-color, #fff);
+      color: var(--primary-text-color);
+      border-radius: 12px;
+      padding: 16px 18px;
+      width: min(420px, 94vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    }
+
+    .stale-card h3 {
+      margin: 0 0 12px;
+      font-size: 17px;
+    }
+
+    .stale-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+    }
+
+    .stale-row input {
+      width: 80px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--divider-color, #e0e0e0);
+      background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+      color: var(--primary-text-color);
+      font: inherit;
+    }
+
+    .stale-group {
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      font-size: 14px;
+    }
+
+    .stale-group label {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      cursor: pointer;
+    }
+
+    .stale-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--secondary-text-color);
+    }
+
+    .stale-help {
+      font-size: 12px;
+      color: var(--secondary-text-color);
+    }
+
+    .stale-preview {
+      margin-top: 12px;
+      padding: 8px 10px;
+      border-radius: 8px;
+      background: rgba(127, 127, 127, 0.1);
+      font-size: 13px;
+    }
+
+    .stale-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .types-menu label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      font-size: 13px;
+      color: var(--primary-text-color);
+      cursor: pointer;
+      border-radius: 6px;
+    }
+
+    .types-menu label:hover {
+      background: rgba(127, 127, 127, 0.12);
+    }
+
+    .type-count {
+      margin-left: auto;
+      color: var(--secondary-text-color);
+      font-size: 12px;
+    }
+
+    .types-btn {
+      cursor: pointer;
+      white-space: nowrap;
     }
 
     .more-menu button:hover {
@@ -728,7 +851,9 @@ export class NodesPage extends LitElement {
   render() {
     return html`
       <div class="nodes-layout" @pointerdown=${(e: Event) => {
-        if (this._moreOpen && !e.composedPath().some((n) => n instanceof HTMLElement && n.classList.contains('more-wrap'))) this._moreOpen = false;
+        const inside = (cls: string) => e.composedPath().some((n) => n instanceof HTMLElement && n.classList.contains(cls));
+        if (this._moreOpen && !inside('more-wrap')) this._moreOpen = false;
+        if (this._typesOpen && !inside('types-wrap')) this._typesOpen = false;
       }}>
         <div class="nodes-header">
           <!-- Search + actions row -->
@@ -751,17 +876,19 @@ export class NodesPage extends LitElement {
               <option value="added">★ Added (${this._l1Counts.added})</option>
               <option value="discovered">Discovered (${this._l1Counts.discovered})</option>
             </select>
-            <select class="sort-select" aria-label="Node type"
-              .value=${this._typeFilter ?? ''}
-              @change=${(e: Event) => {
-                const v = (e.target as HTMLSelectElement).value as NodeType | '';
-                if (!v) { if (this._typeFilter) this._setTypeFilter(this._typeFilter); }
-                else if (v !== this._typeFilter) this._setTypeFilter(v);
-              }}>
-              <option value="">All types</option>
-              ${(['clients', 'repeaters', 'room_servers', 'sensors'] as NodeType[]).map((t) => html`
-                <option value=${t}>${TYPE_LABELS[t]} (${this._typeCounts[t]})</option>`)}
-            </select>
+            <div class="more-wrap types-wrap">
+              <button class="sort-select types-btn" aria-haspopup="true" aria-expanded=${this._typesOpen}
+                @click=${() => { this._typesOpen = !this._typesOpen; }}>
+                ${this._types.length === 0 ? 'All types' : this._types.length === 1 ? TYPE_LABELS[this._types[0]] : `${this._types.length} types`} ▾
+              </button>
+              ${this._typesOpen ? html`
+                <div class="more-menu types-menu" role="group" aria-label="Node types">
+                  <label><input type="checkbox" .checked=${this._types.length === 0} @change=${() => this._toggleType('all')} /> All types</label>
+                  ${(['clients', 'repeaters', 'room_servers', 'sensors'] as NodeType[]).map((t) => html`
+                    <label><input type="checkbox" .checked=${this._types.includes(t)} @change=${() => this._toggleType(t)} />
+                      ${TYPE_LABELS[t]} <span class="type-count">${this._typeCounts[t]}</span></label>`)}
+                </div>` : nothing}
+            </div>
             <select class="sort-select" aria-label="Sort by"
               .value=${this._sortBy}
               @change=${(e: Event) => {
@@ -775,11 +902,11 @@ export class NodesPage extends LitElement {
             ${html`
               <select class="sort-select" aria-label="Heard within" .value=${this._heard}
                 @change=${(e: Event) => setHeardWithin((e.target as HTMLSelectElement).value as HeardWithin)}>
-                <option value="0">Heard: any time</option>
-                <option value="1">Heard: 24 hours</option>
-                <option value="7">Heard: 7 days</option>
-                <option value="30">Heard: 30 days</option>
-              </select>`}
+                ${HEARD_OPTIONS.map(([v, l]) => html`<option value=${v}>Heard: ${l.toLowerCase()}</option>`)}
+              </select>
+              ${this._heard === 'custom' ? html`<input class="sort-select" type="date" aria-label="Heard since"
+                .value=${heardSince()} max=${new Date().toISOString().slice(0, 10)}
+                @change=${(e: Event) => setHeardSince((e.target as HTMLInputElement).value)} />` : nothing}`}
             <div class="more-wrap">
               <button class="sync-btn" aria-label="More actions" aria-haspopup="menu"
                 @click=${() => { this._moreOpen = !this._moreOpen; }}>⋯</button>
@@ -808,6 +935,8 @@ export class NodesPage extends LitElement {
         </div>
       </div>
 
+      ${this._renderClearStale()}
+
       <!-- Node detail dialog -->
       <meshcore-node-detail-dialog
         .hass=${this.hass}
@@ -834,13 +963,13 @@ export class NodesPage extends LitElement {
     this._loadPage(true);
   }
 
-  private _setTypeFilter(type: NodeType) {
-    if (this._typeFilter === type) {
-      // Toggle off
-      this._typeFilter = null;
-    } else {
-      this._typeFilter = type;
-    }
+  /** Tick or untick one type; "all" clears the selection. */
+  private _toggleType(type: NodeType | 'all') {
+    if (type === 'all') this._types = [];
+    else if (this._types.includes(type)) this._types = this._types.filter((t) => t !== type);
+    else this._types = [...this._types, type];
+    // Every type ticked is the same as all of them.
+    if (this._types.length === 4) this._types = [];
     this._displayedContacts = [];
     this._totalCount = 0;
     this._loadPage(true);
@@ -869,11 +998,11 @@ export class NodesPage extends LitElement {
 
     try {
       const offset = reset ? 0 : this._displayedContacts.length;
-      const nodeType = this._typeFilter ? NODE_TYPE_MAP[this._typeFilter] : undefined;
+      const nodeTypes = this._typeParams();
       const search = this._searchQuery.trim() || undefined;
 
       const result = await getContactsPaginated(this.hass, this._primaryFilter, {
-        nodeType,
+        nodeTypes,
         search,
         limit: PAGE_SIZE,
         offset,
@@ -905,19 +1034,114 @@ export class NodesPage extends LitElement {
     }
   }
 
-  private async _clearStaleContacts() {
-    if (!this.hass) return;
-    const days = prompt('Remove discovered contacts older than how many days?', '30');
-    if (!days) return;
-    const daysNum = parseInt(days, 10);
-    if (isNaN(daysNum) || daysNum < 1 || daysNum > 365) return;
-    const result = await clearDiscoveredContacts(this.hass, daysNum, this.config?.entry_id);
-    if (result.removed > 0) {
+  // ─── Clear stale nodes ────────────────────────────────────────────
+
+  @state() private _staleOpen = false;
+  @state() private _staleDays = 30;
+  @state() private _staleTypes: NodeType[] = ['clients', 'repeaters', 'room_servers', 'sensors'];
+  @state() private _staleDiscovered = true;
+  @state() private _staleManual = false;
+  @state() private _stalePreview: { discovered: number; manual: number } | null = null;
+  @state() private _staleBusy = false;
+  private _staleTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private _clearStaleContacts() {
+    this._staleOpen = true;
+    this._staleBusy = false;
+    this._previewStale();
+  }
+
+  private _staleOpts(dryRun: boolean) {
+    return {
+      days: this._staleDays,
+      types: this._staleTypes.map((t) => NODE_TYPE_MAP[t]),
+      discovered: this._staleDiscovered,
+      manual: this._staleManual,
+      dryRun,
+    };
+  }
+
+  /** Count what would be removed (debounced while the options change). */
+  private _previewStale() {
+    if (this._staleTimer) clearTimeout(this._staleTimer);
+    this._stalePreview = null;
+    this._staleTimer = setTimeout(async () => {
+      if (!this.hass || !this._staleValid()) return;
+      this._stalePreview = await clearStaleNodes(this.hass, this._staleOpts(true), this.config?.entry_id);
+    }, 250);
+  }
+
+  private _staleValid(): boolean {
+    return this._staleDays >= 1 && this._staleTypes.length > 0 && (this._staleDiscovered || this._staleManual);
+  }
+
+  private _toggleStaleType(t: NodeType | 'all') {
+    const all: NodeType[] = ['clients', 'repeaters', 'room_servers', 'sensors'];
+    if (t === 'all') this._staleTypes = this._staleTypes.length === all.length ? [] : all;
+    else this._staleTypes = this._staleTypes.includes(t) ? this._staleTypes.filter((x) => x !== t) : [...this._staleTypes, t];
+    this._previewStale();
+  }
+
+  private async _runClearStale() {
+    if (!this.hass || !this._staleValid() || this._staleBusy) return;
+    this._staleBusy = true;
+    const result = await clearStaleNodes(this.hass, this._staleOpts(false), this.config?.entry_id);
+    this._staleBusy = false;
+    this._staleOpen = false;
+    if (result && result.discovered + result.manual > 0) {
       this._loadPage(true);
       this._loadCounts();
       this.dispatchEvent(new CustomEvent('contacts-changed', { bubbles: true, composed: true }));
     }
   }
+
+  private _renderClearStale() {
+    if (!this._staleOpen) return nothing;
+    const all: NodeType[] = ['clients', 'repeaters', 'room_servers', 'sensors'];
+    const p = this._stalePreview;
+    const total = p ? p.discovered + p.manual : 0;
+    return html`
+      <div class="stale-overlay" @click=${() => { this._staleOpen = false; }}>
+        <div class="stale-card" role="dialog" aria-modal="true" aria-label="Clear stale nodes"
+          @click=${(e: Event) => e.stopPropagation()}>
+          <h3>Clear stale nodes</h3>
+          <label class="stale-row">Not heard for more than
+            <input type="number" min="1" step="1" .value=${String(this._staleDays)}
+              @input=${(e: Event) => { this._staleDays = Math.max(0, Math.floor(Number((e.target as HTMLInputElement).value) || 0)); this._previewStale(); }} />
+            days</label>
+          <div class="stale-group">
+            <div class="stale-label">Types</div>
+            <label><input type="checkbox" .checked=${this._staleTypes.length === all.length} @change=${() => this._toggleStaleType('all')} /> All</label>
+            ${all.map((t) => html`<label><input type="checkbox" .checked=${this._staleTypes.includes(t)} @change=${() => this._toggleStaleType(t)} /> ${TYPE_LABELS[t]}</label>`)}
+          </div>
+          <div class="stale-group">
+            <div class="stale-label">Which</div>
+            <label><input type="checkbox" .checked=${this._staleDiscovered && this._staleManual}
+              @change=${(e: Event) => { const on = (e.target as HTMLInputElement).checked; this._staleDiscovered = on; this._staleManual = on; this._previewStale(); }} /> All</label>
+            <label><input type="checkbox" .checked=${this._staleDiscovered}
+              @change=${(e: Event) => { this._staleDiscovered = (e.target as HTMLInputElement).checked; this._previewStale(); }} />
+              Discovered <span class="stale-help">heard on the mesh, not added to your radio</span></label>
+            <label><input type="checkbox" .checked=${this._staleManual}
+              @change=${(e: Event) => { this._staleManual = (e.target as HTMLInputElement).checked; this._previewStale(); }} />
+              Manually added <span class="stale-help">added by hand and never heard from; removed from your radio</span></label>
+          </div>
+          <div class="stale-help" style="margin-top:6px">"Heard" means when your radio last heard them, by its own clock. Contacts you added from the mesh are never removed.</div>
+          <div class="stale-preview">
+            ${!this._staleValid()
+              ? 'Pick at least one type and one kind of node.'
+              : p === null ? 'Counting…'
+              : total === 0 ? 'Nothing to remove.'
+              : `This removes ${p.discovered} discovered node${p.discovered === 1 ? '' : 's'}${this._staleManual ? ` and ${p.manual} manually added contact${p.manual === 1 ? '' : 's'}` : ''}. They come back if your radio hears them again.`}
+          </div>
+          <div class="stale-actions">
+            <button class="sync-btn" @click=${() => { this._staleOpen = false; }}>Cancel</button>
+            <button class="clear-btn" ?disabled=${!this._staleValid() || !p || total === 0 || this._staleBusy}
+              @click=${this._runClearStale}>${this._staleBusy ? 'Removing…' : `Remove ${total || ''}`.trim()}</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
 
   private _syncAll() {
     this._loadPage(true);
@@ -954,12 +1178,12 @@ export class NodesPage extends LitElement {
       void loadOwnPosition(this.hass, this.config?.entry_id).then((pos) => { this._home = pos; });
     }
     try {
-      const nodeType = this._typeFilter ? NODE_TYPE_MAP[this._typeFilter] : undefined;
+      const nodeTypes = this._typeParams();
       const search = this._searchQuery.trim() || undefined;
       const all: Contact[] = [];
       for (;;) {
         const result = await getContactsPaginated(this.hass, this._primaryFilter, {
-          nodeType,
+          nodeTypes,
           search,
           limit: MAP_PAGE_SIZE,
           offset: all.length,

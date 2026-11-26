@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.34
+
+- Nodes: Clear stale is now a proper dialog. Any number of days (no 365 limit), tick which types (companions, repeaters, room servers, sensors) and which kinds (discovered, manually added, or both). It shows how many will be removed before you confirm.
+- Nodes: the type filter lets you pick one, several or all types, for both the map and the list.
+- Nodes: "Heard" filter adds 1 year and a custom "since a date" picker (also in Settings).
+
 ## 0.4.12-beta.33
 
 - **Chat:** each message shows its **hash** (the MeshCore One id reactions use) after the hop count, for example `· #272jvvz7`. The message details show it too. For your own sent messages the exact send second isn't recorded, so the hash is an estimate and is marked `≈` / "(estimated)".
