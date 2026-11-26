@@ -1,17 +1,15 @@
 # MeshCore Chat
 
-Sidebar chat panel and persistent message store for the MeshCore mesh radio network.
+A chat panel for the MeshCore mesh radio network in your Home Assistant sidebar: channels and direct messages, a node map, contacts, repeater management and your radio's settings, with message history that survives restarts.
 
-A **companion** integration: works alongside the [core meshcore integration](https://github.com/meshcore-dev/meshcore-ha) without modifying it. Install both.
+Works alongside the [core MeshCore integration](https://github.com/meshcore-dev/meshcore-ha), which talks to the radio. Install both.
 
-![MeshCore Chat panel](https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/chat-tab.jpg)
+![MeshCore Chat panel](https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/chat.jpg)
 
-**Features:**
+- Channels and DMs with reactions (MeshCore One format), replies, message hashes and delete
+- Contacts: add manually, share as QR code, chat code or link, Unverified badge
+- Nodes on Home Assistant's map with type and last-heard filters, stale-node cleanup and traces
+- Repeater status, sensors and commands; your radio's settings
+- Works on phones, with a bottom tab bar
 
-- Sidebar chat panel — channels, DMs, contacts
-- Persistent message history
-- Trace / path-discovery dialog
-- Per-conversation search
-- Unread counts and delivery status
-
-**Requires:** Home Assistant 2025.6+, the core meshcore integration installed and configured.
+**Requires:** Home Assistant 2025.6+ and the core MeshCore integration 2.7.0+.
