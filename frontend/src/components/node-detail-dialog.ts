@@ -7,6 +7,8 @@ import { attachDialogA11y } from '../utils/dialog-a11y';
 export class NodeDetailDialog extends LitElement {
   @property({ type: Object }) node?: Contact | ManagedDevice;
   @property({ type: Boolean }) open = false;
+  /** Render as a panel in place (no backdrop, no focus trap) instead of a popup. */
+  @property({ type: Boolean, reflect: true }) inline = false;
   @property({ type: Object }) hass?: HomeAssistant;
   // Parent-owned pending state; when set, the matching action button is
   // disabled and its label swaps to "Adding…" / "Removing…" so the user
@@ -22,7 +24,7 @@ export class NodeDetailDialog extends LitElement {
     // confirm sub-section is showing, Escape backs out of confirm mode
     // rather than closing the whole dialog — matches the Cancel button.
     attachDialogA11y(this, {
-      isOpen: () => this.open,
+      isOpen: () => this.open && !this.inline,
       onEscape: () => {
         if (this._confirming) {
           this._confirming = false;
@@ -51,6 +53,24 @@ export class NodeDetailDialog extends LitElement {
       justify-content: center;
       z-index: 1000;
       animation: fadeIn 0.2s;
+    }
+
+    :host([inline]) .dialog-backdrop {
+      position: static;
+      width: auto;
+      height: 100%;
+      background: none;
+      display: block;
+      animation: none;
+    }
+
+    :host([inline]) .dialog {
+      max-width: none;
+      max-height: none;
+      height: 100%;
+      border-radius: 12px;
+      animation: none;
+      box-sizing: border-box;
     }
 
     @keyframes fadeIn {
@@ -291,11 +311,11 @@ export class NodeDetailDialog extends LitElement {
     else if (isClient) { avatarSvg = html`<svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M17 1.01L7 1c-1.1 0-2 .9-2 2v18c0 1.1.9 2 2 2h10c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM17 19H7V5h10v14z"/></svg>`; typeLabel = 'Client'; typeClass = 'client'; }
 
     return html`
-      <div class="dialog-backdrop" @click=${this._close}>
+      <div class="dialog-backdrop" @click=${() => { if (!this.inline) this._close(); }}>
         <div
           class="dialog"
-          role="dialog"
-          aria-modal="true"
+          role=${this.inline ? 'region' : 'dialog'}
+          aria-modal=${this.inline ? 'false' : 'true'}
           aria-label="Node detail — ${name}"
           @click=${(e: Event) => e.stopPropagation()}>
           <div class="dialog-header">

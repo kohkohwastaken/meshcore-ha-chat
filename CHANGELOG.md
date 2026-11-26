@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.25
+
+- **Nodes map:** the selected node's pin is bigger, with a white ring, and drawn on top of the others, so you can see which one the card is about.
+- **Nodes map:** clicking a node opens its **full details** in a panel on the map instead of the small card. On desktop it's a column down the right; on phones it's the bottom half. The rest of the map stays visible and usable, and ✕ closes it.
+
 ## 0.4.12-beta.24
 
 - **Chat:** delete your own **unheard or failed** messages. Tap the message, then **Delete** (next to Resend) and confirm. Unheard reactions get a **Delete** link on their "You reacted…" line. This removes the message from Home Assistant only, not from anyone who did receive it.

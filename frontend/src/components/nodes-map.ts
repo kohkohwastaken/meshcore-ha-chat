@@ -42,6 +42,8 @@ export class NodesMap extends LitElement {
   @property({ attribute: false }) nodes: Contact[] = [];
   @property({ attribute: false }) home: { lat: number; lon: number } | null = null;
   @property({ type: Boolean }) loading = false;
+  /** Node to highlight (its card is open). */
+  @property({ attribute: false }) selected: Contact | null = null;
   /** Used for the entity lookup only, so state changes don't re-render the map. */
   @property({ attribute: false, hasChanged: (value: unknown, old: unknown) => !old && !!value }) hass?: HomeAssistant;
 
@@ -147,6 +149,40 @@ export class NodesMap extends LitElement {
     }
     if (first || changed.has('_groups')) map.clusterMarkers = this._groups;
     if (first || changed.has('nodes')) this._drawNodes(map);
+    if (changed.has('selected')) {
+      this._markSelected();
+      // Markers can be redrawn as the map moves or groups change; keep the
+      // highlight on while something is selected.
+      if (this._selTimer) clearInterval(this._selTimer);
+      this._selTimer = this.selected ? setInterval(() => this._markSelected(), 1000) : null;
+    }
+  }
+
+  private _selTimer: ReturnType<typeof setInterval> | null = null;
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._selTimer) clearInterval(this._selTimer);
+    this._selTimer = null;
+  }
+
+  /** The selected node's marker: bigger, with a white ring, on top. */
+  private _markSelected() {
+    const map = this._map();
+    const markers = map?._entityMarkers;
+    if (!markers) return;
+    const key = String(this.selected?.public_key ?? '').toLowerCase();
+    for (const [entityId, el] of markers) {
+      const node = this._entityNodes.get(entityId);
+      const on = !!key && String(node?.public_key ?? '').toLowerCase() === key;
+      el.classList.toggle('mc-selected', on);
+      el.style.transform = on ? 'scale(1.45)' : '';
+      el.style.boxShadow = on ? '0 0 0 3px #fff, 0 0 12px 4px rgba(255, 255, 255, 0.7)' : '';
+      el.style.borderRadius = on ? '50%' : '';
+      el.style.transition = 'transform 0.15s, box-shadow 0.15s';
+      const holder = el.parentElement as HTMLElement | null;
+      if (holder) holder.style.zIndex = on ? '10000' : '';
+    }
   }
 
   private _map(): HaMapElement | null {
@@ -173,7 +209,7 @@ export class NodesMap extends LitElement {
     }
     map.entities = entities;
     this._shown = this._entityNodes.size;
-    void colourMarkers(map, (id) => colours.get(id));
+    void colourMarkers(map, (id) => colours.get(id)).then(() => this._markSelected());
     if (!this._fitted && this._entityNodes.size > 0) {
       this._fitted = true;
       this._fit();

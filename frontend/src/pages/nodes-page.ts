@@ -473,15 +473,25 @@ export class NodesPage extends LitElement {
 
     .map-card {
       position: absolute;
-      left: 12px;
-      bottom: 36px;
+      top: 12px;
+      right: 12px;
+      bottom: 12px;
       z-index: 500;
-      width: min(300px, calc(100% - 24px));
-      background: var(--card-background-color, #fff);
-      border: 1px solid var(--divider-color, #e0e0e0);
+      width: min(360px, calc(100% - 24px));
       border-radius: 12px;
-      padding: 12px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    @media (max-width: 870px) {
+      .map-card {
+        top: auto;
+        left: 8px;
+        right: 8px;
+        bottom: 8px;
+        width: auto;
+        height: 55%;
+      }
     }
 
     .map-card-head {
@@ -975,6 +985,7 @@ export class NodesPage extends LitElement {
             .nodes=${shown}
             .home=${this._home}
             ?loading=${this._mapLoading}
+            .selected=${card}
             @node-selected=${(e: CustomEvent<{ node: Contact }>) => { this._mapCard = e.detail.node; }}>
           </meshcore-nodes-map>
           ${card ? this._renderMapCard(card) : nothing}
@@ -995,28 +1006,23 @@ export class NodesPage extends LitElement {
   }
 
   private _renderMapCard(c: Contact) {
-    const hops = typeof c.out_path_len === 'number' && c.out_path_len >= 0 ? `${c.out_path_len} hop${c.out_path_len === 1 ? '' : 's'}` : 'flood';
-    const canMessage = c.type !== 4;
     return html`
-      <div class="map-card" role="dialog" aria-label=${c.adv_name || 'Node'}>
-        <div class="map-card-head">
-          <b>${c.adv_name || c.pubkey_prefix}</b>
-          <button class="map-card-close" aria-label="Close" @click=${() => { this._mapCard = null; }}>✕</button>
-        </div>
-        <div class="map-row-meta">
-          ${NODE_TYPE_NAMES[c.type] ?? 'Node'} · ${hops}${c.last_advert ? ` · heard ${agoShort(c.last_advert * 1000)}` : ''}
-        </div>
-        <div class="map-card-actions">
-          ${canMessage && c.added_to_node ? html`<button class="sync-btn" @click=${() => this._mapCardAction(c, 'message')}>Message</button>` : nothing}
-          <button class="sync-btn" @click=${() => this._mapCardAction(c, 'trace')}>Trace</button>
-          ${c.added_to_node
-            ? nothing
-            : html`<button class="sync-btn" @click=${() => this._mapCardAction(c, 'add-contact')}>☆ Add</button>`}
-          <button class="sync-btn" @click=${() => this._openNodeDetail(c)}>Details…</button>
-        </div>
+      <div class="map-card">
+        <meshcore-node-detail-dialog
+          inline open
+          .hass=${this.hass}
+          .node=${c}
+          .pendingAction=${this._pendingAction}
+          @node-detail-closed=${() => { this._mapCard = null; }}
+          @node-message=${() => this._mapCardAction(c, 'message')}
+          @node-trace=${() => this._mapCardAction(c, 'trace')}
+          @node-add-contact=${() => this._mapCardAction(c, 'add-contact')}
+          @node-remove-contact=${() => this._mapCardAction(c, 'remove-contact')}>
+        </meshcore-node-detail-dialog>
       </div>
     `;
   }
+
 
   // ─── Contact cards rendering ──────────────────────────────────────
 
