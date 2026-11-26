@@ -2,6 +2,14 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.20
+
+- **Contacts:** "Copy my contact" is **Share my contact** again. It now opens a **Share** window, as does **Share** in each contact's details:
+  - a **QR code** to scan with a MeshCore app;
+  - the **chat code**, which shows as a contact card when pasted into a chat on its own (Copy);
+  - the **link** (`meshcore://contact/add?…`), which opens a MeshCore app to add the contact (Copy);
+  - **Send to nearby radios**, which sends the advert once to radios in direct range, with no repeats.
+
 ## 0.4.12-beta.19
 
 - **Contacts:** the sort menu now has **A–Z, Z–A, Recently heard and Longest ago**, on both the Contacts and Discovered tabs. Discovered is sorted on the server, so the order holds across every batch as you scroll.
