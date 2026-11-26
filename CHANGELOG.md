@@ -2,6 +2,17 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.23
+
+- **Chat:** a **reactions toggle** (😊) in the conversation header shows reaction messages exactly as they were sent. Reactions still also appear as chips. It's a quick toggle, not a saved setting.
+- **Settings → Reactions:** choose how you **send reactions**:
+  - **MeshCore One** (default): SHA-256 hash, the exact message.
+  - **MeshCore Open**: the short `r:hash:emoji` form.
+  - **Plain**: `@[Name] 👍`, no hash, so it goes on their latest message.
+
+  Each option shows its format and formula. Every format is understood when receiving, including plain `@[Name] 👍` on channels.
+- **Chat:** **Reply** works only on a person's **newest** message. Replies don't say which message they answer, so other apps (MeshCore Open included) show them against the person's latest message. On older messages Reply is greyed out, and tapping it explains why.
+
 ## 0.4.12-beta.22
 
 - **Chat:** a reply to a **reaction** now shows what was reacted to, for example "👍 reacted to SWALE-HV4: I'm considering pointing a beam…", instead of the raw reaction code. Tapping the quote jumps to that message. Reactions are hidden from the chat and shown as chips, so the old quote pointed at a message you couldn't find.

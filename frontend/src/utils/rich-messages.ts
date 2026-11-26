@@ -103,7 +103,7 @@ export interface ParsedReaction {
   /** Whose message it reacts to (MeshCore One channel reactions). */
   target?: string;
   hash: string;
-  kind: 'mc1' | 'open';
+  kind: 'mc1' | 'open' | 'plain';
 }
 
 /** One emoji (a single grapheme), not ordinary text. */
@@ -118,6 +118,8 @@ function looksLikeEmoji(s: string): boolean {
 const MC1_RE = /^(?:@\[(.*)\])?(.+?)\n([a-hjkmnp-tv-z0-9]{8})$/i;
 const MC1_LEGACY_RE = /^(.+?)(?:@\[(.*)\])?\n([a-hjkmnp-tv-z0-9]{8})$/i;
 const OPEN_RE = /^r:([0-9a-f]{4}):([0-9a-f]{2})$/;
+/** Plain reaction on a channel: "@[Name] 👍", no hash (goes on their latest message). */
+const PLAIN_RE = /^@\[([^\]]+)\]\s*(\S+)$/u;
 
 export function parseReaction(text: string): ParsedReaction | null {
   const open = OPEN_RE.exec(text);
@@ -129,6 +131,8 @@ export function parseReaction(text: string): ParsedReaction | null {
   if (one && looksLikeEmoji(one[2])) return { emoji: one[2], target: one[1], hash: one[3].toLowerCase(), kind: 'mc1' };
   const legacy = MC1_LEGACY_RE.exec(text);
   if (legacy && looksLikeEmoji(legacy[1])) return { emoji: legacy[1], target: legacy[2], hash: legacy[3].toLowerCase(), kind: 'mc1' };
+  const plain = PLAIN_RE.exec(text);
+  if (plain && looksLikeEmoji(plain[2])) return { emoji: plain[2], target: plain[1], hash: '', kind: 'plain' };
   return null;
 }
 
@@ -143,12 +147,28 @@ function candidateTimes(m: ChatMessage): number[] {
   return out;
 }
 
+/** How reactions you send are written. */
+export type ReactionStyle = 'mc1' | 'open' | 'plain';
+
 /**
- * A reaction in MeshCore One's format, which MeshCore Open also reads:
- * "@[Name]👍\nhash" on channels, "👍\nhash" in direct messages.
+ * A reaction to `msg`, in the chosen style:
+ * - mc1 (MeshCore One): "@[Name]👍\nhash" on channels, "👍\nhash" in DMs.
+ *   hash = Crockford base32 of the first 5 bytes of SHA-256(text + sender time).
+ * - open (MeshCore Open): "r:HASH:IDX". HASH = 16-bit hash of sender time,
+ *   name (channels) and the first 5 characters; IDX = the emoji's place in
+ *   Open's list. Emoji outside that list fall back to mc1.
+ * - plain: "@[Name] 👍" on channels, just "👍" in DMs. No hash: apps put it
+ *   on the person's latest message.
  */
-export function formatReaction(emoji: string, msg: ChatMessage, isChannel: boolean): string {
+export function formatReaction(emoji: string, msg: ChatMessage, isChannel: boolean, style: ReactionStyle = 'mc1'): string {
   const ts = msg.senderTimestamp ?? Math.floor(msg.timestamp.getTime() / 1000);
+  if (style === 'plain') return isChannel ? `@[${msg.sender}] ${emoji}` : emoji;
+  if (style === 'open') {
+    const idx = OPEN_REACTION_EMOJIS.indexOf(emoji);
+    if (idx >= 0) {
+      return `r:${openReactionHash(ts, isChannel ? msg.sender : null, msg.text)}:${idx.toString(16).padStart(2, '0')}`;
+    }
+  }
   const hash = reactionHash(msg.text, ts);
   return isChannel ? `@[${msg.sender}]${emoji}\n${hash}` : `${emoji}\n${hash}`;
 }
@@ -188,6 +208,7 @@ export function findReactionTarget(reaction: ChatMessage, messages: ChatMessage[
     if (x.id === reaction.id || x.isSystem || x.timestamp.getTime() > at) return false;
     if (parseReaction(x.text)) return false;
     if (r.target && x.sender !== r.target) return false;
+    if (r.kind === 'plain') return true;
     return candidateTimes(x).some((t) => (r.kind === 'mc1'
       ? reactionHash(x.text, t)
       : openReactionHash(t, isChannel ? x.sender : null, x.text)) === r.hash);
@@ -200,7 +221,7 @@ export function findReactionTarget(reaction: ChatMessage, messages: ChatMessage[
  * whose hash they carry. Reactions that match nothing are dropped, as the
  * MeshCore apps do (the message may be older than what's loaded).
  */
-export function collectReactions(messages: ChatMessage[], isChannel = true): { visible: ChatMessage[]; reactions: Map<string, ReactionChip[]> } {
+export function collectReactions(messages: ChatMessage[], isChannel = true, keepRaw = false): { visible: ChatMessage[]; reactions: Map<string, ReactionChip[]> } {
   const visible: ChatMessage[] = [];
   const reactions = new Map<string, ReactionChip[]>();
   const mc1 = new Map<string, Set<string>>();
@@ -224,15 +245,18 @@ export function collectReactions(messages: ChatMessage[], isChannel = true): { v
       visible.push(m);
       continue;
     }
-    const target = [...visible].reverse().find((x) =>
-      (!r.target || x.sender === r.target) && hashes(x, r.kind).has(r.hash));
+    const target = r.kind === 'plain'
+      ? [...visible].reverse().find((x) => !x.isSystem && x.sender === r.target && !parseReaction(x.text))
+      : [...visible].reverse().find((x) =>
+        (!r.target || x.sender === r.target) && hashes(x, r.kind as 'mc1' | 'open').has(r.hash));
+    if (keepRaw) visible.push(m);
     if (!target) continue;
     const sender = m.isOutgoing ? 'You' : m.sender;
     const dedup = `${target.id}|${sender}|${r.emoji}`;
     if (seen.has(dedup)) {
       // The same reaction again (a resend): your log line moves to the newest
       // copy, so it shows that copy's delivery state.
-      if (m.isOutgoing) {
+      if (m.isOutgoing && !keepRaw) {
         const i = visible.findIndex((x) => x.activityTarget === target.id && x.activityText === m.text);
         if (i >= 0) visible.splice(i, 1);
         visible.push(logLine(m, r.emoji, target));
@@ -248,7 +272,7 @@ export function collectReactions(messages: ChatMessage[], isChannel = true): { v
     } else chips.push({ emoji: r.emoji, senders: [sender], who: [{ sender, time: m.timestamp }] });
     reactions.set(target.id, chips);
     // Your own reactions also get a small line in the chat, where you sent them.
-    if (m.isOutgoing) visible.push(logLine(m, r.emoji, target));
+    if (m.isOutgoing && !keepRaw) visible.push(logLine(m, r.emoji, target));
   }
   return { visible, reactions };
 }

@@ -4,14 +4,29 @@ import { setTrackableChannelLimit, trackableChannelLimit } from '../utils/messag
 import {
   clockFormat, dateFormat, formatClock, formatDate, setClockFormat, setDateFormat,
   setTimestampFormat, timestampFormat,
-  heardWithin, setHeardWithin,
-  type ClockFormat, type DateFormat, type HeardWithin, type TimestampFormat,
+  heardWithin, setHeardWithin, reactionStyle, setReactionStyle,
+  type ClockFormat, type DateFormat, type HeardWithin, type ReactionStylePref, type TimestampFormat,
 } from '../utils/display-prefs';
 
 /**
  * Settings tab: this panel's own preferences, saved per browser.
  * Nothing here talks to the radio (that lives on the My radio tab).
  */
+const REACTION_HELP: Record<ReactionStylePref, ReturnType<typeof html>> = {
+  mc1: html`
+    <b>Sends:</b> <code>@[Name]👍</code> + <code>hash</code> (channels), <code>👍</code> + <code>hash</code> (direct messages).<br>
+    <b>Hash:</b> SHA-256 of the message text plus the sender's timestamp; the first 5 bytes written as 8 base32 characters, e.g. <code>272jvvz7</code>.<br>
+    <b>Good for:</b> pinpointing the exact message. Understood by MeshCore One and MeshCore Open.`,
+  open: html`
+    <b>Sends:</b> <code>r:e779:00</code>, the shortest form on air.<br>
+    <b>Hash:</b> a 16-bit hash of the sender's timestamp, their name (channels) and the first 5 characters of the message, as 4 hex characters. The last part is the emoji's number in MeshCore Open's list of 184; emoji outside that list are sent the MeshCore One way.<br>
+    <b>Good for:</b> MeshCore Open users. Other apps may show it as raw text.`,
+  plain: html`
+    <b>Sends:</b> <code>@[Name] 👍</code> (channels) or just <code>👍</code> (direct messages).<br>
+    <b>Hash:</b> none. Apps put it on that person's latest message, which may not be the one you meant if they've sent more since.<br>
+    <b>Good for:</b> readable by every app, even ones that don't know about reactions.`,
+};
+
 @customElement('meshcore-preferences-page')
 export class PreferencesPage extends LitElement {
   @state() private _trackable = trackableChannelLimit();
@@ -19,6 +34,7 @@ export class PreferencesPage extends LitElement {
   @state() private _clock: ClockFormat = clockFormat();
   @state() private _date: DateFormat = dateFormat();
   @state() private _heard: HeardWithin = heardWithin();
+  @state() private _reaction: ReactionStylePref = reactionStyle();
 
   static styles = css`
     :host {
@@ -94,6 +110,18 @@ export class PreferencesPage extends LitElement {
       height: 18px;
       flex-shrink: 0;
     }
+    .formula {
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--secondary-text-color);
+      padding: 8px 0 2px;
+    }
+    .formula code {
+      font-size: 12px;
+      background: rgba(127, 127, 127, 0.15);
+      padding: 0 4px;
+      border-radius: 4px;
+    }
     .foot {
       text-align: center;
       font-size: 12px;
@@ -130,6 +158,23 @@ export class PreferencesPage extends LitElement {
               <option value="datetime">Date and time</option>
             </select>
           </label>
+        </div>
+
+        <div class="card">
+          <h2>Reactions</h2>
+          <label class="row">
+            <span class="text">
+              <span class="title">Send reactions as</span>
+              <span class="help">How your reactions are written on the mesh. Every format is understood when receiving.</span>
+            </span>
+            <select aria-label="Send reactions as" .value=${this._reaction}
+              @change=${(e: Event) => { this._reaction = (e.target as HTMLSelectElement).value as ReactionStylePref; setReactionStyle(this._reaction); }}>
+              <option value="mc1">MeshCore One (default)</option>
+              <option value="open">MeshCore Open</option>
+              <option value="plain">Plain (no hash)</option>
+            </select>
+          </label>
+          <div class="formula">${REACTION_HELP[this._reaction]}</div>
         </div>
 
         <div class="card">

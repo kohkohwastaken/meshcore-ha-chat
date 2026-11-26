@@ -28,6 +28,9 @@ export class MeshCoreMessagePanel extends LitElement {
   @property({ type: String }) timestampFormat: 'relative' | 'time' | 'datetime' = 'relative';
   /** Conversation id of a contact with the sender's name, for "Message". */
   @property({ type: String }) senderConversation?: string;
+  /** Why Reply is unavailable for this message, if it is. */
+  @property({ type: String }) replyBlocked?: string;
+  @state() private _replyWhy = false;
 
   @state() private _picker = false;
   /** Desktop: the reaction buttons open from the React button. */
@@ -100,6 +103,9 @@ export class MeshCoreMessagePanel extends LitElement {
     .entry .who { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .more-link { background: none; border: none; color: var(--primary-color, #03a9f4); padding: 4px 0; cursor: pointer; font: inherit; font-size: 13px; }
     .none { font-size: 12px; color: var(--secondary-text-color); }
+    .act.blocked { opacity: 0.45; }
+    .reply-why { font-size: 12px; line-height: 1.45; color: var(--secondary-text-color);
+      background: rgba(127, 127, 127, 0.12); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
   `;
 
   willUpdate() {
@@ -108,6 +114,7 @@ export class MeshCoreMessagePanel extends LitElement {
       this._shownId = this.message?.id;
       this._picker = false;
       this._reactRow = false;
+      this._replyWhy = false;
       this._showMap = this.mode === 'side';
       this._copied = false;
       this._confirmResend = false;
@@ -253,12 +260,15 @@ export class MeshCoreMessagePanel extends LitElement {
         ${delivery ? html`<div class="meta info">${delivery}</div>` : ''}
       </div>
       <div class="actions">
-        ${!m.isOutgoing ? html`<button class="act" @click=${this._reply}>${this._icon('M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z')}Reply</button>` : ''}
+        ${!m.isOutgoing ? html`<button class="act ${this.replyBlocked ? 'blocked' : ''}" aria-disabled=${this.replyBlocked ? 'true' : 'false'}
+          title=${this.replyBlocked ?? ''}
+          @click=${() => { if (this.replyBlocked) this._replyWhy = !this._replyWhy; else this._reply(); }}>${this._icon('M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z')}Reply</button>` : ''}
         <button class="act ${this._reactRow ? 'on' : ''}" aria-expanded=${this._reactRow} @click=${() => { this._reactRow = !this._reactRow; this._picker = false; }}>${this._icon(reactIcon)}React</button>
         <button class="act" @click=${this._copy}>${this._icon('M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z')}${this._copied ? 'Copied' : 'Copy'}</button>
         ${mapAvailable && !side ? html`<button class="act ${this._showMap ? 'on' : ''}" aria-expanded=${this._showMap} @click=${() => { this._showMap = !this._showMap; }}>${this._icon('M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z')}Route</button>` : ''}
         ${!m.isOutgoing && this.senderConversation ? html`<button class="act" @click=${() => { this._emit('open-conversation', { id: this.senderConversation }); this._close(); }}>${this._icon('M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z')}Message</button>` : ''}
       </div>
+      ${this.replyBlocked && this._replyWhy ? html`<div class="reply-why" role="note">${this.replyBlocked}</div>` : ''}
       ${this._reactRow ? html`<div class="reacts" role="group" aria-label="React">
         ${QUICK_REACTIONS.map((e) => html`<button class="em" aria-label="React ${e}" @click=${() => this._react(e)}>${e}</button>`)}
         <button class="em more ${this._picker ? 'on' : ''}" aria-label="More emoji" aria-expanded=${this._picker}

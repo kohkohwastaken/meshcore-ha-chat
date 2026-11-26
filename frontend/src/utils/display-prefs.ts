@@ -109,3 +109,9 @@ export function heardRecently(lastAdvertSecs: number | undefined, within: HeardW
   if (!lastAdvertSecs) return false;
   return now - lastAdvertSecs * 1000 <= Number(within) * 86400000;
 }
+
+/** How reactions you send are written (see formatReaction). */
+export type ReactionStylePref = 'mc1' | 'open' | 'plain';
+const REACTION_STYLE_KEY = 'meshcore-reaction-style';
+export const reactionStyle = () => read<ReactionStylePref>(REACTION_STYLE_KEY, ['mc1', 'open', 'plain'], 'mc1');
+export const setReactionStyle = (v: ReactionStylePref) => write(REACTION_STYLE_KEY, v);

@@ -94,3 +94,28 @@ describe('findReactionTarget', () => {
     expect(findReactionTarget(r, [r], true)).toEqual({ emoji: '👍', target: null });
   });
 });
+
+describe('reaction styles', () => {
+  const a = { ...m('a', 'Dave', 'hello', 1700000000), senderTimestamp: 1700000000 };
+  it('writes each style', () => {
+    expect(formatReaction('👍', a, true, 'open')).toBe(`r:${openReactionHash(1700000000, 'Dave', 'hello')}:00`);
+    expect(formatReaction('👍', a, true, 'plain')).toBe('@[Dave] 👍');
+    expect(formatReaction('👍', a, false, 'plain')).toBe('👍');
+    expect(formatReaction('🦄', a, true, 'open')).toMatch(/^@\[Dave\]🦄\n/); // not in Open's list
+  });
+  it('reads plain reactions and puts them on the latest message', () => {
+    expect(parseReaction('@[Dave] 👍')).toEqual({ emoji: '👍', target: 'Dave', hash: '', kind: 'plain' });
+    expect(parseReaction('@[Dave] thanks')).toBeNull();
+    const b = m('b', 'Dave', 'later', 1700000100);
+    const r = m('r', 'Sam', '@[Dave] 👍', 1700000200);
+    const { visible, reactions } = collectReactions([a, b, r], true);
+    expect(visible.map((x) => x.id)).toEqual(['a', 'b']);
+    expect(reactions.get('b')?.[0].emoji).toBe('👍');
+  });
+  it('keeps reaction messages in the chat when asked', () => {
+    const r = m('r', 'Sam', formatReaction('👍', a, true), 1700000200);
+    const { visible, reactions } = collectReactions([a, r], true, true);
+    expect(visible.map((x) => x.id)).toEqual(['a', 'r']);
+    expect(reactions.get('a')?.[0].emoji).toBe('👍');
+  });
+});

@@ -15,7 +15,7 @@ import '../components/manage-dialog';
 import '../components/message-bubble';
 import '../components/message-search';
 import { findQuoted, rememberReply } from '../utils/reply-links';
-import { collectReactions, findReactionTarget, distanceMetres, formatContact, formatLocation, formatReaction, type ReactionChip } from '../utils/rich-messages';
+import { collectReactions, findReactionTarget, parseReaction, distanceMetres, formatContact, formatLocation, formatReaction, type ReactionChip } from '../utils/rich-messages';
 import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
@@ -24,7 +24,7 @@ import '../components/confirm-dialog';
 import '../components/message-panel';
 import '../components/location-map';
 import type { PickedLocation } from '../components/share-pickers';
-import { DISPLAY_PREFS_EVENT, timestampFormat } from '../utils/display-prefs';
+import { DISPLAY_PREFS_EVENT, reactionStyle, timestampFormat } from '../utils/display-prefs';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
 
 @customElement('meshcore-chat-page')
@@ -593,6 +593,11 @@ export class ChatPage extends LitElement {
       flex-shrink: 1;
     }
 
+    .header-action-btn.toggle-on {
+      color: var(--primary-color, #03a9f4);
+      background: rgba(var(--rgb-primary-color, 3, 169, 244), 0.15);
+    }
+
     .conv-menu-wrap {
       position: relative;
       display: inline-flex;
@@ -954,7 +959,7 @@ export class ChatPage extends LitElement {
                 <button class="back-button" @click=${() => (this._narrowShowMessages = false)}>← Back</button>
                 <span class="narrow-conv-name">${this._getConversationName()}${this._renderScopeChip()}</span>
                 <div class="chat-header-actions">
-                  <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderConvMenu()}
+                  <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderReactionsToggle()}${this._renderConvMenu()}
                 </div>
               </div>
               ${this._renderChatArea()}
@@ -1033,7 +1038,7 @@ export class ChatPage extends LitElement {
                 ${this._getConversationName()}${this._renderScopeChip()}
               </div>
               <div class="chat-header-actions">
-                <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderConvMenu()}
+                <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderReactionsToggle()}${this._renderConvMenu()}
               </div>
             </div>
           ` : ''}
@@ -1085,6 +1090,7 @@ export class ChatPage extends LitElement {
       ?isChannel=${this._isChannelSelected()}
       .timestampFormat=${timestampFormat(this.config?.timestamp_format ?? 'relative')}
       .senderConversation=${contact && contact.pubkey_prefix !== this.selectedId ? contact.pubkey_prefix : undefined}
+      .replyBlocked=${this._replyBlock(msg)}
       @panel-close=${() => { this._selMsgId = null; }}
       @react-to-message=${(e: CustomEvent) => { e.stopPropagation(); this._onReact(e); }}
       @reply-to-sender=${(e: CustomEvent) => { e.stopPropagation(); this._onReplyToSender(e); }}
@@ -1114,7 +1120,7 @@ export class ChatPage extends LitElement {
       `;
     }
 
-    const { visible: messages, reactions } = collectReactions(this._messageStore.messages, this._isChannelSelected());
+    const { visible: messages, reactions } = collectReactions(this._messageStore.messages, this._isChannelSelected(), this._showReactionMsgs);
     this._reactions = reactions;
     const renderItems = buildRenderItems(messages, {
       group_messages: this.config?.group_messages ?? true,
@@ -1372,7 +1378,7 @@ export class ChatPage extends LitElement {
 
   private _onReact(e: CustomEvent) {
     const { emoji, msg } = e.detail as { emoji: string; msg: ChatMessage };
-    void this._sendText(formatReaction(emoji, msg, this._isChannelSelected()));
+    void this._sendText(formatReaction(emoji, msg, this._isChannelSelected(), reactionStyle()));
   }
 
   private _renderLimitNote(budget: MessageBudget) {
@@ -1738,6 +1744,34 @@ export class ChatPage extends LitElement {
   }
 
   @state() private _convMenuOpen = false;
+  /** Show reaction messages in the chat as sent (header toggle, not saved). */
+  @state() private _showReactionMsgs = false;
+
+  private _renderReactionsToggle() {
+    const on = this._showReactionMsgs;
+    return html`<button class="header-action-btn ${on ? 'toggle-on' : ''}" aria-pressed=${on ? 'true' : 'false'}
+      title=${on ? 'Showing reaction messages as sent. Tap to hide them.' : 'Show reaction messages as sent'}
+      aria-label="Show reaction messages"
+      @click=${() => { this._showReactionMsgs = !this._showReactionMsgs; }}>
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
+    </button>`;
+  }
+
+  /**
+   * Why Reply is off for this message, if it is. Other apps attach a reply
+   * to the person's latest message, so replying to an older one would look
+   * like a reply to whatever they said last.
+   */
+  private _replyBlock(msg: ChatMessage): string | undefined {
+    if (msg.isOutgoing || msg.isSystem || !this._messageStore) return undefined;
+    const newer = this._messageStore.messages.filter((x) =>
+      x.sender === msg.sender && !x.isOutgoing && !x.isSystem && x.id !== msg.id
+      && x.timestamp.getTime() > msg.timestamp.getTime() && !parseReaction(x.text));
+    if (!newer.length) return undefined;
+    const latest = newer[newer.length - 1];
+    const snippet = latest.text.length > 50 ? `${latest.text.slice(0, 50)}…` : latest.text;
+    return `${msg.sender} has sent newer messages. Replies don't say which message they answer, so other apps show them against ${msg.sender}'s latest message ("${snippet}"). Reply is only available on their newest message.`;
+  }
   @state() private _confirmDelete = false;
 
   private async _deleteChat() {
