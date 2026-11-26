@@ -4,7 +4,7 @@ All notable changes to **MeshCore Chat for Home Assistant** are documented here.
 
 ## 0.4.12-beta.26
 
-- **Nodes map:** fixed every pin jumping to the top left when a node was selected. The selected pin is now enlarged without touching how Home Assistant positions pins.
+- **Nodes map:** fixed every pin jumping to the top left when a node was selected. The selected pin is now marked with a thick white ring and glow, drawn on top. Its size and position are left alone.
 - **Nodes map:** the node details panel sits at the bottom left again, and is smaller.
 
 ## 0.4.12-beta.25

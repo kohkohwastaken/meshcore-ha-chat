@@ -175,15 +175,21 @@ export class NodesMap extends LitElement {
     for (const [entityId, el] of markers) {
       const node = this._entityNodes.get(entityId);
       const on = !!key && String(node?.public_key ?? '').toLowerCase() === key;
+      if (!on && !el.classList.contains('mc-selected')) continue;
       el.classList.toggle('mc-selected', on);
-      // Use the separate `scale` property: ha-map positions markers with
-      // `transform`, so touching that moves them.
-      el.style.scale = on ? '1.45' : '';
-      el.style.boxShadow = on ? '0 0 0 3px #fff, 0 0 12px 4px rgba(255, 255, 255, 0.7)' : '';
+      // ha-map positions each marker with `transform` on this element, so
+      // don't change its size or transform; mark it with a ring and glow.
+      el.style.boxShadow = on ? '0 0 0 4px #fff, 0 0 14px 6px rgba(255, 255, 255, 0.85)' : '';
       el.style.borderRadius = on ? '50%' : '';
-      el.style.transition = 'scale 0.15s, box-shadow 0.15s';
-      const holder = el.parentElement as HTMLElement | null;
-      if (holder) holder.style.zIndex = on ? '10000' : '';
+      // Only touch z-index on the selected marker; restore it afterwards.
+      if (on && el.dataset.mcZ === undefined) {
+        el.dataset.mcZ = el.style.zIndex;
+        el.style.zIndex = '10000';
+      } else if (!on && el.dataset.mcZ !== undefined) {
+        el.style.zIndex = el.dataset.mcZ;
+        delete el.dataset.mcZ;
+      }
+      el.style.transition = 'box-shadow 0.15s';
     }
   }
 
