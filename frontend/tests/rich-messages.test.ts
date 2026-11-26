@@ -77,3 +77,20 @@ describe('rich messages', () => {
     expect(parseContact(`<${key}:7:x>`)).toBeNull();
   });
 });
+
+import { findReactionTarget } from '../src/utils/rich-messages';
+
+describe('findReactionTarget', () => {
+  it('finds the message a reaction points at', () => {
+    const a = { ...m('a', 'Swale', 'Beam test', 100), senderTimestamp: 95 };
+    const r = m('r', 'Rambler', formatReaction('👍', a, true), 200);
+    const hit = findReactionTarget(r, [a, r], true);
+    expect(hit?.emoji).toBe('👍');
+    expect(hit?.target?.id).toBe('a');
+  });
+  it('returns null for ordinary messages and a null target when it is not loaded', () => {
+    expect(findReactionTarget(m('x', 'A', 'hello', 1), [], true)).toBeNull();
+    const r = m('r', 'Rambler', '@[Swale]👍\n272jvvz7', 200);
+    expect(findReactionTarget(r, [r], true)).toEqual({ emoji: '👍', target: null });
+  });
+});

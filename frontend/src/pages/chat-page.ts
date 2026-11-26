@@ -15,7 +15,7 @@ import '../components/manage-dialog';
 import '../components/message-bubble';
 import '../components/message-search';
 import { findQuoted, rememberReply } from '../utils/reply-links';
-import { collectReactions, distanceMetres, formatContact, formatLocation, formatReaction, type ReactionChip } from '../utils/rich-messages';
+import { collectReactions, findReactionTarget, distanceMetres, formatContact, formatLocation, formatReaction, type ReactionChip } from '../utils/rich-messages';
 import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
@@ -45,8 +45,21 @@ export class ChatPage extends LitElement {
   /** The message open in the message panel (sheet on phones, side panel on desktop). */
   @state() private _selMsgId: string | null = null;
   /** The message a bubble replies to, if any. */
-  private _quoteFor = (msg: ChatMessage) =>
-    this.selectedId && this._messageStore ? findQuoted(msg, this.selectedId, this._messageStore.messages) : null;
+  private _quoteFor = (msg: ChatMessage) => {
+    if (!this.selectedId || !this._messageStore) return null;
+    const all = this._messageStore.messages;
+    const q = findQuoted(msg, this.selectedId, all);
+    if (!q) return null;
+    // Replying to a reaction: reactions are hidden from the chat, so show
+    // what was reacted to and jump there instead of to the raw reaction.
+    const quotedMsg = (q.id ? all.find((m) => m.id === q.id) : undefined)
+      ?? ({ id: '', text: q.text, sender: q.sender, timestamp: msg.timestamp } as ChatMessage);
+    const r = findReactionTarget(quotedMsg, all, this._isChannelSelected());
+    if (!r) return q;
+    return r.target
+      ? { sender: q.sender, text: `${r.emoji} reacted to ${r.target.sender}: ${r.target.text}`, id: r.target.id }
+      : { sender: q.sender, text: `${r.emoji} reacted to an older message`, id: undefined };
+  };
   @property({ type: Object }) config?: PanelConfig;
   @property({ type: Array }) conversations: Array<Contact | Channel> = [];
   @property({ type: String }) selectedId: string | null = null;

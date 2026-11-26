@@ -177,6 +177,25 @@ function logLine(m: ChatMessage, emoji: string, target: ChatMessage): ChatMessag
 }
 
 /**
+ * The message a reaction points at, searching messages sent before it.
+ * Null when it isn't a reaction or its target isn't loaded.
+ */
+export function findReactionTarget(reaction: ChatMessage, messages: ChatMessage[], isChannel = true): { emoji: string; target: ChatMessage | null } | null {
+  const r = parseReaction(reaction.text);
+  if (!r) return null;
+  const at = reaction.timestamp.getTime();
+  const target = [...messages].reverse().find((x) => {
+    if (x.id === reaction.id || x.isSystem || x.timestamp.getTime() > at) return false;
+    if (parseReaction(x.text)) return false;
+    if (r.target && x.sender !== r.target) return false;
+    return candidateTimes(x).some((t) => (r.kind === 'mc1'
+      ? reactionHash(x.text, t)
+      : openReactionHash(t, isChannel ? x.sender : null, x.text)) === r.hash);
+  }) ?? null;
+  return { emoji: r.emoji, target };
+}
+
+/**
  * Pull reactions out of the message list and attach them to the message
  * whose hash they carry. Reactions that match nothing are dropped, as the
  * MeshCore apps do (the message may be older than what's loaded).

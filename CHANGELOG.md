@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.22
+
+- **Chat:** a reply to a **reaction** now shows what was reacted to, for example "👍 reacted to SWALE-HV4: I'm considering pointing a beam…", instead of the raw reaction code. Tapping the quote jumps to that message. Reactions are hidden from the chat and shown as chips, so the old quote pointed at a message you couldn't find.
+
 ## 0.4.12-beta.21
 
 - **Share window:** **Copy image** puts the QR code on the clipboard as a picture, ready to paste into another app. **Save image** downloads it as a PNG. Where a browser can't copy images, Copy image saves the picture instead.
