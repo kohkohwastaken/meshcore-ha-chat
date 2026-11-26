@@ -58,7 +58,7 @@ export class NodeDetailDialog extends LitElement {
     :host([inline]) .dialog-backdrop {
       position: static;
       width: auto;
-      height: 100%;
+      height: auto;
       background: none;
       display: block;
       animation: none;
@@ -67,7 +67,8 @@ export class NodeDetailDialog extends LitElement {
     :host([inline]) .dialog {
       max-width: none;
       max-height: none;
-      height: 100%;
+      height: auto;
+      overflow: visible;
       border-radius: 12px;
       animation: none;
       box-sizing: border-box;

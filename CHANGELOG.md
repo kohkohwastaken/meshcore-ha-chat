@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.27
+
+- **Nodes map:** the node details panel grows to fit its contents, so there's no scrollbar. It only scrolls if the map itself is shorter than the details.
+
 ## 0.4.12-beta.26
 
 - **Nodes map:** fixed every pin jumping to the top left when a node was selected. The selected pin is now marked with a thick white ring and glow, drawn on top. Its size and position are left alone.

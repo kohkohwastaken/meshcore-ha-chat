@@ -7466,7 +7466,7 @@ let e,t,i,a,n,o,r,s,l,c,d,u,p,h,m,g,f,v,b,y,_,x,w,k,C,A,$,E,F,D,B,S,M,z,O,I,R,T,
     :host([inline]) .dialog-backdrop {
       position: static;
       width: auto;
-      height: 100%;
+      height: auto;
       background: none;
       display: block;
       animation: none;
@@ -7475,7 +7475,8 @@ let e,t,i,a,n,o,r,s,l,c,d,u,p,h,m,g,f,v,b,y,_,x,w,k,C,A,$,E,F,D,B,S,M,z,O,I,R,T,
     :host([inline]) .dialog {
       max-width: none;
       max-height: none;
-      height: 100%;
+      height: auto;
+      overflow: visible;
       border-radius: 12px;
       animation: none;
       box-sizing: border-box;
@@ -8296,10 +8297,11 @@ let e,t,i,a,n,o,r,s,l,c,d,u,p,h,m,g,f,v,b,y,_,x,w,k,C,A,$,E,F,D,B,S,M,z,O,I,R,T,
       bottom: 36px;
       z-index: 500;
       width: min(340px, calc(100% - 24px));
-      height: min(420px, calc(100% - 60px));
+      /* As tall as the details need; only scrolls if the map is shorter. */
+      max-height: calc(100% - 48px);
       border-radius: 12px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-      overflow: hidden;
+      overflow-y: auto;
     }
 
     @media (max-width: 870px) {
@@ -8308,7 +8310,7 @@ let e,t,i,a,n,o,r,s,l,c,d,u,p,h,m,g,f,v,b,y,_,x,w,k,C,A,$,E,F,D,B,S,M,z,O,I,R,T,
         right: 8px;
         bottom: 8px;
         width: auto;
-        height: 50%;
+        max-height: 75%;
       }
     }
 

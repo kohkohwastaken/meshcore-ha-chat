@@ -477,10 +477,11 @@ export class NodesPage extends LitElement {
       bottom: 36px;
       z-index: 500;
       width: min(340px, calc(100% - 24px));
-      height: min(420px, calc(100% - 60px));
+      /* As tall as the details need; only scrolls if the map is shorter. */
+      max-height: calc(100% - 48px);
       border-radius: 12px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-      overflow: hidden;
+      overflow-y: auto;
     }
 
     @media (max-width: 870px) {
@@ -489,7 +490,7 @@ export class NodesPage extends LitElement {
         right: 8px;
         bottom: 8px;
         width: auto;
-        height: 50%;
+        max-height: 75%;
       }
     }
 
