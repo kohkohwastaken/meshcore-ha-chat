@@ -72,6 +72,9 @@ Saved per browser: message display, reaction preferences, date and time format, 
 <tr>
 <td colspan="2" align="center"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/contacts.png" alt="Contacts" width="360"><br><b>Contacts</b>: grouped contacts, discovered nodes, Add manually and Share my contact.</td>
 </tr>
+<tr>
+<td colspan="2" align="center"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/phone-chat.jpg" alt="Chat on a phone" width="260"> &nbsp; <img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/phone-map.jpg" alt="Nodes map on a phone" width="260"><br><b>On a phone</b>: the tabs move to a bar along the bottom.</td>
+</tr>
 </table>
 
 ## Installation
