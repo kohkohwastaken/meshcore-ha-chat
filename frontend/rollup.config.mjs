@@ -1,5 +1,6 @@
 import fs from 'fs';
 import resolve from '@rollup/plugin-node-resolve';
+import commonjs from '@rollup/plugin-commonjs';
 import terser from '@rollup/plugin-terser';
 import { getBabelOutputPlugin } from '@rollup/plugin-babel';
 
@@ -66,5 +67,6 @@ export default {
           ]),
     ],
   },
-  plugins: [resolve()],
+  // commonjs: qrcode-generator ships as CommonJS.
+  plugins: [resolve(), commonjs()],
 };

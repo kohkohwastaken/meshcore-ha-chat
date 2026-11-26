@@ -2,7 +2,9 @@ import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Contact, DeviceConfig, HomeAssistant } from '../types';
 import { addContact, getContactsPaginated, getDeviceConfig, removeContact } from '../api';
-import { NODE_TYPE_NAMES, distanceMetres, formatContact } from '../utils/rich-messages';
+import { NODE_TYPE_NAMES, distanceMetres } from '../utils/rich-messages';
+import './share-contact-dialog';
+import type { ShareTarget } from './share-contact-dialog';
 
 /** Contact types you can hold a conversation with (not sensors). */
 const CHATTABLE = new Set([1, 2, 3]);
@@ -91,6 +93,8 @@ export class ContactsDialog extends LitElement {
   @state() private _confirmRemove = false;
   @state() private _me: DeviceConfig | null = null;
   @state() private _toast = '';
+  /** Contact shown in the Share window, if open. */
+  @state() private _sharing: ShareTarget | null = null;
   private _toastTimer: ReturnType<typeof setTimeout> | null = null;
   private _searchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -397,7 +401,7 @@ export class ContactsDialog extends LitElement {
   }
 
   private _onKey = (e: KeyboardEvent) => {
-    if (e.key !== 'Escape') return;
+    if (e.key !== 'Escape' || this._sharing) return;
     if (this._detail) this._detail = null;
     else this._close();
   };
@@ -508,20 +512,13 @@ export class ContactsDialog extends LitElement {
     this._close();
   }
 
-  private async _copy(text: string, done: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      this._say(done);
-    } catch {
-      this._say(text);
-    }
-  }
-
   private _share(c: Contact) {
-    void this._copy(
-      formatContact(c.public_key || c.pubkey_prefix, c.type, c.adv_name || ''),
-      `Copied ${c.adv_name || 'their'} contact code. Paste it into a chat on its own to share it.`,
-    );
+    this._sharing = {
+      name: c.adv_name || c.pubkey_prefix,
+      publicKey: c.public_key || c.pubkey_prefix,
+      type: c.type,
+      self: false,
+    };
   }
 
   private _shareMe = () => {
@@ -529,10 +526,7 @@ export class ContactsDialog extends LitElement {
       this._say("Couldn't read your radio's key yet. Try again in a moment.");
       return;
     }
-    void this._copy(
-      formatContact(this._me.pubkey, 1, this._me.name || ''),
-      'Copied your contact code. Paste it into a chat on its own so others can add you.',
-    );
+    this._sharing = { name: this._me.name || '', publicKey: this._me.pubkey, type: 1, self: true };
   };
 
   private async _add(c: Contact) {
@@ -658,7 +652,7 @@ export class ContactsDialog extends LitElement {
             <button class="btn" ?disabled=${!hasLocation(c)} title=${hasLocation(c) ? '' : "This node hasn't shared a location"}
               @click=${() => this._nodeAction(c, 'show-on-map')}>🗺 Show on map</button>
             <button class="btn" @click=${() => this._nodeAction(c, 'trace')}>↯ Trace route</button>
-            <button class="btn" @click=${() => this._share(c)}>⧉ Copy contact</button>
+            <button class="btn" @click=${() => this._share(c)}>⧉ Share</button>
           </div>
           <div class="kv"><span>Last heard</span><span>${c.last_advert ? ago(c.last_advert) : 'Not yet'}</span></div>
           <div class="kv"><span>Route</span><span>${this._route(c)}</span></div>
@@ -694,7 +688,7 @@ export class ContactsDialog extends LitElement {
               <div class="name">${meName} <span class="meta">(you)</span></div>
               <div class="meta">${this._me?.pubkey ? this._me.pubkey.substring(0, 12) : ''}</div>
             </span>
-            <button class="btn" @click=${this._shareMe}>Copy my contact</button>
+            <button class="btn" @click=${this._shareMe}>Share my contact</button>
           </div>
           <div class="tabs" role="tablist">
             <button role="tab" class=${this._tab === 'contacts' ? 'on' : ''} aria-selected=${this._tab === 'contacts'}
@@ -719,6 +713,9 @@ export class ContactsDialog extends LitElement {
           <div class="body" @scroll=${this._onScroll}>${this._renderList()}</div>
           ${this._detail ? this._renderDetail(this._detail) : nothing}
           ${this._toast ? html`<div class="toast" role="status">${this._toast}</div>` : nothing}
+          ${this._sharing ? html`<meshcore-share-contact-dialog
+            .hass=${this.hass} .entryId=${this.entryId} .target=${this._sharing}
+            @share-closed=${() => { this._sharing = null; }}></meshcore-share-contact-dialog>` : nothing}
         </div>
       </div>
     `;
