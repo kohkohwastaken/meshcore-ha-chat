@@ -2,6 +2,20 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12
+
+A big redesign of the panel. Everything below is detailed in the 0.4.12 betas that follow.
+
+- **New layout:** five tabs (Chat, Nodes, My radio, Repeaters, Settings), a bottom tab bar on phones, a new sidebar icon and header logo.
+- **Chat:** separate, collapsible Channels and Direct messages sections with previews; delete a message or a whole conversation; message hashes next to the hop count.
+- **Reactions** in the MeshCore One format, readable by other apps, with any emoji; reactions from MeshCore Open and plain `@[Name] 👍` messages are understood too. A header toggle shows the raw reaction messages.
+- **Replies** quote the message they answer when it's clear which one; you can only reply to someone's newest message.
+- **Contacts:** a new Contacts window (grouped contacts, discovered nodes 500 at a time, sorting), add a contact manually from a chat code, link, QR text or public key with an Unverified badge until they're heard, and share contacts as a QR code, code, link or over the air.
+- **Nodes:** map or list, selected-pin highlight, details beside the map, multi-type and heard-within filters (including 1 year and a custom date), and a Clear stale dialog by days, type and source.
+- **Repeaters:** card list, Refresh status with the time of the last status, and Manage devices.
+- **Settings tab** for message, reaction, date/time and node preferences, saved per browser.
+- Many fixes for phones, layout and the map.
+
 ## 0.4.12-beta.38
 
 - Header logo on one line (bubble, MESHCORE, HOME ASSISTANT CHAT), with HOME ASSISTANT CHAT large enough to read.
