@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.28
+
+- **Chat:** **React** is hidden on your own **unheard or failed** messages, with a note explaining why. Others may not have the message, so a reaction would have nothing to attach to. Resend or Delete instead. Reply was already hidden on your own messages.
+
 ## 0.4.12-beta.27
 
 - **Nodes map:** the node details panel grows to fit its contents, so there's no scrollbar. It only scrolls if the map itself is shorter than the details.

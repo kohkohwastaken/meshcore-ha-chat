@@ -257,6 +257,9 @@ export class MeshCoreMessagePanel extends LitElement {
       ? `${(ds.repeaterCount ?? 0) > 0 ? `${ds.repeaterCount} repeater${ds.repeaterCount === 1 ? '' : 's'} responded` : 'No repeaters responded'}${ds.ackReceived ? ' · ACK received' : ''}${ds.roundTripMs ? ` · ${ds.roundTripMs}ms RTT` : ''}`
       : '';
     const radio = this._radioLine(m);
+    // Your own message nobody was heard passing on: others may not have it,
+    // so a reaction to it would have nothing to attach to.
+    const unheard = canResend(m.isOutgoing, m.deliveryStatus);
     const reactIcon = 'M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z';
 
     return html`
@@ -272,13 +275,14 @@ export class MeshCoreMessagePanel extends LitElement {
         ${!m.isOutgoing ? html`<button class="act ${this.replyBlocked ? 'blocked' : ''}" aria-disabled=${this.replyBlocked ? 'true' : 'false'}
           title=${this.replyBlocked ?? ''}
           @click=${() => { if (this.replyBlocked) this._replyWhy = !this._replyWhy; else this._reply(); }}>${this._icon('M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z')}Reply</button>` : ''}
-        <button class="act ${this._reactRow ? 'on' : ''}" aria-expanded=${this._reactRow} @click=${() => { this._reactRow = !this._reactRow; this._picker = false; }}>${this._icon(reactIcon)}React</button>
+        ${unheard ? '' : html`<button class="act ${this._reactRow ? 'on' : ''}" aria-expanded=${this._reactRow} @click=${() => { this._reactRow = !this._reactRow; this._picker = false; }}>${this._icon(reactIcon)}React</button>`}
         <button class="act" @click=${this._copy}>${this._icon('M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z')}${this._copied ? 'Copied' : 'Copy'}</button>
         ${mapAvailable && !side ? html`<button class="act ${this._showMap ? 'on' : ''}" aria-expanded=${this._showMap} @click=${() => { this._showMap = !this._showMap; }}>${this._icon('M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5zM15 19l-6-2.11V5l6 2.11V19z')}Route</button>` : ''}
         ${!m.isOutgoing && this.senderConversation ? html`<button class="act" @click=${() => { this._emit('open-conversation', { id: this.senderConversation }); this._close(); }}>${this._icon('M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z')}Message</button>` : ''}
       </div>
       ${this.replyBlocked && this._replyWhy ? html`<div class="reply-why" role="note">${this.replyBlocked}</div>` : ''}
-      ${this._reactRow ? html`<div class="reacts" role="group" aria-label="React">
+      ${unheard ? html`<div class="reply-why" role="note">Reactions are off for this message because nobody was heard receiving it. Resend it first, or delete it.</div>` : ''}
+      ${this._reactRow && !unheard ? html`<div class="reacts" role="group" aria-label="React">
         ${QUICK_REACTIONS.map((e) => html`<button class="em" aria-label="React ${e}" @click=${() => this._react(e)}>${e}</button>`)}
         <button class="em more ${this._picker ? 'on' : ''}" aria-label="More emoji" aria-expanded=${this._picker}
           @click=${() => { this._picker = !this._picker; }}>＋</button>
