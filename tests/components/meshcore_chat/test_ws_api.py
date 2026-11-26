@@ -4087,8 +4087,11 @@ async def test_ws_add_contact_manual_registers_then_adds(hass: HomeAssistant, co
     coordinator._contacts = {}
     coordinator._discovered_contacts = {}
     key = "ab" * 32
+    async def ok(_hass, conn, m):
+        conn.send_result(m["id"], {"success": True})
+
     with patch.object(ws_api, "_get_coordinator", return_value=coordinator), \
-            patch.object(ws_api, "ws_add_contact") as add:
+            patch.object(ws_api, "ws_add_contact", AsyncMock(side_effect=ok)) as add:
         conn = _Connection()
         await _call_ws(ws_api.ws_add_contact_manual, hass, conn, {
             "id": 1, "public_key": key.upper(), "name": "Bob", "node_type": 2,
@@ -4096,6 +4099,30 @@ async def test_ws_add_contact_manual_registers_then_adds(hass: HomeAssistant, co
     assert coordinator._discovered_contacts[key]["adv_name"] == "Bob"
     assert coordinator._discovered_contacts[key]["type"] == 2
     assert add.call_args.args[2]["public_key"] == key
+    assert conn.results[0][1] == {"success": True}
+
+
+async def test_ws_add_contact_manual_failure_removes_stand_in(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """If the add fails, the stand-in discovered entry is removed again."""
+    coordinator = MagicMock()
+    coordinator.api.connected = True
+    coordinator._contacts = {}
+    coordinator._discovered_contacts = {}
+    key = "cd" * 32
+
+    async def fail(_hass, conn, m):
+        conn.send_error(m["id"], "command_failed", "radio said no")
+
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator), \
+            patch.object(ws_api, "ws_add_contact", AsyncMock(side_effect=fail)):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_add_contact_manual, hass, conn, {
+            "id": 1, "public_key": key, "name": "Bob", "node_type": 1,
+        })
+    assert coordinator._discovered_contacts == {}
+    assert conn.errors[0][1] == "command_failed"
+    _store, manual = await ws_api._manual_contacts(hass)
+    assert key not in manual
 
 
 async def test_ws_get_contacts_paginated_last_heard_ignores_future_adverts(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
@@ -4155,3 +4182,31 @@ async def test_ws_get_unverified_contacts_dm_verifies(hass: HomeAssistant, compa
         conn = _Connection()
         await _call_ws(ws_api.ws_get_unverified_contacts, hass, conn, {"id": 1})
     assert conn.results[0][1]["unverified"] == {}
+
+
+async def test_unverified_cleared_by_advert_event(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """An advert from a manually added contact verifies it at once and tells the panel."""
+    key = "ef" * 32
+    hass.data.setdefault(DOMAIN, {})
+    _store, manual = await ws_api._manual_contacts(hass)
+    manual[key] = 1.0
+    fired = []
+    hass.bus.async_listen(ws_api.EVENT_UNVERIFIED_CHANGED, lambda e: fired.append(e.data))
+    event = MagicMock()
+    event.data = {"event_type": "EventType.ADVERTISEMENT", "payload": {"public_key": key}}
+    await ws_api.async_clear_unverified_from_event(hass, event)
+    await hass.async_block_till_done()
+    assert key not in manual
+    assert fired == [{"public_keys": [key]}]
+
+
+async def test_unverified_kept_for_channel_messages(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """Channel messages don't prove the key, so they don't verify."""
+    key = "ab" * 32
+    hass.data.setdefault(DOMAIN, {})
+    _store, manual = await ws_api._manual_contacts(hass)
+    manual[key] = 1.0
+    event = MagicMock()
+    event.data = {"event_type": "EventType.CHANNEL_MSG_RECV", "payload": {"pubkey_prefix": key[:12]}}
+    await ws_api.async_clear_unverified_from_event(hass, event)
+    assert key in manual

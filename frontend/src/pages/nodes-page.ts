@@ -1,6 +1,6 @@
 import { NODE_TYPE_NAMES } from '../utils/rich-messages';
 import { TYPE_COLORS } from '../utils/ha-map';
-import { UNVERIFIED_EVENT, loadUnverified, unverifiedSince } from '../utils/unverified';
+import { UNVERIFIED_EVENT, loadUnverified, unverifiedSince, watchUnverified } from '../utils/unverified';
 import { DISPLAY_PREFS_EVENT, heardRecently, heardWithin, setHeardWithin, type HeardWithin } from '../utils/display-prefs';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
@@ -656,7 +656,10 @@ export class NodesPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     window.addEventListener(UNVERIFIED_EVENT, this._onUnverified);
-    if (this.hass) void loadUnverified(this.hass, this.config?.entry_id);
+    if (this.hass) {
+      void loadUnverified(this.hass, this.config?.entry_id);
+      watchUnverified(this.hass, this.config?.entry_id);
+    }
     window.addEventListener(DISPLAY_PREFS_EVENT, this._onPrefs);
     // Use matchMedia for reliable viewport-based narrow detection
     // 870px matches HA's own narrow threshold (companion app WebViews report wider CSS viewports)

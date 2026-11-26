@@ -5,7 +5,7 @@ import { formatTimestamp } from '../chat/message-parser';
 import { canResend, deliveryLabel } from '../utils/delivery-label';
 import './location-map';
 import type { QuotedMessage } from '../utils/reply-links';
-import { NODE_TYPE_NAMES, parseContact, parseLocation, type ReactionChip } from '../utils/rich-messages';
+import { NODE_TYPE_NAMES, messageHash, parseContact, parseLocation, parseReaction, type ReactionChip } from '../utils/rich-messages';
 import { addContact } from '../api';
 
 /**
@@ -173,6 +173,7 @@ export class MessageBubble extends LitElement {
     .reactions { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
     .reaction { background: rgba(127, 127, 127, 0.25); border-radius: 10px; padding: 1px 6px; font-size: 0.85em; }
     .bubble.selected { outline: 2px solid var(--primary-color, #03a9f4); outline-offset: 1px; }
+    .msg-hash { font-family: monospace; opacity: 0.8; }
     .bubble.system.activity { cursor: default; font-size: 12px; }
     .activity-text { background: none; border: none; padding: 0; font: inherit; color: inherit; font-style: italic; cursor: pointer; }
     @media (hover: hover) { .activity-text:hover { text-decoration: underline; } }
@@ -472,12 +473,13 @@ export class MessageBubble extends LitElement {
         : '';
 
     const hops = !msg.isOutgoing && !msg.isSystem ? hopCount(msg) : null;
+    const hash = !msg.isSystem && !parseReaction(msg.text) ? messageHash(msg) : null;
     return html`
       <div class=${this._classMap(bubbleClasses)} data-msg-id=${msg.id} @click=${(e: Event) => { e.stopPropagation(); this.dispatchEvent(new CustomEvent('message-selected', { detail: { msg }, bubbles: true, composed: true })); }}>
         ${this._renderQuote(msg)}
         ${this._renderBody(msg)}
         ${this._renderReactions(msg)}
-        <div class="timestamp">${statusLabel ? html`<span class="delivery-status">${statusLabel}</span> · ` : ''}${ts}${hops !== null ? html` · <span class="hops">${hops} hop${hops === 1 ? '' : 's'}</span>` : ''}${scopeLabel ? html` · <span class="flood-scope">${scopeLabel}</span>` : ''}</div>
+        <div class="timestamp">${statusLabel ? html`<span class="delivery-status">${statusLabel}</span> · ` : ''}${ts}${hops !== null ? html` · <span class="hops">${hops} hop${hops === 1 ? '' : 's'}</span>` : ''}${hash ? html` · <span class="msg-hash" title=${hash.exact ? 'Message hash (MeshCore One), used by reactions' : 'Estimated message hash: the exact send time was not recorded'}>${hash.exact ? '#' : '≈'}${hash.hash}</span>` : ''}${scopeLabel ? html` · <span class="flood-scope">${scopeLabel}</span>` : ''}</div>
       </div>
     `;
   }

@@ -160,3 +160,14 @@ describe('parseManualContact', () => {
     expect(parseManualContact('meshcore://abcd').kind).toBe('invalid');
   });
 });
+
+import { messageHash } from '../src/utils/rich-messages';
+
+describe('messageHash', () => {
+  it('is exact with the sender timestamp and estimated without', () => {
+    const exact = { ...m('a', 'Dave', 'Hello world!', 999), senderTimestamp: 1234567890 };
+    expect(messageHash(exact)).toEqual({ hash: 'tyvbkb33', exact: true });
+    const est = m('b', 'Me', 'Hello world!', 1234567890, true);
+    expect(messageHash(est)).toEqual({ hash: 'tyvbkb33', exact: false });
+  });
+});

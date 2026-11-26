@@ -245,6 +245,16 @@ async def async_setup_entry(
         EVENT_MESHCORE_MESSAGE,
         _make_message_handler(hass, entry.entry_id, sender_times),
     ))
+
+    async def _verify_manual_contacts(event: Event) -> None:
+        # Imported here: ws_api back-imports this module at load time.
+        from .ws_api import async_clear_unverified_from_event
+        await async_clear_unverified_from_event(hass, event)
+
+    entry.async_on_unload(hass.bus.async_listen(
+        f"{MESHCORE_DOMAIN}_raw_event",
+        _verify_manual_contacts,
+    ))
     entry.async_on_unload(hass.bus.async_listen(
         EVENT_MESHCORE_DELIVERY_UPDATE,
         _make_delivery_update_handler(hass, entry.entry_id),

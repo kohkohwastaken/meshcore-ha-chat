@@ -2686,6 +2686,67 @@ async def ws_get_unverified_contacts(hass, connection, msg):
     connection.send_result(msg["id"], {"unverified": still})
 
 
+EVENT_UNVERIFIED_CHANGED = f"{DOMAIN}_unverified_changed"
+
+
+async def async_clear_unverified_from_event(hass, event) -> None:
+    """Verify a manually added contact the moment it's heard from.
+
+    Listens to the MeshCore integration's raw radio events: an advert (or new
+    contact) carries the full public key, a received direct message its key
+    prefix. Either proves the key's owner, so the contact is verified at once
+    and the panel is told to refresh its badges.
+    """
+    data = event.data or {}
+    kind = str(data.get("event_type") or "").upper()
+    if not any(k in kind for k in ("ADVERTISEMENT", "NEW_CONTACT", "ADVERT_PATH", "CONTACT_MSG_RECV")):
+        return
+    if not hass.data.get(DOMAIN, {}).get("_manual_contacts"):
+        return  # nothing waiting (and don't load the store for every advert)
+    payload = data.get("payload") or {}
+    if not isinstance(payload, dict):
+        return
+    key = str(payload.get("public_key") or payload.get("pubkey_prefix") or "").lower()
+    if len(key) < 6:
+        return
+    store, manual = await _manual_contacts(hass)
+    hits = [pk for pk in manual if pk.startswith(key) or key.startswith(pk)]
+    if not hits:
+        return
+    for pk in hits:
+        manual.pop(pk, None)
+    await store.async_save(manual)
+    hass.bus.async_fire(EVENT_UNVERIFIED_CHANGED, {"public_keys": hits})
+
+
+def _unwrap_ws(handler):
+    """The plain coroutine under websocket decorators (require_admin, async_response)."""
+    inner = handler
+    seen: set[int] = set()
+    while hasattr(inner, "__wrapped__") and id(inner) not in seen:
+        seen.add(id(inner))
+        inner = inner.__wrapped__
+    return inner
+
+
+class _OutcomeConnection:
+    """Wraps a connection to catch a handler's result or error instead of sending it."""
+
+    def __init__(self, connection) -> None:
+        self._connection = connection
+        self.result = None
+        self.error: tuple[str, str] | None = None
+
+    def send_result(self, _msg_id, result=None) -> None:
+        self.result = result
+
+    def send_error(self, _msg_id, code, message, *args, **kwargs) -> None:
+        self.error = (code, message)
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _HEX_ADVERT = re.compile(r"^[0-9a-f]{196,342}$")
 
@@ -2762,7 +2823,8 @@ async def ws_add_contact_manual(hass, connection, msg):
     if public_key[:12] in coordinator._contacts:
         connection.send_error(msg["id"], "already_added", "That contact is already on your radio")
         return
-    if public_key not in coordinator._discovered_contacts:
+    inserted = public_key not in coordinator._discovered_contacts
+    if inserted:
         coordinator._discovered_contacts[public_key] = {
             "public_key": public_key,
             "adv_name": name,
@@ -2777,16 +2839,29 @@ async def ws_add_contact_manual(hass, connection, msg):
             "lastmod": 0,
             "added_to_node": False,
         }
+    # Same path as the Add button from here; watch how it ends so a failed
+    # add doesn't leave our stand-in entry in the integration's discovered list.
+    outcome = _OutcomeConnection(connection)
+    inner = _unwrap_ws(ws_add_contact)
+    add_msg = {
+        "id": msg["id"], "type": "meshcore_chat/add_contact",
+        "public_key": public_key, "name": name,
+        **({"entry_id": msg["entry_id"]} if "entry_id" in msg else {}),
+    }
+    try:
+        await inner(hass, outcome, add_msg)
+    except Exception as ex:  # noqa: BLE001 - reported to the user below
+        outcome.error = ("command_failed", str(ex))
+    if outcome.error is not None:
+        if inserted:
+            coordinator._discovered_contacts.pop(public_key, None)
+        connection.send_error(msg["id"], *outcome.error)
+        return
     # Unverified until heard from (an advert or a direct message).
     mstore, manual = await _manual_contacts(hass)
     manual[public_key] = time.time()
     await mstore.async_save(manual)
-    # Same path as the Add button from here.
-    ws_add_contact(hass, connection, {
-        "id": msg["id"], "type": "meshcore_chat/add_contact",
-        "public_key": public_key, "name": name,
-        **({"entry_id": msg["entry_id"]} if "entry_id" in msg else {}),
-    })
+    connection.send_result(msg["id"], outcome.result if outcome.result is not None else {"success": True})
 
 
 @websocket_api.websocket_command(

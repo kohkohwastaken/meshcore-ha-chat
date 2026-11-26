@@ -20,7 +20,7 @@ import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
 import '../components/contacts-dialog';
-import { loadUnverified } from '../utils/unverified';
+import { loadUnverified, watchUnverified } from '../utils/unverified';
 import '../components/confirm-dialog';
 import '../components/message-panel';
 import '../components/location-map';
@@ -765,7 +765,10 @@ export class ChatPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._refreshPreviews(0);
-    if (this.hass) void loadUnverified(this.hass, this.config?.entry_id);
+    if (this.hass) {
+      void loadUnverified(this.hass, this.config?.entry_id);
+      watchUnverified(this.hass, this.config?.entry_id);
+    }
     window.addEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
     window.addEventListener(DISPLAY_PREFS_EVENT, this._onLimitSettingChanged);
     window.addEventListener('pointerdown', this._onOutsidePointer, true);

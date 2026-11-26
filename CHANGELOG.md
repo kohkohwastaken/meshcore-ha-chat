@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.33
+
+- **Chat:** each message shows its **hash** (the MeshCore One id reactions use) after the hop count, for example `· #272jvvz7`. The message details show it too. For your own sent messages the exact send second isn't recorded, so the hash is an estimate and is marked `≈` / "(estimated)".
+- **Contacts:** the **Unverified** badge clears the moment an advert or direct message arrives from that contact. It no longer waits until the next time you open the panel.
+- **Contacts:** if adding a contact by hand fails, the stand-in entry is removed from the MeshCore integration's discovered list, and it isn't marked Unverified.
+
 ## 0.4.12-beta.32
 
 ### Reactions

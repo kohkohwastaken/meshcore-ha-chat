@@ -77,6 +77,27 @@ export function reactionHash(text: string, timestampSeconds: number): string {
 }
 
 /**
+ * A message's MeshCore One hash, the id reactions use. Exact when the
+ * sender's own timestamp is known (incoming messages); otherwise worked out
+ * from when it was logged, which may be a second or so off.
+ */
+const hashMemo = new Map<string, { hash: string; exact: boolean }>();
+
+export function messageHash(msg: ChatMessage): { hash: string; exact: boolean } | null {
+  if (!msg.text || msg.isSystem) return null;
+  const exact = typeof msg.senderTimestamp === 'number';
+  const ts = exact ? msg.senderTimestamp! : Math.floor(msg.timestamp.getTime() / 1000);
+  const key = `${ts}|${msg.text}`;
+  let out = hashMemo.get(key);
+  if (!out) {
+    out = { hash: reactionHash(msg.text, ts), exact };
+    if (hashMemo.size > 5000) hashMemo.clear();
+    hashMemo.set(key, out);
+  }
+  return out.exact === exact ? out : { hash: out.hash, exact };
+}
+
+/**
  * MeshCore Open's own 4-hex hash (reaction_helper.dart computeReactionHash):
  * the Dart VM string hash of `${timestamp}${senderName}${first 5 UTF-16
  * units of text}`, lower 16 bits. senderName is left out in 1:1 chats.

@@ -2,7 +2,7 @@ import { LitElement, html, css } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { ChatMessage, HomeAssistant } from '../types';
 import { formatTimestamp } from '../chat/message-parser';
-import { QUICK_REACTIONS, type ReactionChip } from '../utils/rich-messages';
+import { QUICK_REACTIONS, messageHash, type ReactionChip } from '../utils/rich-messages';
 import { canResend } from '../utils/delivery-label';
 import { formatFullDateTime } from '../utils/display-prefs';
 import { hasMapPath } from './path-map';
@@ -269,6 +269,11 @@ export class MeshCoreMessagePanel extends LitElement {
         <div class="preview">${m.text}</div>
         <div class="meta info">${m.isOutgoing ? 'Sent' : 'Received'} ${formatFullDateTime(m.timestamp)}</div>
         ${radio ? html`<div class="meta info">${radio}</div>` : ''}
+        ${(() => {
+          const h = messageHash(m);
+          return h ? html`<div class="meta info" title=${h.exact ? 'Used by reactions to point at this message' : 'The exact send time was not recorded, so this may be off'}>
+            Hash <span style="font-family:monospace">${h.hash}</span>${h.exact ? '' : ' (estimated)'}</div>` : '';
+        })()}
         ${delivery ? html`<div class="meta info">${delivery}</div>` : ''}
       </div>
       <div class="actions">

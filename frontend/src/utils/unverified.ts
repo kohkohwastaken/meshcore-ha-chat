@@ -41,3 +41,17 @@ export function onUnverifiedChange(fn: () => void): () => void {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
+
+let watching = false;
+
+/**
+ * Refresh the badges the moment Home Assistant verifies a contact (an advert
+ * or direct message arrived from it). Subscribes once for the whole panel.
+ */
+export function watchUnverified(hass: HomeAssistant, entryId?: string): void {
+  if (watching || !hass.connection?.subscribeEvents) return;
+  watching = true;
+  hass.connection
+    .subscribeEvents(() => { void loadUnverified(hass, entryId); }, 'meshcore_chat_unverified_changed')
+    .catch(() => { watching = false; });
+}
