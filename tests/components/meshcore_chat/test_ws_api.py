@@ -4063,3 +4063,36 @@ async def test_ws_get_contacts_paginated_reverse(hass: HomeAssistant, companion_
             "sort_by": "name", "reverse": True,
         })
     assert [c["adv_name"] for c in conn.results[0][1]["contacts"]] == ["bob", "alice"]
+
+
+async def test_ws_add_contact_manual_rejects_bad_key(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """A malformed key is refused before anything touches the radio."""
+    coordinator = MagicMock()
+    coordinator.api.connected = True
+    coordinator._contacts = {}
+    coordinator._discovered_contacts = {}
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_add_contact_manual, hass, conn, {
+            "id": 1, "public_key": "abc", "name": "Bob", "node_type": 1,
+        })
+    assert conn.errors and conn.errors[0][1] == "invalid_format"
+    assert coordinator._discovered_contacts == {}
+
+
+async def test_ws_add_contact_manual_registers_then_adds(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """A contact code becomes a discovered node, then goes through add_contact."""
+    coordinator = MagicMock()
+    coordinator.api.connected = True
+    coordinator._contacts = {}
+    coordinator._discovered_contacts = {}
+    key = "ab" * 32
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator), \
+            patch.object(ws_api, "ws_add_contact") as add:
+        conn = _Connection()
+        await _call_ws(ws_api.ws_add_contact_manual, hass, conn, {
+            "id": 1, "public_key": key.upper(), "name": "Bob", "node_type": 2,
+        })
+    assert coordinator._discovered_contacts[key]["adv_name"] == "Bob"
+    assert coordinator._discovered_contacts[key]["type"] == 2
+    assert add.call_args.args[2]["public_key"] == key

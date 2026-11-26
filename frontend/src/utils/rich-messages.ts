@@ -334,3 +334,39 @@ export function distanceMetres(aLat: number, aLon: number, bLat: number, bLon: n
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLon / 2) ** 2;
   return 2 * r * Math.asin(Math.sqrt(x));
 }
+
+// --- Adding a contact by hand ------------------------------------------------
+/** What a pasted contact turned out to be. */
+export type ManualContact =
+  | { kind: 'card'; publicKey: string; name: string; type: number }
+  | { kind: 'advert'; hex: string }
+  | { kind: 'key'; publicKey: string }
+  | { kind: 'invalid'; reason: string };
+
+/**
+ * Recognise a pasted contact: a chat code `<key:type:name>`, a
+ * `meshcore://contact/add?…` link, an advert `meshcore://<hex>`, or a bare
+ * 64-character public key (which still needs a name).
+ */
+export function parseManualContact(input: string): ManualContact {
+  const text = input.trim();
+  if (!text) return { kind: 'invalid', reason: '' };
+  const code = parseContact(text);
+  if (code) return { kind: 'card', publicKey: code.publicKey, name: code.name, type: code.type };
+  if (/^meshcore:\/\/contact\/add\b/i.test(text)) {
+    const query = text.split('?')[1] ?? '';
+    const p = new URLSearchParams(query);
+    const key = (p.get('public_key') ?? '').toLowerCase();
+    const type = Number(p.get('type') ?? 1);
+    if (!/^[0-9a-f]{64}$/.test(key)) return { kind: 'invalid', reason: "The link's public key isn't valid." };
+    return { kind: 'card', publicKey: key, name: (p.get('name') ?? '').trim(), type: type >= 1 && type <= 4 ? type : 1 };
+  }
+  const advert = /^meshcore:\/\/([0-9a-f]+)$/i.exec(text);
+  if (advert) {
+    const hex = advert[1].toLowerCase();
+    if (hex.length % 2 || hex.length < 196 || hex.length > 342) return { kind: 'invalid', reason: "That advert is the wrong length." };
+    return { kind: 'advert', hex };
+  }
+  if (/^[0-9a-f]{64}$/i.test(text)) return { kind: 'key', publicKey: text.toLowerCase() };
+  return { kind: 'invalid', reason: "That isn't a contact code, link, advert or public key." };
+}

@@ -995,3 +995,25 @@ export async function deleteMessage(
     return { success: false };
   }
 }
+
+/** Add a contact your radio hasn't heard: from a key + name, or a signed advert. */
+export async function addContactManual(
+  hass: HomeAssistant,
+  data: { publicKey?: string; name?: string; type?: number; advert?: string },
+  entryId?: string,
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const msg: Record<string, unknown> = { type: 'meshcore_chat/add_contact_manual' };
+    if (data.advert) msg.advert = data.advert;
+    else {
+      msg.public_key = data.publicKey;
+      msg.name = data.name;
+      msg.node_type = data.type ?? 1;
+    }
+    if (entryId) msg.entry_id = entryId;
+    return await hass.callWS<{ success: boolean }>(msg);
+  } catch (err) {
+    const e = err as { message?: string };
+    return { success: false, error: e?.message || 'No answer from Home Assistant' };
+  }
+}

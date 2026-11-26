@@ -119,3 +119,25 @@ describe('reaction styles', () => {
     expect(reactions.get('a')?.[0].emoji).toBe('👍');
   });
 });
+
+import { parseManualContact } from '../src/utils/rich-messages';
+
+describe('parseManualContact', () => {
+  const key = 'ab'.repeat(32);
+  it('reads a contact code', () => {
+    expect(parseManualContact(`<${key}:2:Hill Top>`)).toEqual({ kind: 'card', publicKey: key, name: 'Hill Top', type: 2 });
+  });
+  it('reads a contact link', () => {
+    expect(parseManualContact(`meshcore://contact/add?name=Bob%20B&public_key=${key.toUpperCase()}&type=1`))
+      .toEqual({ kind: 'card', publicKey: key, name: 'Bob B', type: 1 });
+  });
+  it('reads an advert', () => {
+    const hex = 'cd'.repeat(110);
+    expect(parseManualContact(`meshcore://${hex}`)).toEqual({ kind: 'advert', hex });
+  });
+  it('reads a bare key and rejects nonsense', () => {
+    expect(parseManualContact(key)).toEqual({ kind: 'key', publicKey: key });
+    expect(parseManualContact('hello').kind).toBe('invalid');
+    expect(parseManualContact('meshcore://abcd').kind).toBe('invalid');
+  });
+});

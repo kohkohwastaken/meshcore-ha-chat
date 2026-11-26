@@ -2,6 +2,16 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.30
+
+- **Contacts → ＋ Add manually:** add someone your radio hasn't heard by pasting any of:
+  - a **contact code** `<public key:type:name>`;
+  - a **link** `meshcore://contact/add?…`;
+  - a signed **advert** `meshcore://…` (the radio checks it and adds the contact, with its location);
+  - a bare **64-character public key** (you give the name and type).
+
+  The panel recognises what you pasted and shows what it found. Name and type can be edited before adding. Contacts added from a code, link or key go through the same path as **Add**, so the MeshCore integration creates their entity as usual.
+
 ## 0.4.12-beta.29
 
 - **Repeaters:** a **⟳ Refresh status** button on every repeater, always available. It logs in if needed and asks the repeater for its current stats. It replaces "Log in and refresh", which only showed when stats were blank.

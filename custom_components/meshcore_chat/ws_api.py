@@ -10,6 +10,7 @@ coordinator.
 from __future__ import annotations
 
 import asyncio
+import re
 import hashlib
 import inspect
 import json
@@ -438,6 +439,7 @@ def async_register_ws_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_import_identity)
     websocket_api.async_register_command(hass, ws_set_location_source)
     websocket_api.async_register_command(hass, ws_add_contact)
+    websocket_api.async_register_command(hass, ws_add_contact_manual)
     websocket_api.async_register_command(hass, ws_remove_contact)
     websocket_api.async_register_command(hass, ws_trace)
     websocket_api.async_register_command(hass, ws_get_blocked_contacts)
@@ -2589,6 +2591,105 @@ async def ws_set_location_source(hass, connection, msg):
 
 
 # ─── Contact Management ──────────────────────────────────────────────────
+
+
+_HEX64 = re.compile(r"^[0-9a-f]{64}$")
+_HEX_ADVERT = re.compile(r"^[0-9a-f]{196,342}$")
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/add_contact_manual",
+        vol.Optional("public_key"): str,
+        vol.Optional("name"): str,
+        vol.Optional("node_type", default=1): vol.All(int, vol.Range(min=1, max=4)),
+        vol.Optional("advert"): str,
+        vol.Optional("entry_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_add_contact_manual(hass, connection, msg):
+    """Add a contact your radio hasn't heard, from a pasted code.
+
+    ``advert``: a signed advert (the hex after ``meshcore://``), imported by
+    the radio itself. Otherwise ``public_key`` + ``name`` + ``node_type``
+    (from a contact code or link): registered as a discovered node, then added
+    through the same path as the Add button, so the integration makes its
+    contact entity as usual.
+    """
+    coordinator = _get_coordinator(hass, msg.get("entry_id"))
+    if not coordinator:
+        connection.send_error(msg["id"], "not_found", "Coordinator not found")
+        return
+    api = coordinator.api
+    if not api.connected:
+        connection.send_error(msg["id"], "not_connected", "Device not connected")
+        return
+
+    advert = (msg.get("advert") or "").strip().lower()
+    if advert:
+        if not _HEX_ADVERT.match(advert):
+            connection.send_error(msg["id"], "invalid_format", "That doesn't look like a MeshCore advert")
+            return
+        response = None
+        try:
+            if hass.services.has_service(MESHCORE_DOMAIN, "execute_command"):
+                response = await hass.services.async_call(
+                    MESHCORE_DOMAIN, "execute_command",
+                    {"command": f"import_contact {advert}", "entry_id": coordinator.config_entry.entry_id},
+                    blocking=True, return_response=True, context=connection.context(msg),
+                )
+            elif not _modern_parent(api) and api.mesh_core:
+                result = await api.mesh_core.commands.import_contact(bytes.fromhex(advert))
+                response = {"error": str(result.payload)} if _command_failure(result) else {}
+            else:
+                connection.send_error(msg["id"], "service_unavailable", "Parent command service is unavailable")
+                return
+        except Exception as ex:  # noqa: BLE001 - reported to the user
+            # A bodyless OK reaches us as HA's "invalid response" error.
+            if getattr(ex, "translation_key", None) not in ("service_reponse_invalid", "service_response_invalid"):
+                _ws_send_error_safe(connection, msg["id"], ex, handler="ws_add_contact_manual")
+                return
+            response = {}
+        if isinstance(response, dict) and any(k in response for k in ("reason", "error_code", "error")):
+            connection.send_error(msg["id"], "command_failed", f"The radio didn't accept the advert: {response}")
+            return
+        connection.send_result(msg["id"], {"success": True, "method": "advert"})
+        return
+
+    public_key = (msg.get("public_key") or "").strip().lower()
+    name = (msg.get("name") or "").strip()[:31]
+    if not _HEX64.match(public_key):
+        connection.send_error(msg["id"], "invalid_format", "A public key is 64 hex characters")
+        return
+    if not name:
+        connection.send_error(msg["id"], "invalid_format", "A name is needed")
+        return
+    if public_key[:12] in coordinator._contacts:
+        connection.send_error(msg["id"], "already_added", "That contact is already on your radio")
+        return
+    if public_key not in coordinator._discovered_contacts:
+        coordinator._discovered_contacts[public_key] = {
+            "public_key": public_key,
+            "adv_name": name,
+            "type": msg["node_type"],
+            "flags": 0,
+            "out_path_len": -1,
+            "out_path": "",
+            "out_path_hash_mode": 0,
+            "last_advert": 0,
+            "adv_lat": 0.0,
+            "adv_lon": 0.0,
+            "lastmod": 0,
+            "added_to_node": False,
+        }
+    # Same path as the Add button from here.
+    ws_add_contact(hass, connection, {
+        "id": msg["id"], "type": "meshcore_chat/add_contact",
+        "public_key": public_key, "name": name,
+        **({"entry_id": msg["entry_id"]} if "entry_id" in msg else {}),
+    })
 
 
 @websocket_api.websocket_command(

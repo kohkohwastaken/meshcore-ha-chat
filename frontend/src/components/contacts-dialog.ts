@@ -1,8 +1,8 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { Contact, DeviceConfig, HomeAssistant } from '../types';
-import { addContact, getContactsPaginated, getDeviceConfig, removeContact } from '../api';
-import { NODE_TYPE_NAMES, distanceMetres } from '../utils/rich-messages';
+import { addContact, addContactManual, getContactsPaginated, getDeviceConfig, removeContact } from '../api';
+import { NODE_TYPE_NAMES, distanceMetres, parseManualContact } from '../utils/rich-messages';
 import './share-contact-dialog';
 import type { ShareTarget } from './share-contact-dialog';
 
@@ -93,6 +93,13 @@ export class ContactsDialog extends LitElement {
   @state() private _confirmRemove = false;
   @state() private _me: DeviceConfig | null = null;
   @state() private _toast = '';
+  /** "Add manually" view: open, the pasted text, and the name/type to use. */
+  @state() private _manual = false;
+  @state() private _paste = '';
+  @state() private _mName = '';
+  @state() private _mType = 1;
+  @state() private _mBusy = false;
+  @state() private _mError = '';
   /** Contact shown in the Share window, if open. */
   @state() private _sharing: ShareTarget | null = null;
   private _toastTimer: ReturnType<typeof setTimeout> | null = null;
@@ -371,6 +378,38 @@ export class ContactsDialog extends LitElement {
       font-size: 13px;
       flex-wrap: wrap;
     }
+    .paste {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border-radius: 8px;
+      border: 1px solid var(--divider-color, #e0e0e0);
+      background: var(--secondary-background-color, rgba(127, 127, 127, 0.08));
+      color: var(--primary-text-color);
+      font-family: monospace;
+      font-size: 12px;
+      resize: vertical;
+    }
+    .m-field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-top: 10px;
+      font-size: 13px;
+      color: var(--secondary-text-color);
+    }
+    .m-ok {
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    .m-error {
+      margin-top: 8px;
+      font-size: 13px;
+      color: var(--error-color, #db4437);
+    }
+    code {
+      font-size: 12px;
+    }
     .toast {
       position: absolute;
       left: 50%;
@@ -402,7 +441,8 @@ export class ContactsDialog extends LitElement {
 
   private _onKey = (e: KeyboardEvent) => {
     if (e.key !== 'Escape' || this._sharing) return;
-    if (this._detail) this._detail = null;
+    if (this._manual) this._manual = false;
+    else if (this._detail) this._detail = null;
     else this._close();
   };
 
@@ -592,6 +632,97 @@ export class ContactsDialog extends LitElement {
       </div>`;
   }
 
+  private _openManual = () => {
+    this._manual = true;
+    this._paste = '';
+    this._mName = '';
+    this._mType = 1;
+    this._mError = '';
+  };
+
+  private _onPaste(e: Event) {
+    this._paste = (e.target as HTMLTextAreaElement).value;
+    this._mError = '';
+    const p = parseManualContact(this._paste);
+    if (p.kind === 'card') {
+      this._mName = p.name;
+      this._mType = p.type;
+    }
+  }
+
+  private async _addManual() {
+    if (!this.hass || this._mBusy) return;
+    const p = parseManualContact(this._paste);
+    if (p.kind === 'invalid') return;
+    const name = this._mName.trim();
+    if (p.kind !== 'advert' && !name) {
+      this._mError = 'Give the contact a name.';
+      return;
+    }
+    if (p.kind !== 'advert' && this.contacts.some((c) => (c.public_key || '').toLowerCase() === p.publicKey
+      || p.publicKey.startsWith((c.pubkey_prefix || '').toLowerCase()))) {
+      this._mError = "That contact is already on your radio.";
+      return;
+    }
+    this._mBusy = true;
+    const res = await addContactManual(this.hass, p.kind === 'advert'
+      ? { advert: p.hex }
+      : { publicKey: p.publicKey, name, type: this._mType }, this.entryId);
+    this._mBusy = false;
+    if (!res.success) {
+      this._mError = `Couldn't add it: ${res.error || 'the radio said no'}`;
+      return;
+    }
+    this.dispatchEvent(new CustomEvent('contacts-changed', { bubbles: true, composed: true }));
+    this._manual = false;
+    this._tab = 'contacts';
+    this._say(p.kind === 'advert' ? 'Contact added from its advert' : `${name} added to your contacts`);
+  }
+
+  private _renderManual() {
+    const p = parseManualContact(this._paste);
+    const needsName = p.kind === 'card' || p.kind === 'key';
+    return html`
+      <div class="detail">
+        <div class="head">
+          <button class="icon-btn" aria-label="Back" @click=${() => { this._manual = false; }}>‹</button>
+          <b>Add a contact</b>
+          <button class="icon-btn" aria-label="Close" @click=${this._close}>×</button>
+        </div>
+        <div class="detail-body">
+          <div class="sub" style="text-align:left;margin-bottom:8px">
+            Paste a contact code, a <code>meshcore://</code> link or advert, or a 64-character public key.
+            Your radio doesn't need to have heard them.
+          </div>
+          <textarea class="paste" rows="4" placeholder="<public key:1:Name>  or  meshcore://…"
+            .value=${this._paste} @input=${this._onPaste}></textarea>
+          ${p.kind === 'invalid' && p.reason ? html`<div class="m-error">${p.reason}</div>` : nothing}
+          ${p.kind === 'advert' ? html`<div class="m-ok">Signed advert. Your radio checks it and adds the contact, including its location if it has one.</div>` : nothing}
+          ${needsName ? html`
+            <div class="m-ok">Public key <span class="mono">${(p as { publicKey: string }).publicKey.substring(0, 12)}…</span></div>
+            <label class="m-field">Name
+              <input .value=${this._mName} maxlength="31"
+                @input=${(e: Event) => { this._mName = (e.target as HTMLInputElement).value; }} />
+            </label>
+            <label class="m-field">Type
+              <select .value=${String(this._mType)}
+                @change=${(e: Event) => { this._mType = Number((e.target as HTMLSelectElement).value); }}>
+                <option value="1">Companion</option>
+                <option value="2">Repeater</option>
+                <option value="3">Room server</option>
+                <option value="4">Sensor</option>
+              </select>
+            </label>
+            <div class="sub" style="text-align:left">Without an advert there's no location or route yet. Those fill in once your radio hears from them.</div>` : nothing}
+          ${this._mError ? html`<div class="m-error">${this._mError}</div>` : nothing}
+          <button class="btn primary" style="width:100%;margin-top:14px"
+            ?disabled=${this._mBusy || p.kind === 'invalid'} @click=${this._addManual}>
+            ${this._mBusy ? 'Adding…' : 'Add to contacts'}
+          </button>
+        </div>
+      </div>`;
+  }
+
   private _heardList(): Contact[] {
     return matchContacts(this._heard, '').filter((c) => !this._isMine(c));
   }
@@ -680,6 +811,7 @@ export class ContactsDialog extends LitElement {
           @click=${(e: Event) => e.stopPropagation()}>
           <div class="head">
             <b>Contacts</b>
+            <button class="btn" @click=${this._openManual}>＋ Add manually</button>
             <button class="icon-btn" aria-label="Close" @click=${this._close}>×</button>
           </div>
           <div class="me">
@@ -712,6 +844,7 @@ export class ContactsDialog extends LitElement {
           </div>
           <div class="body" @scroll=${this._onScroll}>${this._renderList()}</div>
           ${this._detail ? this._renderDetail(this._detail) : nothing}
+          ${this._manual ? this._renderManual() : nothing}
           ${this._toast ? html`<div class="toast" role="status">${this._toast}</div>` : nothing}
           ${this._sharing ? html`<meshcore-share-contact-dialog
             .hass=${this.hass} .entryId=${this.entryId} .target=${this._sharing}
