@@ -2,6 +2,29 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.32
+
+### Reactions
+- Reactions are always sent in **MeshCore One** format, which the MeshCore app developers have agreed to use until MeshCore supports reactions itself. The MeshCore Open and Plain sending options are gone. Settings → Reactions links to the [MeshCore One reactions guide](https://github.com/Avi0n/MeshCoreOne/blob/main/docs/Reactions.md). Reactions in other formats are still read.
+- A reaction that arrives **before its message** (mesh routes differ) now attaches once the message turns up, instead of being lost. With the 😊 toggle on, it shows as "Name reacted 👍 · message not received yet" until then. New setting: **Show reactions to messages that haven't arrived**.
+- New setting for channel messages that are just **@[Name] + one emoji**: Show as a message (default), Treat as a reaction, or Both.
+- Quotes of reactions are worked out once and remembered, so busy chats scroll smoothly.
+
+### Replies
+- A reply only shows a quote when the guess can't really be wrong: exactly one message from that person among the previous 10, sent within 30 minutes. Otherwise there's no quote, as wadamesh does. Your own replies still always quote the exact message you picked.
+
+### Contacts
+- Contacts added from a code, link or key are marked **Unverified**, in Contacts, the chat list and the Nodes list. The mark clears when an advert or a direct message arrives from that key, because both prove the key's owner. Contacts added from an advert are trusted straight away.
+- **Sensors** appear as their own group in Contacts and are counted on the Discovered tab (no Message button).
+- "Recently heard" and "Longest ago" sort by each node's last advert on both tabs, and on the Nodes tab. Advert times far in the future (a firmware quirk) count as unknown and sort last.
+
+### Chat list
+- The Direct messages section shows **Loading…** until conversations have loaded. If loading fails, it says so, with **Retry** and **Show all contacts**, instead of an empty list. A brand-new radio with no conversations still shows "No conversations yet".
+
+### Other
+- The "Delete this reaction?" and "Couldn't delete" pop-ups use the panel's own dialogs instead of the browser's.
+- Nodes map: the selected pin's ring is re-applied after the map moves or zooms, instead of every second.
+
 ## 0.4.12-beta.31
 
 - **Chat:** removed **Contacts** from the ⋯ menu in direct messages.

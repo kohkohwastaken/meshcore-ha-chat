@@ -4096,3 +4096,62 @@ async def test_ws_add_contact_manual_registers_then_adds(hass: HomeAssistant, co
     assert coordinator._discovered_contacts[key]["adv_name"] == "Bob"
     assert coordinator._discovered_contacts[key]["type"] == 2
     assert add.call_args.args[2]["public_key"] == key
+
+
+async def test_ws_get_contacts_paginated_last_heard_ignores_future_adverts(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """Adverts stamped far in the future sort as unknown (last), both ways."""
+    import time as _time
+    now = int(_time.time())
+    contacts = [
+        {"adv_name": "future", "pubkey_prefix": "ff", "added_to_node": False, "last_advert": now + 10 * 365 * 86400},
+        {"adv_name": "old", "pubkey_prefix": "aa", "added_to_node": False, "last_advert": now - 3600},
+        {"adv_name": "new", "pubkey_prefix": "bb", "added_to_node": False, "last_advert": now - 60},
+    ]
+    for reverse, expected in ((False, ["new", "old", "future"]), (True, ["old", "new", "future"])):
+        with patch.object(ws_api, "_get_contacts_via_service", AsyncMock(return_value=[dict(c) for c in contacts])):
+            conn = _Connection()
+            await _call_ws(ws_api.ws_get_contacts_paginated, hass, conn, {
+                "id": 1, "category": "discovered", "limit": 50, "offset": 0,
+                "sort_by": "last_heard", "reverse": reverse,
+            })
+        assert [c["adv_name"] for c in conn.results[0][1]["contacts"]] == expected
+
+
+async def test_ws_get_unverified_contacts_drops_heard_ones(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """A manual contact stays unverified until an advert or DM is heard after it was added."""
+    import time as _time
+    added = _time.time() - 600
+    heard_key = "aa" * 32
+    quiet_key = "bb" * 32
+    hass.data.setdefault(DOMAIN, {})
+    _store, manual = await ws_api._manual_contacts(hass)
+    manual.update({heard_key: added, quiet_key: added})
+    coordinator = MagicMock()
+    coordinator._contacts = {heard_key[:12]: {"last_advert": int(added) + 60}, quiet_key[:12]: {"last_advert": int(added) - 60}}
+    store = companion_entry.runtime_data.store
+    store.get_message_index = MagicMock(return_value={})
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_get_unverified_contacts, hass, conn, {"id": 1})
+    assert list(conn.results[0][1]["unverified"]) == [quiet_key]
+    assert heard_key not in manual
+
+
+async def test_ws_get_unverified_contacts_dm_verifies(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """A direct message received after adding also verifies the contact."""
+    import time as _time
+    added = _time.time() - 600
+    key = "cc" * 32
+    hass.data.setdefault(DOMAIN, {})
+    _store, manual = await ws_api._manual_contacts(hass)
+    manual[key] = added
+    coordinator = MagicMock()
+    coordinator._contacts = {}
+    store = companion_entry.runtime_data.store
+    eid = f"binary_sensor.meshcore_abc123_{key[:6]}_messages"
+    store.get_message_index = MagicMock(return_value={eid: {}})
+    store._load_for_search = AsyncMock(return_value=[{"outgoing": False, "timestamp": _time.time() - 60}])
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_get_unverified_contacts, hass, conn, {"id": 1})
+    assert conn.results[0][1]["unverified"] == {}

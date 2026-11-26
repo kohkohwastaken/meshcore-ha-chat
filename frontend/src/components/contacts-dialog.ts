@@ -4,16 +4,19 @@ import type { Contact, DeviceConfig, HomeAssistant } from '../types';
 import { addContact, addContactManual, getContactsPaginated, getDeviceConfig, removeContact } from '../api';
 import { NODE_TYPE_NAMES, distanceMetres, parseManualContact } from '../utils/rich-messages';
 import './share-contact-dialog';
+import { UNVERIFIED_EVENT, loadUnverified, unverifiedSince } from '../utils/unverified';
 import type { ShareTarget } from './share-contact-dialog';
 
-/** Contact types you can hold a conversation with (not sensors). */
+/** Contact types listed here: companions, repeaters, room servers and sensors. */
+const LISTED = new Set([1, 2, 3, 4]);
+/** Ones you can hold a conversation with (not sensors). */
 const CHATTABLE = new Set([1, 2, 3]);
 
-/** Pure filter used by the dialog: name or key prefix match, chattable types only. */
+/** Pure filter used by the dialog: name or key prefix match, known node types. */
 export function matchContacts(list: Contact[], query: string): Contact[] {
   const q = query.trim().toLowerCase();
   return list
-    .filter((c) => CHATTABLE.has(c.type))
+    .filter((c) => LISTED.has(c.type))
     .filter((c) => !q
       || (c.adv_name || '').toLowerCase().includes(q)
       || (c.pubkey_prefix || '').toLowerCase().startsWith(q));
@@ -21,7 +24,7 @@ export function matchContacts(list: Contact[], query: string): Contact[] {
 
 /** Contacts grouped for display: companions, then room servers, then repeaters. */
 export function groupContacts(list: Contact[]): Array<{ label: string; items: Contact[] }> {
-  const groups: Array<[number, string]> = [[1, 'Companions'], [3, 'Room servers'], [2, 'Repeaters']];
+  const groups: Array<[number, string]> = [[1, 'Companions'], [3, 'Room servers'], [2, 'Repeaters'], [4, 'Sensors']];
   return groups
     .map(([type, label]) => ({ label, items: list.filter((c) => c.type === type) }))
     .filter((g) => g.items.length > 0);
@@ -60,9 +63,20 @@ type SortOrder = 'az' | 'za' | 'recent' | 'oldest';
 export function sortContacts(list: Contact[], order: SortOrder): Contact[] {
   const byName = (a: Contact, b: Contact) =>
     (a.adv_name || '').trim().toLowerCase().localeCompare((b.adv_name || '').trim().toLowerCase());
-  const byHeard = (a: Contact, b: Contact) => (b.last_advert || 0) - (a.last_advert || 0);
-  const sorted = list.slice().sort(order === 'az' || order === 'za' ? byName : byHeard);
-  return order === 'za' || order === 'oldest' ? sorted.reverse() : sorted;
+  if (order === 'az' || order === 'za') {
+    const sorted = list.slice().sort(byName);
+    return order === 'za' ? sorted.reverse() : sorted;
+  }
+  // Last advert, newest or oldest first. Times more than a day ahead (some
+  // firmware stamps adverts decades out) count as unknown and go last.
+  const horizon = Date.now() / 1000 + 86400;
+  const heard = (c: Contact) => {
+    const t = c.last_advert || 0;
+    return t > 0 && t <= horizon ? t : 0;
+  };
+  const known = list.filter((c) => heard(c) > 0)
+    .sort((a, b) => (order === 'recent' ? heard(b) - heard(a) : heard(a) - heard(b)));
+  return [...known, ...list.filter((c) => heard(c) === 0)];
 }
 
 /** Discovered nodes fetched per page as the list scrolls. */
@@ -410,6 +424,27 @@ export class ContactsDialog extends LitElement {
     code {
       font-size: 12px;
     }
+    .unv {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 0 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 16px;
+      vertical-align: middle;
+      color: var(--warning-color, #ff9800);
+      border: 1px solid var(--warning-color, #ff9800);
+    }
+    .unv-note {
+      font-size: 12px;
+      line-height: 1.45;
+      color: var(--warning-color, #ff9800);
+      background: rgba(255, 152, 0, 0.1);
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-bottom: 8px;
+    }
     .toast {
       position: absolute;
       left: 50%;
@@ -425,8 +460,12 @@ export class ContactsDialog extends LitElement {
     }
   `;
 
+  private _onUnverified = () => this.requestUpdate();
+
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener(UNVERIFIED_EVENT, this._onUnverified);
+    if (this.hass) void loadUnverified(this.hass, this.entryId);
     window.addEventListener('keydown', this._onKey);
     void this._loadMe();
     void this._loadHeard();
@@ -434,6 +473,7 @@ export class ContactsDialog extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener(UNVERIFIED_EVENT, this._onUnverified);
     window.removeEventListener('keydown', this._onKey);
     if (this._searchTimer) clearTimeout(this._searchTimer);
     if (this._toastTimer) clearTimeout(this._toastTimer);
@@ -532,6 +572,12 @@ export class ContactsDialog extends LitElement {
     ].filter(Boolean).join(' · ');
   }
 
+  private _badge(c: Contact) {
+    return this._isMine(c) && unverifiedSince(c.public_key || c.pubkey_prefix) !== null
+      ? html`<span class="unv" title="Added manually and not heard from yet">Unverified</span>`
+      : nothing;
+  }
+
   private _avatar(c: Contact, big = false) {
     const infra = c.type === 2 || c.type === 3;
     const initials = (c.adv_name || '').replace(/[^\p{L}\p{N}]/gu, '').substring(0, 2).toUpperCase()
@@ -610,11 +656,11 @@ export class ContactsDialog extends LitElement {
       <div class="row" @click=${() => this._open(c)}>
         ${this._avatar(c)}
         <span class="txt">
-          <div class="name">${c.adv_name || c.pubkey_prefix}${hasLocation(c) ? html` <span title="Shared a location">📍</span>` : nothing}</div>
+          <div class="name">${c.adv_name || c.pubkey_prefix}${hasLocation(c) ? html` <span title="Shared a location">📍</span>` : nothing}${this._badge(c)}</div>
           <div class="meta">${this._meta(c)}</div>
         </span>
-        <button class="round" title="Message" aria-label="Message ${c.adv_name}"
-          @click=${(e: Event) => { e.stopPropagation(); this._message(c); }}>💬</button>
+        ${CHATTABLE.has(c.type) ? html`<button class="round" title="Message" aria-label="Message ${c.adv_name}"
+          @click=${(e: Event) => { e.stopPropagation(); this._message(c); }}>💬</button>` : nothing}
       </div>`;
   }
 
@@ -624,7 +670,7 @@ export class ContactsDialog extends LitElement {
       <div class="row" @click=${() => this._open(c)}>
         ${this._avatar(c)}
         <span class="txt">
-          <div class="name">${c.adv_name || c.pubkey_prefix}${hasLocation(c) ? html` <span title="Shared a location">📍</span>` : nothing}</div>
+          <div class="name">${c.adv_name || c.pubkey_prefix}${hasLocation(c) ? html` <span title="Shared a location">📍</span>` : nothing}${this._badge(c)}</div>
           <div class="meta">${this._meta(c)}</div>
         </span>
         <button class="btn primary" ?disabled=${busy}
@@ -674,6 +720,7 @@ export class ContactsDialog extends LitElement {
       return;
     }
     this.dispatchEvent(new CustomEvent('contacts-changed', { bubbles: true, composed: true }));
+    if (this.hass) void loadUnverified(this.hass, this.entryId);
     this._manual = false;
     this._tab = 'contacts';
     this._say(p.kind === 'advert' ? 'Contact added from its advert' : `${name} added to your contacts`);
@@ -774,17 +821,21 @@ export class ContactsDialog extends LitElement {
         </div>
         <div class="detail-body">
           ${this._avatar(c, true)}
-          <div class="title">${c.adv_name || c.pubkey_prefix}</div>
+          <div class="title">${c.adv_name || c.pubkey_prefix}${this._badge(c)}</div>
           <div class="sub">${NODE_TYPE_NAMES[c.type] ?? 'Node'}</div>
           <div class="acts">
             ${mine
-              ? html`<button class="btn primary" @click=${() => this._message(c)}>💬 Message</button>`
+              ? (CHATTABLE.has(c.type) ? html`<button class="btn primary" @click=${() => this._message(c)}>💬 Message</button>` : nothing)
               : html`<button class="btn primary" ?disabled=${busy} @click=${() => this._add(c)}>${busy ? 'Adding…' : '＋ Add to contacts'}</button>`}
             <button class="btn" ?disabled=${!hasLocation(c)} title=${hasLocation(c) ? '' : "This node hasn't shared a location"}
               @click=${() => this._nodeAction(c, 'show-on-map')}>🗺 Show on map</button>
             <button class="btn" @click=${() => this._nodeAction(c, 'trace')}>↯ Trace route</button>
             <button class="btn" @click=${() => this._share(c)}>⧉ Share</button>
           </div>
+          ${mine && unverifiedSince(c.public_key || c.pubkey_prefix) !== null ? html`<div class="unv-note">
+            Added manually on ${new Date(unverifiedSince(c.public_key || c.pubkey_prefix)! * 1000).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })}.
+            Not yet heard from this key, so its name and identity aren't confirmed. This clears when an advert or a direct message arrives from it.
+          </div>` : nothing}
           <div class="kv"><span>Last heard</span><span>${c.last_advert ? ago(c.last_advert) : 'Not yet'}</span></div>
           <div class="kv"><span>Route</span><span>${this._route(c)}</span></div>
           <div class="kv"><span>Distance</span><span>${km !== null ? `${km.toFixed(1)} km` : 'No location shared'}</span></div>

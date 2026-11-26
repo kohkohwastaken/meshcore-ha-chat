@@ -1,3 +1,4 @@
+import { parseReaction } from './rich-messages';
 /**
  * Which message a reply answers. MeshCore only sends "@[Name] text" over the
  * air, so the link to the original message is kept here, in this browser.
@@ -15,7 +16,11 @@ export interface QuotedMessage {
   id?: string;
 }
 
-const REPLY_RE = /^@\[([^\]]+)\]\s?/;
+const REPLY_RE = /^@\[([^\]]+)\]\s+\S/;
+/** Messages before a reply that are searched for the one it answers. */
+const QUOTE_LOOKBACK = 10;
+/** And how much older than the reply that message may be. */
+const QUOTE_MAX_AGE_MS = 30 * 60 * 1000;
 
 type Links = Record<string, { sender: string; text: string }>;
 
@@ -55,6 +60,14 @@ export function findQuoted(msg: ChatMessage, conversation: string, messages: Cha
     const hit = [...before].reverse().find((x) => x.sender === saved.sender && x.text === saved.text);
     return { sender: saved.sender, text: saved.text, id: hit?.id };
   }
-  const guess = [...before].reverse().find((x) => x.sender === name);
-  return guess ? { sender: guess.sender, text: guess.text, id: guess.id } : null;
+  // Replies don't say which message they answer, so only quote when the guess
+  // can't really be wrong: exactly one message from that person among the last
+  // few, and recent (as wadamesh does).
+  // Reactions are hidden from the chat, so they don't count as messages here.
+  const recent = before.filter((x) => !parseReaction(x.text)).slice(-QUOTE_LOOKBACK);
+  const fromThem = recent.filter((x) => x.sender === name);
+  if (fromThem.length !== 1) return null;
+  const guess = fromThem[0];
+  if (msg.timestamp.getTime() - guess.timestamp.getTime() > QUOTE_MAX_AGE_MS) return null;
+  return { sender: guess.sender, text: guess.text, id: guess.id };
 }

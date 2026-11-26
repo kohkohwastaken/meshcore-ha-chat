@@ -149,21 +149,25 @@ export class NodesMap extends LitElement {
     }
     if (first || changed.has('_groups')) map.clusterMarkers = this._groups;
     if (first || changed.has('nodes')) this._drawNodes(map);
-    if (changed.has('selected')) {
-      this._markSelected();
-      // Markers can be redrawn as the map moves or groups change; keep the
-      // highlight on while something is selected.
-      if (this._selTimer) clearInterval(this._selTimer);
-      this._selTimer = this.selected ? setInterval(() => this._markSelected(), 1000) : null;
-    }
+    if (changed.has('selected')) this._markSelected();
   }
 
-  private _selTimer: ReturnType<typeof setInterval> | null = null;
+  private _afterMoveTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * The map can redraw its markers as it pans and zooms (groups split and
+   * merge), which drops the selected ring; put it back once movement stops.
+   */
+  private _onMapMoved = () => {
+    if (!this.selected) return;
+    if (this._afterMoveTimer) clearTimeout(this._afterMoveTimer);
+    this._afterMoveTimer = setTimeout(() => this._markSelected(), 400);
+  };
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    if (this._selTimer) clearInterval(this._selTimer);
-    this._selTimer = null;
+    if (this._afterMoveTimer) clearTimeout(this._afterMoveTimer);
+    this._afterMoveTimer = null;
   }
 
   /** The selected node's marker: bigger, with a white ring, on top. */
@@ -275,7 +279,8 @@ export class NodesMap extends LitElement {
     if (this._available === null) return html`<div class="wrap"></div>`;
     if (!this._available) return html`<div class="wrap"><div class="note">${NO_MAP_NOTE}</div></div>`;
     return html`
-      <div class="wrap" @hass-more-info=${this._onMoreInfo}>
+      <div class="wrap" @hass-more-info=${this._onMoreInfo}
+        @pointerup=${this._onMapMoved} @wheel=${this._onMapMoved} @touchend=${this._onMapMoved}>
         <ha-map></ha-map>
         <div class="controls">
           <button aria-label="Show all" title="Show all" @click=${() => this._fit()}>⤢</button>

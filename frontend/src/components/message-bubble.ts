@@ -445,7 +445,6 @@ export class MessageBubble extends LitElement {
           this.dispatchEvent(new CustomEvent('resend-message', { detail: { text: msg.activityText }, bubbles: true, composed: true }));
         }}>Resend</button> · <button class="activity-retry" @click=${(e: Event) => {
           e.stopPropagation();
-          if (!confirm('Delete this reaction from Home Assistant?')) return;
           this.dispatchEvent(new CustomEvent('delete-message', { detail: { id: msg.id.replace(/^react_/, '') }, bubbles: true, composed: true }));
         }}>Delete</button>` : ''}
       </div>`;

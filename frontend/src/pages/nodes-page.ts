@@ -1,5 +1,6 @@
 import { NODE_TYPE_NAMES } from '../utils/rich-messages';
 import { TYPE_COLORS } from '../utils/ha-map';
+import { UNVERIFIED_EVENT, loadUnverified, unverifiedSince } from '../utils/unverified';
 import { DISPLAY_PREFS_EVENT, heardRecently, heardWithin, setHeardWithin, type HeardWithin } from '../utils/display-prefs';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
@@ -454,6 +455,19 @@ export class NodesPage extends LitElement {
       white-space: nowrap;
     }
 
+    .unv {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 0 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 16px;
+      vertical-align: middle;
+      color: var(--warning-color, #ff9800);
+      border: 1px solid var(--warning-color, #ff9800);
+    }
+
     .map-row-meta {
       font-size: 12px;
       color: var(--secondary-text-color);
@@ -637,8 +651,12 @@ export class NodesPage extends LitElement {
     :host([narrow]) .nodes-grid { grid-template-columns: 1fr; }
   `;
 
+  private _onUnverified = () => this.requestUpdate();
+
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener(UNVERIFIED_EVENT, this._onUnverified);
+    if (this.hass) void loadUnverified(this.hass, this.config?.entry_id);
     window.addEventListener(DISPLAY_PREFS_EVENT, this._onPrefs);
     // Use matchMedia for reliable viewport-based narrow detection
     // 870px matches HA's own narrow threshold (companion app WebViews report wider CSS viewports)
@@ -651,6 +669,7 @@ export class NodesPage extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    window.removeEventListener(UNVERIFIED_EVENT, this._onUnverified);
     window.removeEventListener(DISPLAY_PREFS_EVENT, this._onPrefs);
     this._mediaQuery?.removeEventListener('change', this._onMediaChange);
     if (this._searchTimer) {
@@ -973,7 +992,7 @@ export class NodesPage extends LitElement {
               @click=${() => this._focusOnMap(c)}>
               <span class="map-dot" style="background:${TYPE_COLORS[c.type] ?? '#9e9e9e'}"></span>
               <span class="map-row-text">
-                <span class="map-row-name">${c.added_to_node ? '★ ' : ''}${c.adv_name || c.pubkey_prefix}</span>
+                <span class="map-row-name">${c.added_to_node ? '★ ' : ''}${c.adv_name || c.pubkey_prefix}${c.added_to_node && unverifiedSince(c.public_key || c.pubkey_prefix) !== null ? html`<span class="unv">Unverified</span>` : nothing}</span>
                 <span class="map-row-meta">${NODE_TYPE_NAMES[c.type] ?? 'Node'}${c.last_advert ? ` · ${agoShort(c.last_advert * 1000)}` : ''}${hasPosition(c) ? '' : ' · no location'}</span>
               </span>
             </button>`)}

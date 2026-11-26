@@ -10,8 +10,12 @@ describe('findQuoted', () => {
   beforeEach(() => localStorage.clear());
   const msgs = [m('a', 'Dave', 'first', 1), m('b', 'Dave', 'Test', 2), m('c', 'Me', '@[Dave] hi', 3)];
   it('ignores non-replies', () => expect(findQuoted(msgs[1], 'x', msgs)).toBeNull());
-  it('guesses the newest earlier message from the sender', () =>
-    expect(findQuoted(msgs[2], 'x', msgs)?.id).toBe('b'));
+  it('does not guess when the sender has two recent messages', () =>
+    expect(findQuoted(msgs[2], 'x', msgs)).toBeNull());
+  it('quotes the only recent message from the sender', () => {
+    const one = msgs.filter((x) => x.id !== 'a');
+    expect(findQuoted(one[one.length - 1], 'y', one)?.id).toBe('b');
+  });
   it('prefers the saved link', () => {
     rememberReply('x', '@[Dave] hi', { sender: 'Dave', text: 'first' });
     expect(findQuoted(msgs[2], 'x', msgs)?.id).toBe('a');

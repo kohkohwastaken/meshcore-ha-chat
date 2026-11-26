@@ -962,13 +962,14 @@ export interface ConversationPreview {
 /** Last message of every stored conversation, keyed by entity_id. */
 export async function getConversationPreviews(
   hass: HomeAssistant, entryId?: string,
-): Promise<Record<string, ConversationPreview>> {
+): Promise<Record<string, ConversationPreview> | null> {
+  // null means the request failed; {} means there are no conversations yet.
   try {
     const msg: Record<string, unknown> = { type: 'meshcore_chat/get_conversation_previews' };
     if (entryId) msg.entry_id = entryId;
     const result = await hass.callWS<{ previews?: Record<string, ConversationPreview> }>(msg);
     return result.previews || {};
-  } catch { return {}; }
+  } catch { return null; }
 }
 
 /** Delete a conversation's stored history. The contact or channel itself stays. */

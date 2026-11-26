@@ -30,6 +30,9 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 
 from . import MeshCoreChatRuntimeData, _sync_upstream_repair_issue
+from homeassistant.helpers.storage import Store
+from homeassistant.util import dt as dt_util
+
 from .const import (
     CONF_NAME_UPSTREAM,
     DOMAIN,
@@ -440,6 +443,7 @@ def async_register_ws_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_set_location_source)
     websocket_api.async_register_command(hass, ws_add_contact)
     websocket_api.async_register_command(hass, ws_add_contact_manual)
+    websocket_api.async_register_command(hass, ws_get_unverified_contacts)
     websocket_api.async_register_command(hass, ws_remove_contact)
     websocket_api.async_register_command(hass, ws_trace)
     websocket_api.async_register_command(hass, ws_get_blocked_contacts)
@@ -616,13 +620,26 @@ async def ws_get_contacts_paginated(hass, connection, msg):
     elif sort_by == "prefix":
         filtered.sort(key=lambda c: c.get("pubkey_prefix") or "")
     else:
-        # "last_heard" default — keyed on `lastmod` (not `last_advert`) so
-        # firmware-emitted bogus year-2081+ values can't pin nodes to top.
-        filtered.sort(key=lambda c: c.get("lastmod") or 0, reverse=True)
+        # "last_heard" default — keyed on the node's own last advert, so the
+        # Contacts and Discovered tabs agree. Some firmware stamps adverts
+        # decades ahead (year 2081+); anything more than a day in the future
+        # counts as unknown and sorts last instead of pinning to the top.
+        horizon = time.time() + 86400
 
-    # Flip the chosen order (Z–A, or longest ago first).
+        def heard(c):
+            t = c.get("last_advert") or 0
+            return t if 0 < t <= horizon else 0
+
+        filtered.sort(key=heard, reverse=True)
+
+    # Flip the chosen order (Z–A, or longest ago first). Nodes with no known
+    # last advert stay at the bottom either way.
     if msg.get("reverse"):
-        filtered.reverse()
+        if sort_by == "last_heard":
+            known = [c for c in filtered if heard(c)]
+            filtered = known[::-1] + [c for c in filtered if not heard(c)]
+        else:
+            filtered.reverse()
 
     total = len(filtered)
     page = filtered[offset : offset + limit]
@@ -2593,6 +2610,82 @@ async def ws_set_location_source(hass, connection, msg):
 # ─── Contact Management ──────────────────────────────────────────────────
 
 
+_MANUAL_STORE_KEY = "meshcore_chat.manual_contacts"
+
+
+async def _manual_contacts(hass) -> tuple[Store, dict]:
+    """Contacts added by hand and not yet heard from: {public_key: added_epoch}."""
+    data = hass.data.setdefault(DOMAIN, {})
+    store = data.get("_manual_store")
+    if store is None:
+        store = Store(hass, 1, _MANUAL_STORE_KEY)
+        data["_manual_store"] = store
+        data["_manual_contacts"] = await store.async_load() or {}
+    return store, data["_manual_contacts"]
+
+
+def _to_epoch(value) -> float:
+    """A stored message timestamp (ISO text or seconds) as epoch seconds; 0 if unknown."""
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value:
+        parsed = dt_util.parse_datetime(value)
+        if parsed is not None:
+            return dt_util.as_utc(parsed).timestamp()
+    return 0.0
+
+
+async def _verified_since(hass, coordinator, public_key: str, added: float) -> bool:
+    """Heard from this key since it was added: an advert, or a direct message.
+
+    Adverts are signed and direct messages only decrypt for the key's owner,
+    so either proves the contact really is that key. Channel messages don't.
+    """
+    contact = (getattr(coordinator, "_contacts", {}) or {}).get(public_key[:12]) or {}
+    advert = contact.get("last_advert") or 0
+    if added < advert <= time.time() + 86400:
+        return True
+    store = _get_store(hass, None)
+    if store is None:
+        return False
+    suffix = f"_{public_key[:6]}_messages"
+    for entity_id in list(store.get_message_index().keys()):
+        if not entity_id.endswith(suffix):
+            continue
+        for m in await store._load_for_search(entity_id):
+            if not m.get("outgoing") and _to_epoch(m.get("timestamp")) > added:
+                return True
+    return False
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/get_unverified_contacts",
+        vol.Optional("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_get_unverified_contacts(hass, connection, msg):
+    """Manually added contacts not yet heard from, with when they were added.
+
+    Each is checked on the way: one heard from since (advert or direct
+    message) is verified and dropped from the list for good.
+    """
+    store, manual = await _manual_contacts(hass)
+    coordinator = _get_coordinator(hass, msg.get("entry_id"))
+    still: dict[str, float] = {}
+    changed = False
+    for public_key, added in list(manual.items()):
+        if coordinator is not None and await _verified_since(hass, coordinator, public_key, float(added)):
+            manual.pop(public_key, None)
+            changed = True
+        else:
+            still[public_key] = float(added)
+    if changed:
+        await store.async_save(manual)
+    connection.send_result(msg["id"], {"unverified": still})
+
+
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _HEX_ADVERT = re.compile(r"^[0-9a-f]{196,342}$")
 
@@ -2684,6 +2777,10 @@ async def ws_add_contact_manual(hass, connection, msg):
             "lastmod": 0,
             "added_to_node": False,
         }
+    # Unverified until heard from (an advert or a direct message).
+    mstore, manual = await _manual_contacts(hass)
+    manual[public_key] = time.time()
+    await mstore.async_save(manual)
     # Same path as the Add button from here.
     ws_add_contact(hass, connection, {
         "id": msg["id"], "type": "meshcore_chat/add_contact",

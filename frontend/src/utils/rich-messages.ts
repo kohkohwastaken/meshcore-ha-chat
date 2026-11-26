@@ -147,28 +147,14 @@ function candidateTimes(m: ChatMessage): number[] {
   return out;
 }
 
-/** How reactions you send are written. */
-export type ReactionStyle = 'mc1' | 'open' | 'plain';
-
 /**
- * A reaction to `msg`, in the chosen style:
- * - mc1 (MeshCore One): "@[Name]👍\nhash" on channels, "👍\nhash" in DMs.
- *   hash = Crockford base32 of the first 5 bytes of SHA-256(text + sender time).
- * - open (MeshCore Open): "r:HASH:IDX". HASH = 16-bit hash of sender time,
- *   name (channels) and the first 5 characters; IDX = the emoji's place in
- *   Open's list. Emoji outside that list fall back to mc1.
- * - plain: "@[Name] 👍" on channels, just "👍" in DMs. No hash: apps put it
- *   on the person's latest message.
+ * A reaction to `msg` in MeshCore One's format, the community-agreed one
+ * (https://github.com/Avi0n/MeshCoreOne/blob/main/docs/Reactions.md):
+ * "@[Name]👍\nhash" on channels, "👍\nhash" in DMs, where hash is the
+ * Crockford base32 of the first 5 bytes of SHA-256(text + sender time).
  */
-export function formatReaction(emoji: string, msg: ChatMessage, isChannel: boolean, style: ReactionStyle = 'mc1'): string {
+export function formatReaction(emoji: string, msg: ChatMessage, isChannel: boolean): string {
   const ts = msg.senderTimestamp ?? Math.floor(msg.timestamp.getTime() / 1000);
-  if (style === 'plain') return isChannel ? `@[${msg.sender}] ${emoji}` : emoji;
-  if (style === 'open') {
-    const idx = OPEN_REACTION_EMOJIS.indexOf(emoji);
-    if (idx >= 0) {
-      return `r:${openReactionHash(ts, isChannel ? msg.sender : null, msg.text)}:${idx.toString(16).padStart(2, '0')}`;
-    }
-  }
   const hash = reactionHash(msg.text, ts);
   return isChannel ? `@[${msg.sender}]${emoji}\n${hash}` : `${emoji}\n${hash}`;
 }
@@ -221,7 +207,46 @@ export function findReactionTarget(reaction: ChatMessage, messages: ChatMessage[
  * whose hash they carry. Reactions that match nothing are dropped, as the
  * MeshCore apps do (the message may be older than what's loaded).
  */
-export function collectReactions(messages: ChatMessage[], isChannel = true, keepRaw = false): { visible: ChatMessage[]; reactions: Map<string, ReactionChip[]> } {
+/** How a channel message that is just "@[Name]" + one emoji is treated. */
+export type PlainReactionMode = 'message' | 'reaction' | 'both';
+
+export interface CollectOptions {
+  /** Keep reaction messages in the chat as sent (the header toggle). */
+  keepRaw?: boolean;
+  /** "@[Name] 👍" with no hash: a message (default), a reaction, or both. */
+  plainMode?: PlainReactionMode;
+  /** With keepRaw, show reactions whose message hasn't arrived (default on). */
+  showPending?: boolean;
+}
+
+/** "Dave reacted 👍 · message not received yet". */
+function pendingLine(m: ChatMessage, emoji: string): ChatMessage {
+  return {
+    ...m,
+    id: `pending_${m.id}`,
+    isSystem: true,
+    isOutgoing: true,
+    text: `${m.isOutgoing ? 'You' : m.sender} reacted ${emoji} · message not received yet`,
+    mentions: [],
+  };
+}
+
+/**
+ * Pull reactions out of the message list and attach them to the message
+ * whose hash they carry. A reaction can arrive before its message (mesh
+ * routes differ), so it is matched against every message, earlier ones
+ * first; one that matches nothing waits, and attaches once its message
+ * turns up (or shows as "not received yet" when reactions are shown).
+ */
+export function collectReactions(
+  messages: ChatMessage[],
+  isChannel = true,
+  options: boolean | CollectOptions = {},
+): { visible: ChatMessage[]; reactions: Map<string, ReactionChip[]> } {
+  const opts: CollectOptions = typeof options === 'boolean' ? { keepRaw: options } : options;
+  const keepRaw = !!opts.keepRaw;
+  const plainMode = opts.plainMode ?? 'message';
+  const showPending = opts.showPending ?? true;
   const visible: ChatMessage[] = [];
   const reactions = new Map<string, ReactionChip[]>();
   const mc1 = new Map<string, Set<string>>();
@@ -238,30 +263,50 @@ export function collectReactions(messages: ChatMessage[], isChannel = true, keep
     }
     return set;
   };
-  const seen = new Set<string>();
-  for (const m of messages) {
+  // What each message is: a reaction (and of what kind), or ordinary chat.
+  const parsed = messages.map((m) => {
     const r = m.isSystem ? null : parseReaction(m.text);
+    if (r && r.kind === 'plain' && plainMode === 'message') return null;
+    return r;
+  });
+  // Messages a reaction can point at: everything that isn't itself a reaction
+  // (plain ones stay messages in "both" mode). With reactions shown, a
+  // reaction to a reaction can land on that reaction's line too.
+  const targets = messages.filter((m, i) => !m.isSystem
+    && (keepRaw || !parsed[i] || (parsed[i]!.kind === 'plain' && plainMode === 'both')));
+  const seen = new Set<string>();
+  messages.forEach((m, i) => {
+    const r = parsed[i];
     if (!r) {
       visible.push(m);
-      continue;
+      return;
     }
+    const plainAsMessage = r.kind === 'plain' && plainMode === 'both';
+    if (plainAsMessage) visible.push(m);
+    const at = m.timestamp.getTime();
+    const earlierFirst = [
+      ...targets.filter((x) => x.id !== m.id && x.timestamp.getTime() <= at).reverse(),
+      ...targets.filter((x) => x.id !== m.id && x.timestamp.getTime() > at),
+    ];
     const target = r.kind === 'plain'
-      ? [...visible].reverse().find((x) => !x.isSystem && x.sender === r.target && !parseReaction(x.text))
-      : [...visible].reverse().find((x) =>
-        (!r.target || x.sender === r.target) && hashes(x, r.kind as 'mc1' | 'open').has(r.hash));
-    if (keepRaw) visible.push(m);
-    if (!target) continue;
+      ? earlierFirst.find((x) => x.sender === r.target && x.timestamp.getTime() <= at)
+      : earlierFirst.find((x) => (!r.target || x.sender === r.target) && hashes(x, r.kind as 'mc1' | 'open').has(r.hash));
+    if (!target) {
+      if (keepRaw && showPending && !plainAsMessage) visible.push(pendingLine(m, r.emoji));
+      return;
+    }
+    if (keepRaw && !plainAsMessage) visible.push(m);
     const sender = m.isOutgoing ? 'You' : m.sender;
     const dedup = `${target.id}|${sender}|${r.emoji}`;
     if (seen.has(dedup)) {
       // The same reaction again (a resend): your log line moves to the newest
       // copy, so it shows that copy's delivery state.
       if (m.isOutgoing && !keepRaw) {
-        const i = visible.findIndex((x) => x.activityTarget === target.id && x.activityText === m.text);
-        if (i >= 0) visible.splice(i, 1);
+        const j = visible.findIndex((x) => x.activityTarget === target.id && x.activityText === m.text);
+        if (j >= 0) visible.splice(j, 1);
         visible.push(logLine(m, r.emoji, target));
       }
-      continue;
+      return;
     }
     seen.add(dedup);
     const chips = reactions.get(target.id) ?? [];
@@ -272,8 +317,8 @@ export function collectReactions(messages: ChatMessage[], isChannel = true, keep
     } else chips.push({ emoji: r.emoji, senders: [sender], who: [{ sender, time: m.timestamp }] });
     reactions.set(target.id, chips);
     // Your own reactions also get a small line in the chat, where you sent them.
-    if (m.isOutgoing && !keepRaw) visible.push(logLine(m, r.emoji, target));
-  }
+    if (m.isOutgoing && !keepRaw && !plainAsMessage) visible.push(logLine(m, r.emoji, target));
+  });
   return { visible, reactions };
 }
 

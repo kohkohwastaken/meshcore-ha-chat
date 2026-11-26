@@ -4,6 +4,7 @@ import type { Contact, Channel } from '../types';
 import type { UnreadController } from '../chat/unread-controller';
 import type { ConversationPreview } from '../api';
 import { parseContact, parseLocation, parseReaction } from '../utils/rich-messages';
+import { UNVERIFIED_EVENT, unverifiedSince } from '../utils/unverified';
 // manage-dialog is loaded by chat-page
 
 type ChatFilter = 'all' | 'unread';
@@ -66,6 +67,10 @@ export class ConversationList extends LitElement {
   @property({ type: String }) nodePrefix: string | null = null;
   /** Last message per conversation entity_id (from the backend index). */
   @property({ attribute: false }) previews: Record<string, ConversationPreview> = {};
+  /** Whether the previews have loaded: empty DMs are only hidden once they have. */
+  @property({ type: String }) previewsState: 'loading' | 'ok' | 'error' = 'ok';
+  /** After a failed load: list every contact so a chat can still be opened. */
+  @state() private _showAllDms = false;
 
   @state() private _query = '';
   /** Collapsed sections, remembered in this browser. */
@@ -262,6 +267,19 @@ export class ConversationList extends LitElement {
       min-width: 0;
     }
 
+    .unv {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 0 6px;
+      border-radius: 8px;
+      font-size: 10px;
+      font-weight: 600;
+      line-height: 16px;
+      vertical-align: middle;
+      color: var(--warning-color, #ff9800);
+      border: 1px solid var(--warning-color, #ff9800);
+    }
+
     .conversation-age {
       flex-shrink: 0;
       font-size: 11px;
@@ -357,6 +375,15 @@ export class ConversationList extends LitElement {
       line-height: 1;
     }
 
+    .link-btn {
+      border: none;
+      background: none;
+      padding: 0;
+      color: var(--primary-color, #03a9f4);
+      font: inherit;
+      cursor: pointer;
+    }
+
     .section-empty {
       padding: 4px 14px 8px;
       font-size: 12px;
@@ -424,12 +451,26 @@ export class ConversationList extends LitElement {
     }
   `;
 
+  private _onUnverified = () => this.requestUpdate();
+
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener(UNVERIFIED_EVENT, this._onUnverified);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    window.removeEventListener(UNVERIFIED_EVENT, this._onUnverified);
+  }
+
   updated(changedProperties: Map<string, unknown>) {
     if (
       changedProperties.has('conversations') ||
       changedProperties.has('_activeFilter') ||
       changedProperties.has('_query') ||
-      changedProperties.has('previews')
+      changedProperties.has('previews') ||
+      changedProperties.has('previewsState') ||
+      changedProperties.has('_showAllDms')
     ) {
       this._updateFiltered();
     }
@@ -576,15 +617,34 @@ export class ConversationList extends LitElement {
         </div>
         ${collapsed
           ? ''
-          : items.length
-            ? items.map((c) => this._renderConversation(c, idx++))
-            : html`<div class="section-empty">${key === 'dms' ? 'No conversations yet. Tap Contacts to start one.' : 'None yet'}</div>`}
+          : html`
+            ${key === 'dms' ? this._dmStatus(items.length) : ''}
+            ${items.length
+              ? items.map((c) => this._renderConversation(c, idx++))
+              : key === 'dms' && this.previewsState !== 'ok' && !this._showAllDms
+                ? ''
+                : html`<div class="section-empty">${key === 'dms' ? 'No conversations yet. Tap Contacts to start one.' : 'None yet'}</div>`}`}
       `;
     };
     return html`
       ${section('channels', 'Channels', channels, 'Add a channel')}
       ${section('dms', 'Direct messages', dms, 'Contacts')}
     `;
+  }
+
+  /** Loading / failed line at the top of Direct messages. */
+  private _dmStatus(shown: number) {
+    if (this.previewsState === 'loading' && !this._showAllDms && shown === 0) {
+      return html`<div class="section-empty">Loading…</div>`;
+    }
+    if (this.previewsState === 'error') {
+      return html`<div class="section-empty">
+        Couldn't load conversations.
+        <button class="link-btn" @click=${() => this.dispatchEvent(new CustomEvent('retry-previews', { bubbles: true, composed: true }))}>Retry</button>
+        ${this._showAllDms ? '' : html`· <button class="link-btn" @click=${() => { this._showAllDms = true; }}>Show all contacts</button>`}
+      </div>`;
+    }
+    return '';
   }
 
   /** Same entity_id matching as the unread badges. */
@@ -651,7 +711,8 @@ export class ConversationList extends LitElement {
         <div class="conversation-avatar ${isContact ? (infra ? 'infra' : '') : 'channel'}">${avatar}</div>
         <div class="conversation-info">
           <div class="conversation-top">
-            <span class="conversation-name">${name}</span>
+            <span class="conversation-name">${name}${isContact && unverifiedSince((conv as Contact).public_key || (conv as Contact).pubkey_prefix) !== null
+              ? html`<span class="unv" title="Added manually and not heard from yet">Unverified</span>` : ''}</span>
             ${age ? html`<span class="conversation-age">${age}</span>` : ''}
           </div>
           <div class="conversation-detail">${detail}</div>
@@ -685,8 +746,9 @@ export class ConversationList extends LitElement {
       const unread = this._getUnreadCount(id);
       if (this._activeFilter === 'unread' && unread <= 0) return false;
       // Direct messages only appear once there's a conversation to show
-      // (searching still finds every contact).
-      if (isContact && !this._previewFor(conv) && unread <= 0 && this.activeId !== id && !q) return false;
+      // (searching, or "Show all contacts" after a failed load, finds every contact).
+      if (isContact && this.previewsState !== 'ok' && !this._showAllDms && !q && this.activeId !== id) return false;
+      if (isContact && this.previewsState === 'ok' && !this._previewFor(conv) && unread <= 0 && this.activeId !== id && !q) return false;
       return true;
     });
   }

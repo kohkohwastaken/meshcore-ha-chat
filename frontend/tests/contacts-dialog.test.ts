@@ -7,8 +7,8 @@ const c = (adv_name: string, pubkey_prefix: string, type: number) => ({ adv_name
 
 describe('matchContacts', () => {
   const list = [c('Dave', 'aa11', 1), c('Winterfield', 'bb22', 2), c('Sensor', 'cc33', 4)];
-  it('leaves out sensors', () => {
-    expect(matchContacts(list, '').map((x) => x.adv_name)).toEqual(['Dave', 'Winterfield']);
+  it('includes sensors', () => {
+    expect(matchContacts(list, '').map((x) => x.adv_name)).toEqual(['Dave', 'Winterfield', 'Sensor']);
   });
   it('matches by name or key prefix', () => {
     expect(matchContacts(list, 'win').map((x) => x.adv_name)).toEqual(['Winterfield']);
@@ -37,6 +37,11 @@ describe('sortContacts', () => {
   it('sorts by name both ways', () => {
     expect(names(sortContacts(list, 'az'))).toEqual(['Alice', 'bob', 'carl']);
     expect(names(sortContacts(list, 'za'))).toEqual(['carl', 'bob', 'Alice']);
+  });
+  it('puts adverts stamped far in the future last', () => {
+    const odd = [...list, { adv_name: 'future', last_advert: 4_000_000_000 } as Contact];
+    expect(names(sortContacts(odd, 'recent'))).toEqual(['Alice', 'carl', 'bob', 'future']);
+    expect(names(sortContacts(odd, 'oldest'))).toEqual(['bob', 'carl', 'Alice', 'future']);
   });
   it('sorts by last heard both ways', () => {
     expect(names(sortContacts(list, 'recent'))).toEqual(['Alice', 'carl', 'bob']);

@@ -4,29 +4,14 @@ import { setTrackableChannelLimit, trackableChannelLimit } from '../utils/messag
 import {
   clockFormat, dateFormat, formatClock, formatDate, setClockFormat, setDateFormat,
   setTimestampFormat, timestampFormat,
-  heardWithin, setHeardWithin, reactionStyle, setReactionStyle,
-  type ClockFormat, type DateFormat, type HeardWithin, type ReactionStylePref, type TimestampFormat,
+  heardWithin, setHeardWithin, plainReactionMode, setPlainReactionMode, showPendingReactions, setShowPendingReactions,
+  type ClockFormat, type DateFormat, type HeardWithin, type PlainReactionPref, type TimestampFormat,
 } from '../utils/display-prefs';
 
 /**
  * Settings tab: this panel's own preferences, saved per browser.
  * Nothing here talks to the radio (that lives on the My radio tab).
  */
-const REACTION_HELP: Record<ReactionStylePref, ReturnType<typeof html>> = {
-  mc1: html`
-    <b>Sends:</b> <code>@[Name]👍</code> + <code>hash</code> (channels), <code>👍</code> + <code>hash</code> (direct messages).<br>
-    <b>Hash:</b> SHA-256 of the message text plus the sender's timestamp; the first 5 bytes written as 8 base32 characters, e.g. <code>272jvvz7</code>.<br>
-    <b>Good for:</b> pinpointing the exact message. Understood by MeshCore One and MeshCore Open.`,
-  open: html`
-    <b>Sends:</b> <code>r:e779:00</code>, the shortest form on air.<br>
-    <b>Hash:</b> a 16-bit hash of the sender's timestamp, their name (channels) and the first 5 characters of the message, as 4 hex characters. The last part is the emoji's number in MeshCore Open's list of 184; emoji outside that list are sent the MeshCore One way.<br>
-    <b>Good for:</b> MeshCore Open users. Other apps may show it as raw text.`,
-  plain: html`
-    <b>Sends:</b> <code>@[Name] 👍</code> (channels) or just <code>👍</code> (direct messages).<br>
-    <b>Hash:</b> none. Apps put it on that person's latest message, which may not be the one you meant if they've sent more since.<br>
-    <b>Good for:</b> readable by every app, even ones that don't know about reactions.`,
-};
-
 @customElement('meshcore-preferences-page')
 export class PreferencesPage extends LitElement {
   @state() private _trackable = trackableChannelLimit();
@@ -34,7 +19,8 @@ export class PreferencesPage extends LitElement {
   @state() private _clock: ClockFormat = clockFormat();
   @state() private _date: DateFormat = dateFormat();
   @state() private _heard: HeardWithin = heardWithin();
-  @state() private _reaction: ReactionStylePref = reactionStyle();
+  @state() private _plain: PlainReactionPref = plainReactionMode();
+  @state() private _pending = showPendingReactions();
 
   static styles = css`
     :host {
@@ -116,6 +102,15 @@ export class PreferencesPage extends LitElement {
       color: var(--secondary-text-color);
       padding: 8px 0 2px;
     }
+    .formula a {
+      color: var(--primary-color, #03a9f4);
+    }
+    code {
+      font-size: 12px;
+      background: rgba(127, 127, 127, 0.15);
+      padding: 0 4px;
+      border-radius: 4px;
+    }
     .formula code {
       font-size: 12px;
       background: rgba(127, 127, 127, 0.15);
@@ -162,19 +157,32 @@ export class PreferencesPage extends LitElement {
 
         <div class="card">
           <h2>Reactions</h2>
+          <div class="formula">
+            Reactions are sent in MeshCore One's format, which the MeshCore app developers have agreed to use
+            until MeshCore supports reactions itself:
+            <a href="https://github.com/Avi0n/MeshCoreOne/blob/main/docs/Reactions.md" target="_blank" rel="noopener">MeshCore One reactions guide</a>.
+            Reactions from other apps' formats are still shown.
+          </div>
           <label class="row">
             <span class="text">
-              <span class="title">Send reactions as</span>
-              <span class="help">How your reactions are written on the mesh. Every format is understood when receiving.</span>
+              <span class="title">Channel messages that are just @[Name] and one emoji</span>
+              <span class="help">Some apps send <code>@[Name] 👍</code> as a reaction to that person's latest message; others mean it as a short reply.</span>
             </span>
-            <select aria-label="Send reactions as" .value=${this._reaction}
-              @change=${(e: Event) => { this._reaction = (e.target as HTMLSelectElement).value as ReactionStylePref; setReactionStyle(this._reaction); }}>
-              <option value="mc1">MeshCore One (default)</option>
-              <option value="open">MeshCore Open</option>
-              <option value="plain">Plain (no hash)</option>
+            <select aria-label="Channel messages that are just a mention and one emoji" .value=${this._plain}
+              @change=${(e: Event) => { this._plain = (e.target as HTMLSelectElement).value as PlainReactionPref; setPlainReactionMode(this._plain); }}>
+              <option value="message">Show as a message</option>
+              <option value="reaction">Treat as a reaction</option>
+              <option value="both">Both</option>
             </select>
           </label>
-          <div class="formula">${REACTION_HELP[this._reaction]}</div>
+          <label class="row">
+            <span class="text">
+              <span class="title">Show reactions to messages that haven't arrived</span>
+              <span class="help">When reactions are shown in a chat (😊 toggle), list reactions whose message hasn't been received yet. They attach to the message once it arrives.</span>
+            </span>
+            <input type="checkbox" .checked=${this._pending}
+              @change=${(e: Event) => { this._pending = (e.target as HTMLInputElement).checked; setShowPendingReactions(this._pending); }} />
+          </label>
         </div>
 
         <div class="card">

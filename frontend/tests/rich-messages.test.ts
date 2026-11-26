@@ -95,28 +95,47 @@ describe('findReactionTarget', () => {
   });
 });
 
-describe('reaction styles', () => {
+describe('reaction handling', () => {
   const a = { ...m('a', 'Dave', 'hello', 1700000000), senderTimestamp: 1700000000 };
-  it('writes each style', () => {
-    expect(formatReaction('👍', a, true, 'open')).toBe(`r:${openReactionHash(1700000000, 'Dave', 'hello')}:00`);
-    expect(formatReaction('👍', a, true, 'plain')).toBe('@[Dave] 👍');
-    expect(formatReaction('👍', a, false, 'plain')).toBe('👍');
-    expect(formatReaction('🦄', a, true, 'open')).toMatch(/^@\[Dave\]🦄\n/); // not in Open's list
+  it('always sends MeshCore One', () => {
+    expect(formatReaction('🦄', a, true)).toBe(`@[Dave]🦄\n${reactionHash('hello', 1700000000)}`);
+    expect(formatReaction('👍', a, false)).toBe(`👍\n${reactionHash('hello', 1700000000)}`);
   });
-  it('reads plain reactions and puts them on the latest message', () => {
+  it('treats "@[Name] 👍" as a message by default', () => {
+    const r = m('r', 'Sam', '@[Dave] 👍', 1700000200);
+    const { visible, reactions } = collectReactions([a, r], true);
+    expect(visible.map((x) => x.id)).toEqual(['a', 'r']);
+    expect(reactions.size).toBe(0);
+  });
+  it('can treat it as a reaction, or both', () => {
     expect(parseReaction('@[Dave] 👍')).toEqual({ emoji: '👍', target: 'Dave', hash: '', kind: 'plain' });
-    expect(parseReaction('@[Dave] thanks')).toBeNull();
     const b = m('b', 'Dave', 'later', 1700000100);
     const r = m('r', 'Sam', '@[Dave] 👍', 1700000200);
-    const { visible, reactions } = collectReactions([a, b, r], true);
-    expect(visible.map((x) => x.id)).toEqual(['a', 'b']);
-    expect(reactions.get('b')?.[0].emoji).toBe('👍');
+    const asReaction = collectReactions([a, b, r], true, { plainMode: 'reaction' });
+    expect(asReaction.visible.map((x) => x.id)).toEqual(['a', 'b']);
+    expect(asReaction.reactions.get('b')?.[0].emoji).toBe('👍');
+    const both = collectReactions([a, b, r], true, { plainMode: 'both' });
+    expect(both.visible.map((x) => x.id)).toEqual(['a', 'b', 'r']);
+    expect(both.reactions.get('b')?.[0].emoji).toBe('👍');
   });
   it('keeps reaction messages in the chat when asked', () => {
     const r = m('r', 'Sam', formatReaction('👍', a, true), 1700000200);
     const { visible, reactions } = collectReactions([a, r], true, true);
     expect(visible.map((x) => x.id)).toEqual(['a', 'r']);
     expect(reactions.get('a')?.[0].emoji).toBe('👍');
+  });
+  it('matches a reaction that arrived before its message', () => {
+    const r = m('r', 'Sam', formatReaction('👍', a, true), 1699999990);
+    const { visible, reactions } = collectReactions([r, a], true);
+    expect(visible.map((x) => x.id)).toEqual(['a']);
+    expect(reactions.get('a')?.[0].emoji).toBe('👍');
+  });
+  it('shows a pending line for an unmatched reaction only when reactions are shown', () => {
+    const r = m('r', 'Sam', '@[Dave]👍\n272jvvz7', 1700000200);
+    expect(collectReactions([r], true).visible).toEqual([]);
+    const shown = collectReactions([r], true, { keepRaw: true });
+    expect(shown.visible[0].text).toBe('Sam reacted 👍 · message not received yet');
+    expect(collectReactions([r], true, { keepRaw: true, showPending: false }).visible).toEqual([]);
   });
 });
 

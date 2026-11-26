@@ -20,11 +20,12 @@ import { getDevices } from '../api';
 import '../components/emoji-picker';
 import '../components/share-pickers';
 import '../components/contacts-dialog';
+import { loadUnverified } from '../utils/unverified';
 import '../components/confirm-dialog';
 import '../components/message-panel';
 import '../components/location-map';
 import type { PickedLocation } from '../components/share-pickers';
-import { DISPLAY_PREFS_EVENT, reactionStyle, timestampFormat } from '../utils/display-prefs';
+import { DISPLAY_PREFS_EVENT, plainReactionMode, showPendingReactions, timestampFormat } from '../utils/display-prefs';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
 
 @customElement('meshcore-chat-page')
@@ -44,11 +45,26 @@ export class ChatPage extends LitElement {
   @state() private _ownContact?: { publicKey: string; name: string };
   /** The message open in the message panel (sheet on phones, side panel on desktop). */
   @state() private _selMsgId: string | null = null;
-  /** The message a bubble replies to, if any. */
+  /** Quotes worked out per message; cleared when the loaded messages change. */
+  private _quoteCache = new Map<string, ReturnType<typeof findQuoted>>();
+  private _quoteCacheKey = '';
+
   private _quoteFor = (msg: ChatMessage) => {
     if (!this.selectedId || !this._messageStore) return null;
     const all = this._messageStore.messages;
-    const q = findQuoted(msg, this.selectedId, all);
+    const key = `${this.selectedId}|${all.length}|${all[all.length - 1]?.id ?? ''}`;
+    if (key !== this._quoteCacheKey) {
+      this._quoteCache.clear();
+      this._quoteCacheKey = key;
+    }
+    if (this._quoteCache.has(msg.id)) return this._quoteCache.get(msg.id) ?? null;
+    const result = this._computeQuote(msg, all);
+    this._quoteCache.set(msg.id, result);
+    return result;
+  };
+
+  private _computeQuote(msg: ChatMessage, all: ChatMessage[]) {
+    const q = findQuoted(msg, this.selectedId!, all);
     if (!q) return null;
     // Replying to a reaction: reactions are hidden from the chat, so show
     // what was reacted to and jump there instead of to the raw reaction.
@@ -59,7 +75,8 @@ export class ChatPage extends LitElement {
     return r.target
       ? { sender: q.sender, text: `${r.emoji} reacted to ${r.target.sender}: ${r.target.text}`, id: r.target.id }
       : { sender: q.sender, text: `${r.emoji} reacted to an older message`, id: undefined };
-  };
+  }
+
   @property({ type: Object }) config?: PanelConfig;
   @property({ type: Array }) conversations: Array<Contact | Channel> = [];
   @property({ type: String }) selectedId: string | null = null;
@@ -725,6 +742,7 @@ export class ChatPage extends LitElement {
   }
 
   @state() private _previews: Record<string, ConversationPreview> = {};
+  @state() private _previewsState: 'loading' | 'ok' | 'error' = 'loading';
   private _previewTimer: ReturnType<typeof setTimeout> | null = null;
 
   /** Refresh the conversation list's last-message previews (debounced). */
@@ -733,13 +751,21 @@ export class ChatPage extends LitElement {
     this._previewTimer = setTimeout(async () => {
       this._previewTimer = null;
       if (!this.hass) return;
-      this._previews = await getConversationPreviews(this.hass, this.config?.entry_id);
+      const previews = await getConversationPreviews(this.hass, this.config?.entry_id);
+      if (previews) {
+        this._previews = previews;
+        this._previewsState = 'ok';
+      } else if (this._previewsState !== 'ok') {
+        // Keep showing what we had if a later refresh fails.
+        this._previewsState = 'error';
+      }
     }, delay);
   }
 
   connectedCallback() {
     super.connectedCallback();
     this._refreshPreviews(0);
+    if (this.hass) void loadUnverified(this.hass, this.config?.entry_id);
     window.addEventListener(LIMIT_SETTING_EVENT, this._onLimitSettingChanged);
     window.addEventListener(DISPLAY_PREFS_EVENT, this._onLimitSettingChanged);
     window.addEventListener('pointerdown', this._onOutsidePointer, true);
@@ -762,6 +788,8 @@ export class ChatPage extends LitElement {
         this.lastRead = this.unread.lastRead;
         this.requestUpdate();
         this._refreshPreviews();
+        // A new message may be the first from a manually added contact.
+        if (this.hass) void loadUnverified(this.hass, this.config?.entry_id);
       });
       // The subscription only fires on FUTURE mutations — pull the
       // current cursor map in now so the first render is correct.
@@ -978,6 +1006,8 @@ export class ChatPage extends LitElement {
               .unreadCounts=${this.unread.counts}
               .nodePrefix=${this.config?.node_prefix || null}
               .previews=${this._previews}
+              .previewsState=${this._previewsState}
+              @retry-previews=${() => { this._previewsState = 'loading'; this._refreshPreviews(0); }}
               @conversation-selected=${(e: CustomEvent) => {
                 const newId = e.detail.id;
                 if (newId === this.selectedId) {
@@ -1019,6 +1049,8 @@ export class ChatPage extends LitElement {
           .unreadCounts=${this.unread.counts}
           .nodePrefix=${this.config?.node_prefix || null}
           .previews=${this._previews}
+              .previewsState=${this._previewsState}
+              @retry-previews=${() => { this._previewsState = 'loading'; this._refreshPreviews(0); }}
           @conversation-selected=${(e: CustomEvent) => {
             const newId = e.detail.id;
             if (newId === this.selectedId) {
@@ -1122,7 +1154,11 @@ export class ChatPage extends LitElement {
       `;
     }
 
-    const { visible: messages, reactions } = collectReactions(this._messageStore.messages, this._isChannelSelected(), this._showReactionMsgs);
+    const { visible: messages, reactions } = collectReactions(this._messageStore.messages, this._isChannelSelected(), {
+      keepRaw: this._showReactionMsgs,
+      plainMode: plainReactionMode(),
+      showPending: showPendingReactions(),
+    });
     this._reactions = reactions;
     const renderItems = buildRenderItems(messages, {
       group_messages: this.config?.group_messages ?? true,
@@ -1133,7 +1169,7 @@ export class ChatPage extends LitElement {
     const budget = this._budget();
     return html`
       <div class="chat-container" @message-selected=${(e: CustomEvent) => { this._selMsgId = (e.detail as { msg: ChatMessage }).msg.id; }} @jump-to-message=${(e: CustomEvent) => this._findAndHighlightBubble(e.detail.id)}
-          @react-to-message=${this._onReact} @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @delete-message=${(e: CustomEvent) => void this._deleteOne((e.detail as { id: string }).id)} @scroll=${this._onChatScroll}>
+          @react-to-message=${this._onReact} @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @delete-message=${(e: CustomEvent) => { this._confirmDeleteReaction = (e.detail as { id: string }).id; }} @scroll=${this._onChatScroll}>
         ${this._messageStore.loadingOlder
           ? html`<div class="loading-older"><div class="loading-spinner"></div></div>`
           : html``}
@@ -1380,7 +1416,7 @@ export class ChatPage extends LitElement {
 
   private _onReact(e: CustomEvent) {
     const { emoji, msg } = e.detail as { emoji: string; msg: ChatMessage };
-    void this._sendText(formatReaction(emoji, msg, this._isChannelSelected(), reactionStyle()));
+    void this._sendText(formatReaction(emoji, msg, this._isChannelSelected()));
   }
 
   private _renderLimitNote(budget: MessageBudget) {
@@ -1785,7 +1821,7 @@ export class ChatPage extends LitElement {
       const storedId = id.startsWith('rt_') ? id.substring(3) : id;
       const res = await deleteMessage(this.hass, entityId, storedId);
       if (!res.success) {
-        alert("Couldn't delete that message. Try again in a moment.");
+        this._notice = "Couldn't delete that message. Try again in a moment.";
         return;
       }
     }
@@ -1800,7 +1836,7 @@ export class ChatPage extends LitElement {
     const isChannel = this._isChannelSelected();
     const res = await deleteConversation(this.hass, entityId);
     if (!res.success) {
-      alert("Couldn't delete this chat. Try again in a moment.");
+      this._notice = "Couldn't delete this chat. Try again in a moment.";
       return;
     }
     this.unread.clearEntity(entityId);
@@ -1812,7 +1848,25 @@ export class ChatPage extends LitElement {
     this._refreshPreviews(0);
   }
 
+  /** A message to acknowledge (e.g. a delete that failed). */
+  @state() private _notice = '';
+  /** A reaction waiting for "Delete this reaction?" to be confirmed. */
+  @state() private _confirmDeleteReaction: string | null = null;
+
   private _renderDeleteConfirm() {
+    if (this._notice) {
+      return html`<meshcore-confirm-dialog .open=${true} .title=${'Something went wrong'} .message=${this._notice}
+        .confirmLabel=${'OK'} .cancelLabel=${''}
+        @confirm=${() => { this._notice = ''; }} @cancel=${() => { this._notice = ''; }}></meshcore-confirm-dialog>`;
+    }
+    if (this._confirmDeleteReaction) {
+      const id = this._confirmDeleteReaction;
+      return html`<meshcore-confirm-dialog .open=${true} .title=${'Delete this reaction?'}
+        .message=${"It's removed from Home Assistant only, not from anyone who did receive it."}
+        .confirmLabel=${'Delete'} .dangerous=${true}
+        @confirm=${() => { this._confirmDeleteReaction = null; void this._deleteOne(id); }}
+        @cancel=${() => { this._confirmDeleteReaction = null; }}></meshcore-confirm-dialog>`;
+    }
     if (!this._confirmDelete) return html``;
     const isChannel = this._isChannelSelected();
     const name = this._getConversationName();

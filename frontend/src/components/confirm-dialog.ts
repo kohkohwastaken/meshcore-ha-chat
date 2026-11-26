@@ -79,11 +79,13 @@ export class ConfirmDialog extends LitElement {
               : ''}
           </div>
           <div class="dialog-footer">
-            <button
-              class="dialog-button"
-              @click=${this._onCancel}>
-              ${this.cancelLabel}
-            </button>
+            ${this.cancelLabel
+              ? html`<button
+                  class="dialog-button"
+                  @click=${this._onCancel}>
+                  ${this.cancelLabel}
+                </button>`
+              : ''}
             <button
               class="dialog-button primary ${this.dangerous
                 ? 'danger-button'

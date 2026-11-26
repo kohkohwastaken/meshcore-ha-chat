@@ -110,8 +110,13 @@ export function heardRecently(lastAdvertSecs: number | undefined, within: HeardW
   return now - lastAdvertSecs * 1000 <= Number(within) * 86400000;
 }
 
-/** How reactions you send are written (see formatReaction). */
-export type ReactionStylePref = 'mc1' | 'open' | 'plain';
-const REACTION_STYLE_KEY = 'meshcore-reaction-style';
-export const reactionStyle = () => read<ReactionStylePref>(REACTION_STYLE_KEY, ['mc1', 'open', 'plain'], 'mc1');
-export const setReactionStyle = (v: ReactionStylePref) => write(REACTION_STYLE_KEY, v);
+/** A channel message that is just "@[Name]" + one emoji: message, reaction or both. */
+export type PlainReactionPref = 'message' | 'reaction' | 'both';
+const PLAIN_KEY = 'meshcore-plain-reaction-mode';
+export const plainReactionMode = () => read<PlainReactionPref>(PLAIN_KEY, ['message', 'reaction', 'both'], 'message');
+export const setPlainReactionMode = (v: PlainReactionPref) => write(PLAIN_KEY, v);
+
+/** With reactions shown, also show reactions whose message hasn't arrived. */
+const PENDING_KEY = 'meshcore-show-pending-reactions';
+export const showPendingReactions = () => read<'on' | 'off'>(PENDING_KEY, ['on', 'off'], 'on') === 'on';
+export const setShowPendingReactions = (v: boolean) => write(PENDING_KEY, v ? 'on' : 'off');
