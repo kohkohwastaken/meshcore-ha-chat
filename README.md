@@ -8,6 +8,8 @@ It works alongside the [core MeshCore integration](https://github.com/meshcore-d
 
 > **This is a fork** of [MeshCore Chat](https://github.com/mwolter805/meshcore-ha-chat) by Matt Wolter, maintained by [kohkohwastaken](https://github.com/kohkohwastaken). Route matching is ported from [MeshCore Chattx](https://github.com/michalsiman/meshcore-ha-chattx) by Michal Šiman. Both are MIT-licensed. See the [changelog](CHANGELOG.md) for everything that's changed, and report issues for this fork [here](https://github.com/kohkohwastaken/meshcore-ha-chat/issues).
 
+<p align="center"><a href="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/chat.jpg"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/chat.jpg" alt="Chat tab with a reaction, quoted replies and message details"></a></p>
+
 ## What's in it
 
 The panel has five tabs. On a phone they move to a bar along the bottom.
@@ -47,6 +49,30 @@ One card per repeater or client you manage, showing its status and when it was l
 ### ⚙️ Settings
 
 Saved per browser: message display, reaction preferences, date and time format, and which nodes to show by default.
+
+## Screenshots
+
+<table>
+<tr>
+<td width="50%"><a href="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/nodes-map.jpg"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/nodes-map.jpg" alt="Nodes map"></a></td>
+<td width="50%"><a href="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/repeater.png"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/repeater.png" alt="Repeater status"></a></td>
+</tr>
+<tr>
+<td><b>Nodes</b>: every node on the map, filtered by type, with the selected node's details beside it.</td>
+<td><b>Repeaters</b>: live status, message activity and Refresh status for a managed repeater.</td>
+</tr>
+<tr>
+<td><a href="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/my-radio.png"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/my-radio.png" alt="My radio"></a></td>
+<td><a href="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/settings.png"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/settings.png" alt="Settings"></a></td>
+</tr>
+<tr>
+<td><b>My radio</b>: your companion's battery, location, quick actions and radio settings.</td>
+<td><b>Settings</b>: message, reaction, date and node preferences, saved per browser.</td>
+</tr>
+<tr>
+<td colspan="2" align="center"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/screenshots/contacts.png" alt="Contacts" width="360"><br><b>Contacts</b>: grouped contacts, discovered nodes, Add manually and Share my contact.</td>
+</tr>
+</table>
 
 ## Installation
 
