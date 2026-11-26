@@ -5,7 +5,7 @@ import { MessageStore } from '../chat/message-store';
 import { UnreadController, markReadTailKey, pillLabel } from '../chat/unread-controller';
 import { buildRenderItems } from '../chat/message-parser';
 import { discoverChannelEntity, discoverContactEntity } from '../chat/entity-resolver';
-import { sendDirectMessage, sendChannelMessage, getConversationPreviews, deleteConversation, deleteMessage, type ConversationPreview } from '../api';
+import { sendDirectMessage, sendChannelMessage, getConversationPreviews, deleteConversation, deleteMessage, type ConversationPreview, roomLogin, getRoomStatus, roomForgetPassword, type RoomState } from '../api';
 import {
   AT_BOTTOM_THRESHOLD_PX,
   LAZY_LOAD_TRIGGER_PX,
@@ -27,6 +27,9 @@ import '../components/location-map';
 import type { PickedLocation } from '../components/share-pickers';
 import { DISPLAY_PREFS_EVENT, plainReactionMode, showPendingReactions, timestampFormat } from '../utils/display-prefs';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
+
+/** Most characters in one room post (the official app's limit). */
+const ROOM_POST_MAX = 150;
 
 @customElement('meshcore-chat-page')
 export class ChatPage extends LitElement {
@@ -162,6 +165,96 @@ export class ChatPage extends LitElement {
    */
 
   static styles = css`
+    .room-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 400;
+      color: var(--secondary-text-color);
+    }
+
+    .room-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex: none;
+    }
+
+    .room-check {
+      font-size: 18px;
+    }
+
+    .room-check.attention {
+      color: var(--warning-color, #ff9800);
+    }
+
+    .room-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin: 8px 12px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: var(--primary-text-color);
+    }
+
+    .room-bar.info {
+      background: rgba(3, 169, 244, 0.1);
+      border: 1px solid rgba(3, 169, 244, 0.35);
+    }
+
+    .room-bar.warn {
+      background: rgba(255, 152, 0, 0.1);
+      border: 1px solid rgba(255, 152, 0, 0.4);
+    }
+
+    .room-bar-text {
+      flex: 1 1 260px;
+    }
+
+    .room-pw {
+      width: 160px;
+      padding: 6px 8px;
+      border-radius: 6px;
+      border: 1px solid var(--divider-color, #444);
+      background: var(--card-background-color, #1c1c1c);
+      color: var(--primary-text-color);
+      font: inherit;
+    }
+
+    .room-remember {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 12px;
+      color: var(--secondary-text-color);
+    }
+
+    .room-btn {
+      border: none;
+      border-radius: 6px;
+      padding: 6px 12px;
+      background: var(--primary-color, #03a9f4);
+      color: var(--text-primary-color, #fff);
+      font: inherit;
+      font-weight: 500;
+      cursor: pointer;
+    }
+
+    .room-btn.ghost {
+      background: none;
+      border: 1px solid var(--divider-color, #444);
+      color: var(--primary-text-color);
+    }
+
+    .room-btn:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
     :host {
       display: flex;
       width: 100%;
@@ -843,7 +936,162 @@ export class ChatPage extends LitElement {
     }
   }
 
+  // ─── Room servers ───────────────────────────────────────────────────
+  // Nothing logs in until a room is opened, and only when we have no
+  // working login on record. After that the room pushes new posts itself;
+  // "Check for new posts" logs in again on request.
+
+  @state() private _rooms: Record<string, RoomState> = {};
+  @state() private _roomBusy: string | null = null;
+  /** The open room's bar: needs a password, or the last attempt failed. */
+  @state() private _roomPrompt: 'password' | 'failing' | null = null;
+  @state() private _roomPw = '';
+  @state() private _roomRemember = true;
+  @state() private _roomNote = '';
+  private _roomOpened: string | null = null;
+
+  /** The open conversation when it's a room server. */
+  private _selectedRoom(): Contact | null {
+    const c = this.conversations.find((x) => 'pubkey_prefix' in x && (x as Contact).pubkey_prefix === this.selectedId) as Contact | undefined;
+    return c && c.type === 3 ? c : null;
+  }
+
+  private _roomState(room: Contact | null): RoomState | undefined {
+    return room ? this._rooms[room.public_key.toLowerCase()] : undefined;
+  }
+
+  private async _onRoomOpened() {
+    const room = this._selectedRoom();
+    const key = room?.public_key.toLowerCase() ?? null;
+    if (key === this._roomOpened) return;
+    this._roomOpened = key;
+    this._roomPrompt = null;
+    this._roomNote = '';
+    this._roomPw = '';
+    if (!room || !this.hass) return;
+    this._rooms = await getRoomStatus(this.hass);
+    const st = this._rooms[room.public_key.toLowerCase()];
+    // Already logged in before and the last attempt worked: no airtime needed.
+    if (st?.access && !st.fails) return;
+    void this._roomLogin(room);
+  }
+
+  private async _roomLogin(room: Contact, password?: string) {
+    if (!this.hass || this._roomBusy) return;
+    const key = room.public_key.toLowerCase();
+    this._roomBusy = key;
+    this._roomNote = '';
+    try {
+      const r = await roomLogin(this.hass, key, password === undefined ? {} : { password, remember: this._roomRemember }, this.config?.entry_id);
+      this._rooms = { ...this._rooms, [key]: { access: r.ok ? r.access : (this._rooms[key]?.access ?? null), last_login: r.ok ? Math.floor(Date.now() / 1000) : (this._rooms[key]?.last_login ?? null), fails: r.fails, remembered: r.remembered } };
+      if (r.ok) {
+        this._roomPrompt = null;
+        this._roomPw = '';
+        void this._messageStore?.refresh();
+      } else {
+        // Nothing remembered and the room doesn't know us: just ask. Otherwise it may have changed.
+        this._roomPrompt = password === undefined && !r.remembered ? 'password' : 'failing';
+      }
+    } catch (err) {
+      this._roomNote = err instanceof Error ? err.message : String(err);
+      this._roomPrompt = 'failing';
+    } finally {
+      this._roomBusy = null;
+    }
+  }
+
+  private async _forgetRoomPassword() {
+    this._convMenuOpen = false;
+    const room = this._selectedRoom();
+    if (!room || !this.hass) return;
+    await roomForgetPassword(this.hass, room.public_key.toLowerCase());
+    this._rooms = await getRoomStatus(this.hass);
+  }
+
+  /** "Posts may be delayed / paused": the room re-sent a post because it didn't hear our acknowledgement. */
+  private _roomPushHealth(room: Contact): 'ok' | 'delayed' | 'paused' {
+    const st = this._roomState(room);
+    const since = (st?.last_login ?? 0) * 1000;
+    const recent = (this._messageStore?.messages ?? []).filter((m) => !m.isOutgoing && m.roomAuthor && m.timestamp.getTime() > since);
+    const repeats = recent.length ? Math.max(...recent.map((m) => m.roomRepeats ?? 0)) : 0;
+    return repeats >= 2 ? 'paused' : repeats >= 1 ? 'delayed' : 'ok';
+  }
+
+  private _roomCanPost(room: Contact | null): boolean {
+    if (!room) return true;
+    const a = this._roomState(room)?.access;
+    return a === 'read_write' || a === 'admin';
+  }
+
+  private _renderRoomStatus() {
+    const room = this._selectedRoom();
+    if (!room) return '';
+    const st = this._roomState(room);
+    const busy = this._roomBusy === room.public_key.toLowerCase();
+    let dot = '#777';
+    let text = 'Not logged in';
+    if (busy) { dot = 'var(--primary-color, #03a9f4)'; text = 'Logging in…'; }
+    else if (this._roomPrompt === 'failing') { dot = 'var(--warning-color, #ff9800)'; text = 'Login failing'; }
+    else if (st?.access) {
+      const health = this._roomPushHealth(room);
+      const access = st.access === 'admin' ? 'admin' : st.access === 'read_only' ? 'read-only' : 'read-write';
+      dot = health === 'ok' && st.access !== 'read_only' ? 'var(--success-color, #4caf50)' : st.access === 'read_only' ? '#9b9b9b' : 'var(--warning-color, #ff9800)';
+      text = health === 'paused' ? "Posts paused: the room can't hear your radio"
+        : health === 'delayed' ? 'Posts may be delayed'
+        : `Logged in · ${access}${st.last_login ? ` · checked ${this._agoSecs(st.last_login)}` : ''}`;
+    }
+    return html`<div class="room-status"><span class="room-dot" style="background:${dot}"></span>${text}</div>`;
+  }
+
+  private _agoSecs(secs: number): string {
+    const m = Math.max(0, Math.round((Date.now() / 1000 - secs) / 60));
+    return m < 1 ? 'just now' : m < 60 ? `${m}m ago` : m < 1440 ? `${Math.round(m / 60)}h ago` : `${Math.round(m / 1440)}d ago`;
+  }
+
+  private _renderRoomCheck() {
+    const room = this._selectedRoom();
+    if (!room) return '';
+    const st = this._roomState(room);
+    const busy = this._roomBusy === room.public_key.toLowerCase();
+    const paused = st?.access && this._roomPushHealth(room) === 'paused';
+    return html`<button class="header-action-btn room-check ${paused ? 'attention' : ''}" ?disabled=${busy}
+      title="Check for new posts (logs in to the room again)" aria-label="Check for new posts"
+      @click=${() => this._roomLogin(room)}>⟳</button>`;
+  }
+
+  private _renderRoomBar() {
+    const room = this._selectedRoom();
+    if (!room) return '';
+    const st = this._roomState(room);
+    const busy = this._roomBusy === room.public_key.toLowerCase();
+    const form = html`
+      <input class="room-pw" type="password" maxlength="15" aria-label="Room password"
+        placeholder=${this._roomPrompt === 'password' ? 'Password' : 'New password'}
+        .value=${this._roomPw} @input=${(e: Event) => { this._roomPw = (e.target as HTMLInputElement).value; }}
+        @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._roomLogin(room, this._roomPw); }} />
+      <label class="room-remember"><input type="checkbox" .checked=${this._roomRemember}
+        @change=${(e: Event) => { this._roomRemember = (e.target as HTMLInputElement).checked; }} /> Remember</label>
+      <button class="room-btn" ?disabled=${busy} @click=${() => this._roomLogin(room, this._roomPw)}>${busy ? 'Logging in…' : 'Log in'}</button>`;
+    if (this._roomPrompt === 'password') {
+      return html`<div class="room-bar info"><div class="room-bar-text"><b>This room needs a password.</b> Most rooms use the default guest password <code>hello</code> unless the owner changed it. Up to 15 characters.</div>${form}</div>`;
+    }
+    if (this._roomPrompt === 'failing') {
+      return html`<div class="room-bar warn"><div class="room-bar-text"><b>Couldn't log in.</b> The room's password may have changed, or the room may be out of reach.${st?.remembered ? ' Your remembered password is kept until a new one works.' : ''}${this._roomNote ? html`<br><small>${this._roomNote}</small>` : ''}</div>
+        ${form}<button class="room-btn ghost" ?disabled=${busy} @click=${() => this._roomLogin(room)}>Try again</button></div>`;
+    }
+    if (st?.access === 'read_only' && !busy) {
+      return html`<div class="room-bar warn"><div class="room-bar-text"><b>Logged in read-only.</b> You can read posts but not post. The password may be wrong or may have changed.</div>
+        <button class="room-btn ghost" @click=${() => { this._roomPrompt = 'password'; }}>Enter password</button></div>`;
+    }
+    if (st?.access && this._roomPushHealth(room) === 'paused' && !busy) {
+      return html`<div class="room-bar warn"><div class="room-bar-text"><b>Posts paused.</b> The room re-sent posts because it couldn't hear your radio's replies, so it has stopped sending. Check for new posts to start it again.</div>
+        <button class="room-btn" @click=${() => this._roomLogin(room)}>⟳ Check for new posts</button></div>`;
+    }
+    return '';
+  }
+
   updated(changedProperties: Map<string, unknown>) {
+    if (changedProperties.has('selectedId') || changedProperties.has('conversations')) void this._onRoomOpened();
     if (changedProperties.has('hass') && this.hass && this._messageStore) {
       this._messageStore.setHass(this.hass);
     }
@@ -988,9 +1236,9 @@ export class ChatPage extends LitElement {
             <div class="chat-main narrow-full">
               <div class="narrow-header">
                 <button class="back-button" @click=${() => (this._narrowShowMessages = false)}>← Back</button>
-                <span class="narrow-conv-name">${this._getConversationName()}${this._renderScopeChip()}</span>
+                <span class="narrow-conv-name">${this._getConversationName()}${this._renderScopeChip()}${this._renderRoomStatus()}</span>
                 <div class="chat-header-actions">
-                  <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderReactionsToggle()}${this._renderConvMenu()}
+                  ${this._renderRoomCheck()}<button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderReactionsToggle()}${this._renderConvMenu()}
                 </div>
               </div>
               ${this._renderChatArea()}
@@ -1071,10 +1319,10 @@ export class ChatPage extends LitElement {
           ${this.selectedId ? html`
             <div class="narrow-header" style="display: flex; align-items: center; padding: 8px 16px;">
               <div style="flex: 1; font-size: 14px; font-weight: 500; color: var(--primary-text-color);">
-                ${this._getConversationName()}${this._renderScopeChip()}
+                ${this._getConversationName()}${this._renderScopeChip()}${this._renderRoomStatus()}
               </div>
               <div class="chat-header-actions">
-                <button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderReactionsToggle()}${this._renderConvMenu()}
+                ${this._renderRoomCheck()}<button class="header-action-btn" title="Search messages" aria-label="Search messages" @click=${() => { this._searchOpen = !this._searchOpen; }}><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0016 9.5 6.5 6.5 0 109.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg></button>${this._renderReactionsToggle()}${this._renderConvMenu()}
               </div>
             </div>
           ` : ''}
@@ -1157,7 +1405,14 @@ export class ChatPage extends LitElement {
       `;
     }
 
-    const { visible: messages, reactions } = collectReactions(this._messageStore.messages, this._isChannelSelected(), {
+    // A room re-sends a post it thinks we missed; the stored copy is already
+    // shown, so drop the live duplicate.
+    let source = this._messageStore.messages;
+    if (this._selectedRoom()) {
+      const stored = new Set(source.filter((m) => !m.id.startsWith('rt_')).map((m) => m.text));
+      source = source.filter((m) => !m.id.startsWith('rt_') || !stored.has(m.text));
+    }
+    const { visible: messages, reactions } = collectReactions(source, this._isChannelSelected(), {
       keepRaw: this._showReactionMsgs,
       plainMode: plainReactionMode(),
       showPending: showPendingReactions(),
@@ -1173,6 +1428,7 @@ export class ChatPage extends LitElement {
     return html`
       <div class="chat-container" @message-selected=${(e: CustomEvent) => { this._selMsgId = (e.detail as { msg: ChatMessage }).msg.id; }} @jump-to-message=${(e: CustomEvent) => this._findAndHighlightBubble(e.detail.id)}
           @react-to-message=${this._onReact} @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @delete-message=${(e: CustomEvent) => { this._confirmDeleteReaction = (e.detail as { id: string }).id; }} @scroll=${this._onChatScroll}>
+        ${this._renderRoomBar()}
         ${this._messageStore.loadingOlder
           ? html`<div class="loading-older"><div class="loading-spinner"></div></div>`
           : html``}
@@ -1229,7 +1485,7 @@ export class ChatPage extends LitElement {
             </div>` : ''}
           <div class="composer-body">
             <textarea
-              placeholder=${this._location || this._contact ? 'Add a message (optional)...' : 'Type a message...'}
+              placeholder=${!this._roomCanPost(this._selectedRoom()) ? (this._roomState(this._selectedRoom())?.access === 'read_only' ? "Read-only: you can't post in this room" : 'Log in to post in this room') : this._location || this._contact ? 'Add a message (optional)...' : 'Type a message...'}
               aria-label="Message text. Press Enter to send, Shift+Enter for newline."
               .value=${this._inputText}
               @input=${(e: Event) => {
@@ -1246,7 +1502,7 @@ export class ChatPage extends LitElement {
                   this._replyTo = null;
                 }
               }}
-              ?disabled=${this._sending || !this.selectedId}></textarea>
+              ?disabled=${this._sending || !this.selectedId || !this._roomCanPost(this._selectedRoom())}></textarea>
             <div class="composer-toolbar">
               <button class="tool-button ${this._popup === 'plus' ? 'on' : ''}" aria-label="Share location or contact" title="Share location or contact"
                 ?disabled=${!this.selectedId}
@@ -1265,7 +1521,7 @@ export class ChatPage extends LitElement {
                 class="send-button"
                 aria-label="Send message"
                 @click=${() => this._sendMessage()}
-                ?disabled=${this._sending || !this.selectedId || (!this._inputText.trim() && !this._location && !this._contact) || budget.over}>
+                ?disabled=${this._sending || !this.selectedId || !this._roomCanPost(this._selectedRoom()) || (!this._inputText.trim() && !this._location && !this._contact) || budget.over}>
                 <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
               </button>
             </div>
@@ -1287,11 +1543,17 @@ export class ChatPage extends LitElement {
 
   /** Bytes used and left for the text in the send box, as it would be sent. */
   private _budget(): MessageBudget {
-    return messageBudget(
+    const b = messageBudget(
       this._composedText(this._inputText),
       this._isChannelSelected() ? (this.config?.node_name ?? '') : null,
       trackableChannelLimit(),
     );
+    // Room posts: 150 characters, like the official MeshCore app.
+    if (this._selectedRoom()) {
+      const left = Math.min(b.left, ROOM_POST_MAX - [...this._composedText(this._inputText)].length);
+      return { ...b, left, over: left < 0 };
+    }
+    return b;
   }
 
   private _onLimitSettingChanged = () => this.requestUpdate();
@@ -1947,6 +2209,9 @@ export class ChatPage extends LitElement {
                     ? html`<button role="menuitem" @click=${() => this._convAction('show-on-map')}>Show on map</button>`
                     : html`<button role="menuitem" disabled title="This contact hasn't shared a location in its adverts">Show on map (no location shared)</button>`}
                   <button role="menuitem" @click=${() => this._convAction('trace')}>Trace route</button>`}
+            ${this._selectedRoom() ? html`
+              <button role="menuitem" @click=${() => { this._convMenuOpen = false; this._roomPrompt = 'password'; }}>Log in with a password…</button>
+              ${this._roomState(this._selectedRoom())?.remembered ? html`<button role="menuitem" @click=${() => this._forgetRoomPassword()}>Forget saved room password</button>` : ''}` : ''}
             <button role="menuitem" @click=${() => this._convAction('search')}>Search this conversation</button>
             <button role="menuitem" class="danger" @click=${() => this._convAction('delete')}>${isChannel ? 'Clear chat history' : 'Delete chat'}</button>
           </div>` : ''}

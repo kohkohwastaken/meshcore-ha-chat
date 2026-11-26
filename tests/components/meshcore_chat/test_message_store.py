@@ -1170,3 +1170,14 @@ async def test_delete_message_removes_one_and_updates_index(store: MessageStore)
     assert store.get_message_index()[eid]["last_preview"] == "first"
     assert [m["id"] for m in store._loaded_conversations[eid]] == ["m1"]
     assert await store.delete_message(eid, "nope") is False
+
+
+async def test_note_room_repeat_counts_resends(store) -> None:
+    """A room post re-sent by the room is recognised, not stored twice."""
+    eid = "binary_sensor.meshcore_x_room_messages"
+    await store.store_message(eid, {"id": "a1", "text": "hello", "timestamp": "2026-01-01T00:00:00+00:00",
+                                    "room_author": "a1b2c3d4", "sender_timestamp": 100})
+    assert await store.note_room_repeat(eid, "a1b2c3d4", 100, "hello") is True
+    assert await store.note_room_repeat(eid, "a1b2c3d4", 101, "hello") is False
+    msgs = await store.get_messages(eid, limit=10)
+    assert len(msgs) == 1 and msgs[0]["room_repeats"] == 1

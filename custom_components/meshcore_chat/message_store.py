@@ -337,6 +337,29 @@ class MessageStore:
         }
         self._schedule_index_save()
 
+    async def note_room_repeat(
+        self, entity_id: str, author: str, sender_ts: int | None, text: str
+    ) -> bool:
+        """True when this room post is already stored (the room re-sent it).
+
+        A room server re-sends a post when it didn't hear our radio's
+        acknowledgement, and stops pushing to us after three misses. Count
+        the repeats on the stored post so the panel can say posts may be
+        paused.
+        """
+        messages = await self._ensure_loaded(entity_id)
+        for m in reversed(messages[-100:]):
+            if (
+                m.get("room_author") == author
+                and m.get("text") == text
+                and (sender_ts is None or m.get("sender_timestamp") == sender_ts)
+            ):
+                m["room_repeats"] = int(m.get("room_repeats", 0)) + 1
+                self._conversation_dirty.add(entity_id)
+                self._schedule_conversation_save(entity_id)
+                return True
+        return False
+
     async def update_message_rx_data(
         self, entity_id: str, message_id: str, rx_log_data: list
     ) -> None:

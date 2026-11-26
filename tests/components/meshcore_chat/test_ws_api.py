@@ -4251,3 +4251,39 @@ async def test_ws_get_contacts_paginated_several_types(hass: HomeAssistant, comp
             "id": 1, "category": "all", "limit": 50, "offset": 0, "sort_by": "name", "node_types": [1, 4],
         })
     assert [c["adv_name"] for c in conn.results[0][1]["contacts"]] == ["c", "s"]
+
+
+async def test_ws_room_login_blank_then_saved(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """No password: blank first, then the remembered one; access comes from the reply."""
+    from types import SimpleNamespace
+    key = "ab" * 32
+    coordinator = MagicMock()
+    coordinator.api.mesh_core.get_contact_by_key_prefix.return_value = {"public_key": key, "out_path_len": -1}
+    store, rooms = await ws_api._room_store(hass)
+    rooms[key] = {"password": "secret"}
+    calls = []
+
+    async def fake(hass_, conn, msg, coord, command, *args, **kw):
+        calls.append((command, args[-1] if args else None))
+        if command == "send_login_sync" and args[-1] == "secret":
+            return SimpleNamespace(type="EventType.LOGIN_SUCCESS", payload={"permissions": 0, "acl_permissions": 2})
+        return None
+
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator), \
+         patch.object(ws_api, "_modern_parent", return_value=False), \
+         patch.object(ws_api, "_parent_command", side_effect=fake):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_room_login, hass, conn, {"id": 1, "public_key": key, "remember": True})
+    result = conn.results[0][1]
+    assert result["ok"] and result["access"] == "read_write" and result["used"] == "saved"
+    assert [c for c in calls if c[0] == "send_login_sync"] == [("send_login_sync", ""), ("send_login_sync", "secret")]
+
+
+def test_room_access_levels() -> None:
+    from types import SimpleNamespace
+    ok = lambda **p: SimpleNamespace(type="EventType.LOGIN_SUCCESS", payload=p)  # noqa: E731
+    assert ws_api._room_access(ok(permissions=1, acl_permissions=3)) == "admin"
+    assert ws_api._room_access(ok(permissions=2, acl_permissions=0)) == "read_only"
+    assert ws_api._room_access(ok(permissions=0)) == "read_write"
+    assert ws_api._room_access(ok(permissions=2)) == "read_only"
+    assert ws_api._room_access(None) is None

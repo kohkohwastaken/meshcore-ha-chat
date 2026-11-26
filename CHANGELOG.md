@@ -2,6 +2,17 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.1
+
+### Rooms
+- Rooms (room servers) have their own **Rooms** section in the chat list.
+- Opening a room logs you in and catches you up on posts you missed: blank password first (works while the room still knows you), then your saved password, then it asks. Logins that get no reply over a direct route are retried once by flood. Passwords up to 15 characters; saved passwords stay on the Home Assistant server and are never sent to the panel.
+- Each room post shows its real author (from the key prefix the room attaches), and is dated by when it was posted.
+- Shows your access: read-write, admin or read-only. Read-only disables the message box and explains why.
+- No background traffic: **⟳ Check for new posts** logs in again when you want an update.
+- Detects when the room re-sends posts because it can't hear your radio's replies: "Posts may be delayed", then "Posts paused" with a prompt to check. Re-sent posts are stored once.
+- Room posts are limited to 150 characters, like the official app.
+
 ## 0.4.12
 
 A big redesign of the panel. Everything below is detailed in the 0.4.12 betas that follow.

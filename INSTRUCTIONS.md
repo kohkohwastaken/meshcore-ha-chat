@@ -58,6 +58,18 @@ In **Settings → Reactions** you can choose whether a channel message that's ju
 
 Click a message and pick **Reply**. MeshCore has no built-in replies, so a reply is just a message starting `@[Name]`. To avoid confusion you can only reply to someone's **newest** message; the panel tells you why if you try an older one. Incoming replies show a quote of the message they answer when it's clear which one it is (that person's only message in the last 10, within 30 minutes).
 
+### Rooms
+
+A room server is a small bulletin board on the mesh: it keeps the last 32 posts and sends them to people who log in. Rooms you've added to your radio appear under **Rooms**.
+
+- **Opening a room** logs you in and catches you up on posts you missed. If you've logged in before, it tries without a password first (the room remembers you until it restarts), then your saved password, and only asks if both fail. Most rooms use the default guest password `hello` unless the owner changed it. Passwords can be up to 15 characters.
+- **Nothing is sent in the background.** After you log in, the room sends new posts to your radio by itself. Press **⟳ Check for new posts** in the header when you want to make sure you're up to date. It logs in again, which uses a little airtime.
+- **Who wrote it:** each post shows its author's name, or the first part of their key if you don't know them.
+- **Read-only:** if the room lets in read-only guests, a wrong password still gets you in, but you can't post. The panel says so and disables the message box.
+- **Posts delayed or paused:** if the room re-sends a post, it didn't hear your radio's reply. After a few misses it stops sending to you; the panel shows **Posts paused**, and Check for new posts starts it again.
+- **If the password changes:** you stay in until the room restarts. After that, opening the room shows **Couldn't log in**; enter the new password and it replaces the saved one. Use **⋯ → Forget saved room password** to remove it.
+- Room posts are limited to 150 characters, like the official MeshCore app.
+
 ### Message details, hashes and delete
 
 Click any message for its details: hops, SNR, RSSI, the exact time, **Show route on map**, and its **hash** (also shown next to the hop count). The hash identifies the message across apps; that's what reactions point at. A hash marked `≈` is estimated because we don't know exactly when it was sent.

@@ -17,7 +17,7 @@ const COLLAPSE_KEY = 'meshcore-collapsed-sections';
 function readCollapsed(): string[] {
   try {
     const v = JSON.parse(localStorage.getItem(COLLAPSE_KEY) || '[]');
-    return Array.isArray(v) ? v.filter((x) => x === 'channels' || x === 'dms') : [];
+    return Array.isArray(v) ? v.filter((x) => x === 'channels' || x === 'rooms' || x === 'dms') : [];
   } catch {
     return [];
   }
@@ -565,22 +565,23 @@ export class ConversationList extends LitElement {
     `;
   }
 
-  private _sections(): { channels: Array<Contact | Channel>; dms: Array<Contact | Channel> } {
+  private _sections(): { channels: Array<Contact | Channel>; rooms: Array<Contact | Channel>; dms: Array<Contact | Channel> } {
     const channels = this._filteredConversations.filter((c) => !('pubkey_prefix' in c));
-    const dms = this._filteredConversations
-      .filter((c) => 'pubkey_prefix' in c)
-      .sort((a, b) => (this._previewFor(b)?.ts || '').localeCompare(this._previewFor(a)?.ts || ''));
-    return { channels, dms };
+    const byRecent = (a: Contact | Channel, b: Contact | Channel) => (this._previewFor(b)?.ts || '').localeCompare(this._previewFor(a)?.ts || '');
+    const contacts = this._filteredConversations.filter((c) => 'pubkey_prefix' in c) as Contact[];
+    const rooms = contacts.filter((c) => c.type === 3).sort(byRecent);
+    const dms = contacts.filter((c) => c.type !== 3).sort(byRecent);
+    return { channels, rooms, dms };
   }
 
   private _renderSections() {
-    const { channels, dms } = this._sections();
-    if (!channels.length && !dms.length) {
+    const { channels, rooms, dms } = this._sections();
+    if (!channels.length && !rooms.length && !dms.length) {
       return html`<div class="empty-state"><div class="empty-text">${this._emptyMessage()}</div></div>`;
     }
     // Rows are indexed across both sections so roving focus still works.
     let idx = 0;
-    const section = (key: 'channels' | 'dms', title: string, items: Array<Contact | Channel>, add: string) => {
+    const section = (key: 'channels' | 'rooms' | 'dms', title: string, items: Array<Contact | Channel>, add: string) => {
       const collapsed = this._collapsed.has(key);
       const unread = items.reduce((n, c) => n + this._getUnreadCount(
         'pubkey_prefix' in c ? (c as Contact).pubkey_prefix : String((c as Channel).channel_idx)), 0);
@@ -594,7 +595,7 @@ export class ConversationList extends LitElement {
             ${collapsed && unread === 0 ? html`<span class="section-count">${items.length}</span>` : ''}
           </button>
           <span class="section-tools">
-          ${key === 'channels' ? html`<button
+          ${key === 'rooms' ? '' : key === 'channels' ? html`<button
           class="compose-btn section-cog"
           title="Manage channels"
           aria-label="Manage channels"
@@ -623,11 +624,12 @@ export class ConversationList extends LitElement {
               ? items.map((c) => this._renderConversation(c, idx++))
               : key === 'dms' && this.previewsState !== 'ok' && !this._showAllDms
                 ? ''
-                : html`<div class="section-empty">${key === 'dms' ? 'No conversations yet. Tap Contacts to start one.' : 'None yet'}</div>`}`}
+                : html`<div class="section-empty">${key === 'dms' ? 'No conversations yet. Tap Contacts to start one.' : key === 'rooms' ? 'No rooms. Add a room server from Contacts.' : 'None yet'}</div>`}`}
       `;
     };
     return html`
       ${section('channels', 'Channels', channels, 'Add a channel')}
+      ${rooms.length ? section('rooms', 'Rooms', rooms, '') : ''}
       ${section('dms', 'Direct messages', dms, 'Contacts')}
     `;
   }
@@ -747,8 +749,9 @@ export class ConversationList extends LitElement {
       if (this._activeFilter === 'unread' && unread <= 0) return false;
       // Direct messages only appear once there's a conversation to show
       // (searching, or "Show all contacts" after a failed load, finds every contact).
-      if (isContact && this.previewsState !== 'ok' && !this._showAllDms && !q && this.activeId !== id) return false;
-      if (isContact && this.previewsState === 'ok' && !this._previewFor(conv) && unread <= 0 && this.activeId !== id && !q) return false;
+      const isRoom = isContact && (conv as Contact).type === 3;
+      if (isContact && !isRoom && this.previewsState !== 'ok' && !this._showAllDms && !q && this.activeId !== id) return false;
+      if (isContact && !isRoom && this.previewsState === 'ok' && !this._previewFor(conv) && unread <= 0 && this.activeId !== id && !q) return false;
       return true;
     });
   }

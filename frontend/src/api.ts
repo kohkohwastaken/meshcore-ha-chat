@@ -1043,3 +1043,51 @@ export async function clearStaleNodes(
     return null;
   }
 }
+
+// ─── Room servers ─────────────────────────────────────────────────────────
+
+export type RoomAccess = 'admin' | 'read_write' | 'read_only';
+
+export interface RoomState {
+  access: RoomAccess | null;
+  last_login: number | null;
+  fails: number;
+  remembered: boolean;
+}
+
+export interface RoomLoginResult {
+  ok: boolean;
+  access: RoomAccess | null;
+  used: 'blank' | 'saved' | 'given' | null;
+  flooded: boolean;
+  remembered: boolean;
+  fails: number;
+}
+
+/** Log in to a room: blank then remembered password, or just `password` if given. */
+export async function roomLogin(
+  hass: HomeAssistant,
+  publicKey: string,
+  opts: { password?: string; remember?: boolean } = {},
+  entryId?: string,
+): Promise<RoomLoginResult> {
+  const msg: Record<string, unknown> = { type: 'meshcore_chat/room_login', public_key: publicKey };
+  if (opts.password !== undefined) msg.password = opts.password;
+  if (opts.remember !== undefined) msg.remember = opts.remember;
+  if (entryId) msg.entry_id = entryId;
+  return hass.callWS<RoomLoginResult>(msg);
+}
+
+/** What we know about each room, by public key (no passwords). */
+export async function getRoomStatus(hass: HomeAssistant): Promise<Record<string, RoomState>> {
+  try {
+    const r = await hass.callWS<{ rooms: Record<string, RoomState> }>({ type: 'meshcore_chat/room_status' });
+    return r.rooms || {};
+  } catch {
+    return {};
+  }
+}
+
+export async function roomForgetPassword(hass: HomeAssistant, publicKey: string): Promise<void> {
+  await hass.callWS({ type: 'meshcore_chat/room_forget_password', public_key: publicKey });
+}

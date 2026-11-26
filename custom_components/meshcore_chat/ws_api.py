@@ -445,6 +445,9 @@ def async_register_ws_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_add_contact_manual)
     websocket_api.async_register_command(hass, ws_get_unverified_contacts)
     websocket_api.async_register_command(hass, ws_clear_stale_nodes)
+    websocket_api.async_register_command(hass, ws_room_login)
+    websocket_api.async_register_command(hass, ws_room_status)
+    websocket_api.async_register_command(hass, ws_room_forget_password)
     websocket_api.async_register_command(hass, ws_remove_contact)
     websocket_api.async_register_command(hass, ws_trace)
     websocket_api.async_register_command(hass, ws_get_blocked_contacts)
@@ -2854,6 +2857,177 @@ async def ws_clear_stale_nodes(hass, connection, msg):
     connection.send_result(msg["id"], {
         "discovered": len(stale_discovered), "manual": removed_manual,
     })
+
+
+# ─── Room servers ───────────────────────────────────────────────────────
+# A room server only pushes posts to clients that have logged in. Logging in
+# with a blank password works while the room still has us in its client list
+# (until it restarts or runs out of room); otherwise it needs the room's
+# password. Nothing here runs in the background: the panel logs in when a
+# room is opened or the user checks for new posts.
+
+ROOM_PASSWORD_MAX = 15  # the firmware sends at most 15 characters
+
+
+async def _room_store(hass) -> tuple[Store, dict]:
+    """Per-room state: remembered password (never sent to the panel), access, last login, failures."""
+    bucket = hass.data.setdefault(DOMAIN, {})
+    cached = bucket.get("_rooms")
+    if cached is None:
+        store = Store(hass, 1, "meshcore_chat.rooms")
+        data = await store.async_load() or {}
+        if not isinstance(data, dict):
+            data = {}
+        cached = bucket["_rooms"] = (store, data)
+    return cached
+
+
+def _find_payload_value(obj, key):
+    if isinstance(obj, dict):
+        if key in obj:
+            return obj[key]
+        for v in obj.values():
+            found = _find_payload_value(v, key)
+            if found is not None:
+                return found
+    return None
+
+
+def _room_access(result) -> str | None:
+    """Access level from a LOGIN_SUCCESS result, or None if the login wasn't confirmed."""
+    if result is None:
+        return None
+    payload = getattr(result, "payload", result)
+    if getattr(result, "type", None) is not None and "LOGIN_SUCCESS" not in str(getattr(result, "type", "")) and str(getattr(result, "type", "")) != "OK":
+        return None
+    acl = _find_payload_value(payload, "acl_permissions")
+    if isinstance(acl, int):
+        role = acl & 3
+        return "admin" if role == 3 else "read_write" if role == 2 else "read_only"
+    perms = _find_payload_value(payload, "permissions")
+    if isinstance(perms, int):
+        # Older reply: 1 = admin, 2 = read-only guest, 0 = normal member.
+        return "admin" if perms & 1 else "read_only" if perms == 2 else "read_write"
+    if _find_payload_value(payload, "is_admin") is not None or _find_payload_value(payload, "pubkey_prefix"):
+        return "read_write"
+    return None
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/room_login",
+        vol.Required("public_key"): vol.All(str, vol.Match(r"^[0-9a-fA-F]{12,64}$")),
+        vol.Optional("password"): vol.All(str, vol.Length(max=ROOM_PASSWORD_MAX)),
+        vol.Optional("remember", default=True): bool,
+        vol.Optional("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_room_login(hass, connection, msg):
+    """Log in to a room server so it sends the posts we've missed.
+
+    Without ``password``: try a blank password (works while the room still
+    knows us), then the remembered one. With ``password``: try just that,
+    and remember it once it works if ``remember``. Each attempt that gets no
+    reply over a direct route is retried once by flood, in case the route
+    has gone stale.
+    """
+    coordinator = _get_coordinator(hass, msg.get("entry_id"))
+    if not coordinator:
+        connection.send_error(msg["id"], "not_found", "No MeshCore coordinator found")
+        return
+    key = msg["public_key"].lower()
+    prefix = key[:12]
+    api = coordinator.api
+    contact = api.contact_by_prefix(prefix) if _modern_parent(api) else api.mesh_core.get_contact_by_key_prefix(prefix)
+    if not contact:
+        connection.send_error(msg["id"], "not_found", "That room isn't in your radio's contacts")
+        return
+    full_key = str((contact.get("public_key") if isinstance(contact, dict) else "") or key).lower()
+    store, rooms = await _room_store(hass)
+    state = rooms.setdefault(full_key, {})
+
+    if "password" in msg:
+        attempts = [("given", msg["password"])]
+    else:
+        attempts = [("blank", "")]
+        if state.get("password"):
+            attempts.append(("saved", state["password"]))
+
+    flooded = False
+    access = None
+    used = None
+    for label, pwd in attempts:
+        try:
+            result = await _parent_command(hass, connection, msg, coordinator, "send_login_sync", contact, pwd)
+        except Exception as ex:  # noqa: BLE001 - treated as no reply
+            _LOGGER.debug("Room login (%s) to %s failed: %s", label, prefix, ex)
+            result = None
+        access = _room_access(result)
+        if access is None and not flooded and isinstance(contact, dict) and (contact.get("out_path_len") or -1) >= 0:
+            flooded = True
+            try:
+                await _parent_command(hass, connection, msg, coordinator, "reset_path", contact)
+                result = await _parent_command(hass, connection, msg, coordinator, "send_login_sync", contact, pwd)
+                access = _room_access(result)
+            except Exception as ex:  # noqa: BLE001
+                _LOGGER.debug("Room flood login to %s failed: %s", prefix, ex)
+        if access:
+            used = label
+            break
+
+    now = int(time.time())
+    if access:
+        state.update({"access": access, "last_login": now, "fails": 0})
+        if used == "given" and msg["remember"] and access != "read_only":
+            state["password"] = msg["password"]
+    else:
+        state["fails"] = int(state.get("fails", 0)) + 1
+        state["last_fail"] = now
+    await store.async_save(rooms)
+    connection.send_result(msg["id"], {
+        "ok": bool(access),
+        "access": access,
+        "used": used,
+        "flooded": flooded,
+        "remembered": bool(state.get("password")),
+        "fails": state.get("fails", 0),
+    })
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/room_status",
+    }
+)
+@websocket_api.async_response
+async def ws_room_status(hass, connection, msg):
+    """What we know about each room, by public key. Never includes passwords."""
+    _store, rooms = await _room_store(hass)
+    connection.send_result(msg["id"], {"rooms": {
+        k: {
+            "access": v.get("access"),
+            "last_login": v.get("last_login"),
+            "fails": v.get("fails", 0),
+            "remembered": bool(v.get("password")),
+        }
+        for k, v in rooms.items()
+    }})
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/room_forget_password",
+        vol.Required("public_key"): vol.All(str, vol.Match(r"^[0-9a-fA-F]{64}$")),
+    }
+)
+@websocket_api.async_response
+async def ws_room_forget_password(hass, connection, msg):
+    store, rooms = await _room_store(hass)
+    state = rooms.get(msg["public_key"].lower())
+    if state and state.pop("password", None) is not None:
+        await store.async_save(rooms)
+    connection.send_result(msg["id"], {"remembered": False})
 
 
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")

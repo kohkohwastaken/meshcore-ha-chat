@@ -16,11 +16,12 @@ The panel has five tabs. On a phone they move to a bar along the bottom.
 
 ### 💬 Chat
 
-- **Channels and direct messages** in two sections you can collapse, each showing the last message and how long ago it was. Empty DMs are hidden.
+- **Channels, rooms and direct messages** in sections you can collapse, each showing the last message and how long ago it was. Empty DMs are hidden.
 - **Reactions** that work with other apps: we send and read the [MeshCore One reaction format](https://github.com/Avi0n/MeshCoreOne/blob/main/docs/Reactions.md), which the community has settled on until MeshCore supports reactions itself. We also read reactions from MeshCore Open and plain `@[Name] 👍` messages. Any emoji works. A toggle in the chat header shows or hides the raw reaction messages.
 - **Replies** with a quote of the message being answered, when it's clear which one that is. You can only reply to someone's newest message, so replies never point at the wrong one.
 - **Message details**: hops, SNR, RSSI, the route on a map, the exact time, and each message's hash (shown next to the hop count).
 - **Delete** a single message or a whole conversation, with a confirmation first.
+- **Rooms** (room servers): opening one logs you in and catches you up on posts you missed, showing who wrote each post. Nothing is sent in the background: use ⟳ Check for new posts when you want an update. The panel warns you if you're read-only or if the room has stopped sending to you.
 - **Search** within a conversation, unread counts, and delivery status (Sent, Repeated, Waiting) with Resend.
 
 ### 👥 Contacts

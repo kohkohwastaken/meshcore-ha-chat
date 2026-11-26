@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import time
+from datetime import datetime, timezone
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
@@ -368,6 +370,9 @@ class SenderTimestamps:
 
     def __init__(self) -> None:
         self._times: OrderedDict[str, int] = OrderedDict()
+        # Room-server posts (TXT_TYPE_SIGNED_PLAIN, txt_type 2) carry the
+        # original author's 4-byte key prefix in ``signature``.
+        self._authors: OrderedDict[str, str] = OrderedDict()
 
     @callback
     def on_raw_event(self, event: Event) -> None:
@@ -388,11 +393,42 @@ class SenderTimestamps:
         for key in keys:
             self._times[key] = int(ts)
             self._times.move_to_end(key)
+        author = payload.get("signature")
+        if "CONTACT_MSG_RECV" in kind and payload.get("txt_type") == 2 and isinstance(author, str):
+            self._authors[text] = author.lower()[:8]
+            self._authors.move_to_end(text)
         while len(self._times) > self.MAX:
             self._times.popitem(last=False)
+        while len(self._authors) > self.MAX:
+            self._authors.popitem(last=False)
 
     def lookup(self, text: str) -> int | None:
         return self._times.get(text)
+
+    def room_author(self, text: str) -> str | None:
+        """The author prefix of a room post with this text, if one was just received."""
+        return self._authors.get(text)
+
+
+def _author_name(hass: HomeAssistant, entry_id: str | None, prefix: str) -> str | None:
+    """Name of the node whose public key starts with ``prefix``, from contacts or discovered nodes."""
+    for coordinator in _coordinators(hass, entry_id):
+        for source in (getattr(coordinator, "_contacts", None), getattr(coordinator, "_discovered_contacts", None)):
+            if not isinstance(source, dict):
+                continue
+            for contact in source.values():
+                if not isinstance(contact, dict):
+                    continue
+                key = str(contact.get("public_key") or "").lower()
+                if key.startswith(prefix) and contact.get("adv_name"):
+                    return str(contact["adv_name"])
+    return None
+
+
+def _coordinators(hass: HomeAssistant, entry_id: str | None) -> list:
+    bucket = hass.data.get(MESHCORE_DOMAIN) or {}
+    found = [v for k, v in bucket.items() if hasattr(v, "api") and (not entry_id or k == entry_id)]
+    return found or [v for v in bucket.values() if hasattr(v, "api")]
 
 
 def _make_message_handler(hass: HomeAssistant, entry_id: str, sender_times: SenderTimestamps | None = None):
@@ -444,6 +480,18 @@ def _make_message_handler(hass: HomeAssistant, entry_id: str, sender_times: Send
             sender_ts = sender_times.lookup(record["text"])
             if sender_ts is not None:
                 record["sender_timestamp"] = sender_ts
+            author = sender_times.room_author(record["text"])
+            if author:
+                # A room-server post: show its real author, date it by when it
+                # was posted (it may be a catch-up of an older post), and drop
+                # repeats the room sends when it didn't hear our acknowledgement.
+                record["room_author"] = author
+                record["room_sender"] = record["sender"]
+                record["sender"] = _author_name(hass, data.get("entry_id"), author) or author
+                if sender_ts and 1577836800 < sender_ts < time.time() + 300:
+                    record["timestamp"] = datetime.fromtimestamp(sender_ts, tz=timezone.utc).isoformat()
+                if await store.note_room_repeat(entity_id, author, sender_ts, record["text"]):
+                    return
         # Optional metadata — copy through only if present.
         for k in (
             "channel",

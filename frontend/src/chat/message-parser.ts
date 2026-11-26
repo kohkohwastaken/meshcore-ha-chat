@@ -151,6 +151,8 @@ export function toClientMessage(stored: StoredMessage): ChatMessage {
     text: stored.text,
     timestamp: new Date(stored.timestamp),
     senderTimestamp: stored.sender_timestamp,
+    roomAuthor: stored.room_author,
+    roomRepeats: stored.room_repeats,
     isOutgoing: stored.outgoing,
     isSystem: false,
     raw: stored.text,
