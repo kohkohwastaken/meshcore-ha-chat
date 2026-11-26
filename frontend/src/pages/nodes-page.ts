@@ -473,11 +473,11 @@ export class NodesPage extends LitElement {
 
     .map-card {
       position: absolute;
-      top: 12px;
-      right: 12px;
-      bottom: 12px;
+      left: 12px;
+      bottom: 36px;
       z-index: 500;
-      width: min(360px, calc(100% - 24px));
+      width: min(340px, calc(100% - 24px));
+      height: min(420px, calc(100% - 60px));
       border-radius: 12px;
       box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
       overflow: hidden;
@@ -485,12 +485,11 @@ export class NodesPage extends LitElement {
 
     @media (max-width: 870px) {
       .map-card {
-        top: auto;
         left: 8px;
         right: 8px;
         bottom: 8px;
         width: auto;
-        height: 55%;
+        height: 50%;
       }
     }
 

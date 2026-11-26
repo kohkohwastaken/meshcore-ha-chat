@@ -176,10 +176,12 @@ export class NodesMap extends LitElement {
       const node = this._entityNodes.get(entityId);
       const on = !!key && String(node?.public_key ?? '').toLowerCase() === key;
       el.classList.toggle('mc-selected', on);
-      el.style.transform = on ? 'scale(1.45)' : '';
+      // Use the separate `scale` property: ha-map positions markers with
+      // `transform`, so touching that moves them.
+      el.style.scale = on ? '1.45' : '';
       el.style.boxShadow = on ? '0 0 0 3px #fff, 0 0 12px 4px rgba(255, 255, 255, 0.7)' : '';
       el.style.borderRadius = on ? '50%' : '';
-      el.style.transition = 'transform 0.15s, box-shadow 0.15s';
+      el.style.transition = 'scale 0.15s, box-shadow 0.15s';
       const holder = el.parentElement as HTMLElement | null;
       if (holder) holder.style.zIndex = on ? '10000' : '';
     }
