@@ -2929,8 +2929,7 @@ async def ws_room_login(hass, connection, msg):
     Without ``password``: the saved password if there is one (it works
     whether or not the room still knows us), otherwise a blank one (works
     while the room still knows us). With ``password``: just that, saved once
-    it works if ``remember``. A login that gets no reply over a direct route
-    is retried once by flood, in case the route has gone stale. If the
+    it works if ``remember``. Logins always go by flood. If the
     parent integration refuses to send (its traffic limit), we stop and say
     so. ``tried`` reports each attempt.
     """
@@ -2976,20 +2975,19 @@ async def ws_room_login(hass, connection, msg):
         tried.append({"password": label, "route": route, "result": "ok" if access else "no_reply", "detail": ""})
         return access, False
 
+    # Always log in by flood: a stored direct route may be stale, and the
+    # room's reply tells the radio a fresh route back.
     has_route = isinstance(contact, dict) and (contact.get("out_path_len") if contact.get("out_path_len") is not None else -1) >= 0
+    if has_route:
+        try:
+            await _parent_command(hass, connection, msg, coordinator, "reset_path", contact)
+        except Exception as ex:  # noqa: BLE001 - the login still goes out, by the old route
+            _LOGGER.debug("Couldn't clear the route to room %s: %s", prefix, ex)
     access = None
     used = None
     stopped = False
     for label, pwd in attempts:
-        access, stopped = await attempt(label, pwd, "direct" if has_route else "flood")
-        if not access and not stopped and has_route and tried[-1]["result"] == "no_reply":
-            # The direct route may have gone stale: forget it and try once by flood.
-            try:
-                await _parent_command(hass, connection, msg, coordinator, "reset_path", contact)
-                has_route = False
-                access, stopped = await attempt(label, pwd, "flood")
-            except Exception as ex:  # noqa: BLE001
-                tried.append({"password": label, "route": "flood", "result": "error", "detail": str(ex)})
+        access, stopped = await attempt(label, pwd, "flood")
         if access:
             used = label
             break

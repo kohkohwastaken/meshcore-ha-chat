@@ -4299,7 +4299,7 @@ async def test_ws_room_login_stops_at_rate_limit(hass: HomeAssistant, companion_
         await _call_ws(ws_api.ws_room_login, hass, conn, {"id": 1, "public_key": key, "remember": True})
     result = conn.results[0][1]
     assert not result["ok"] and result["fails"] == 0
-    assert calls == ["send_login_sync"]
+    assert calls == ["reset_path", "send_login_sync"]
     assert result["tried"][0]["result"] == "rate_limited" and "20 seconds" in result["tried"][0]["detail"]
 
 

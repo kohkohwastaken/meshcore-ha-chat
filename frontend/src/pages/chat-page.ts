@@ -237,6 +237,11 @@ export class ChatPage extends LitElement {
       font: inherit;
     }
 
+    .room-saved {
+      font-size: 13px;
+      color: var(--secondary-text-color);
+    }
+
     .room-remember {
       display: flex;
       align-items: center;
@@ -963,6 +968,8 @@ export class ChatPage extends LitElement {
   /** Why the last login didn't work, in words. */
   @state() private _roomWhy = '';
   @state() private _roomLimited = false;
+  /** Typing a new password instead of using the saved one. */
+  @state() private _roomChangePw = false;
   private _roomOpened: string | null = null;
 
   /** The open conversation when it's a room server. */
@@ -983,6 +990,7 @@ export class ChatPage extends LitElement {
     this._roomPrompt = null;
     this._roomNote = '';
     this._roomPw = '';
+    this._roomChangePw = false;
     if (!room || !this.hass) return;
     this._rooms = await getRoomStatus(this.hass);
     const st = this._rooms[room.public_key.toLowerCase()];
@@ -1004,6 +1012,7 @@ export class ChatPage extends LitElement {
       if (r.ok) {
         this._roomPrompt = null;
         this._roomPw = '';
+        this._roomChangePw = false;
         void this._messageStore?.refresh();
       } else if (this._roomLimited) {
         this._roomPrompt = 'failing';
@@ -1090,14 +1099,19 @@ export class ChatPage extends LitElement {
     if (!room) return '';
     const st = this._roomState(room);
     const busy = this._roomBusy === room.public_key.toLowerCase();
-    const form = html`
+    const useSaved = !!st?.remembered && !this._roomChangePw;
+    const form = useSaved ? html`
+      <span class="room-saved">Saved password <span aria-hidden="true">•••••</span> will be used</span>
+      <button class="room-btn" ?disabled=${busy} @click=${() => this._roomLogin(room)}>${busy ? 'Logging in…' : 'Log in'}</button>
+      <button class="room-btn ghost" ?disabled=${busy} @click=${() => { this._roomChangePw = true; }}>Change</button>` : html`
       <input class="room-pw" type="password" maxlength="15" aria-label="Room password"
         placeholder=${this._roomPrompt === 'password' ? 'Password' : 'New password'}
         .value=${this._roomPw} @input=${(e: Event) => { this._roomPw = (e.target as HTMLInputElement).value; }}
         @keydown=${(e: KeyboardEvent) => { if (e.key === 'Enter') void this._roomLogin(room, this._roomPw); }} />
       <label class="room-remember"><input type="checkbox" .checked=${this._roomRemember}
         @change=${(e: Event) => { this._roomRemember = (e.target as HTMLInputElement).checked; }} /> Remember</label>
-      <button class="room-btn" ?disabled=${busy} @click=${() => this._roomLogin(room, this._roomPw)}>${busy ? 'Logging in…' : 'Log in'}</button>`;
+      <button class="room-btn" ?disabled=${busy} @click=${() => this._roomLogin(room, this._roomPw)}>${busy ? 'Logging in…' : 'Log in'}</button>
+      ${st?.remembered ? html`<button class="room-btn ghost" @click=${() => { this._roomChangePw = false; this._roomPw = ''; }}>Use saved password</button>` : ''}`;
     if (this._roomPrompt === 'password') {
       return html`<div class="room-bar info"><div class="room-bar-text"><b>This room needs a password.</b> Most rooms use the default guest password <code>hello</code> unless the owner changed it. Up to 15 characters.</div>${form}</div>`;
     }
@@ -1107,7 +1121,7 @@ export class ChatPage extends LitElement {
           <button class="room-btn ghost" ?disabled=${busy} @click=${() => this._roomLogin(room)}>Try again</button></div>`;
       }
       return html`<div class="room-bar warn"><div class="room-bar-text"><b>Couldn't log in.</b> The room's password may have changed, or the room may be out of reach.${st?.remembered ? ' Your saved password is kept until a new one works.' : ''}${this._roomWhy ? html`<br><small>${this._roomWhy}</small>` : ''}${this._roomNote ? html`<br><small>${this._roomNote}</small>` : ''}</div>
-        ${form}<button class="room-btn ghost" ?disabled=${busy} @click=${() => this._roomLogin(room)}>Try again</button></div>`;
+        ${form}${useSaved ? '' : html`<button class="room-btn ghost" ?disabled=${busy} @click=${() => this._roomLogin(room)}>Try again</button>`}</div>`;
     }
     if (st?.access === 'read_only' && !busy) {
       return html`<div class="room-bar warn"><div class="room-bar-text"><b>Logged in read-only.</b> You can read posts but not post. The password may be wrong or may have changed.</div>
@@ -2240,7 +2254,7 @@ export class ChatPage extends LitElement {
                     : html`<button role="menuitem" disabled title="This contact hasn't shared a location in its adverts">Show on map (no location shared)</button>`}
                   <button role="menuitem" @click=${() => this._convAction('trace')}>Trace route</button>`}
             ${this._selectedRoom() ? html`
-              <button role="menuitem" @click=${() => { this._convMenuOpen = false; this._roomPrompt = 'password'; }}>Log in with a password…</button>
+              <button role="menuitem" @click=${() => { this._convMenuOpen = false; this._roomPrompt = 'password'; this._roomChangePw = true; }}>${this._roomState(this._selectedRoom())?.remembered ? 'Change room password…' : 'Log in with a password…'}</button>
               ${this._roomState(this._selectedRoom())?.remembered ? html`<button role="menuitem" @click=${() => this._forgetRoomPassword()}>Forget saved room password</button>` : ''}` : ''}
             <button role="menuitem" @click=${() => this._convAction('search')}>Search this conversation</button>
             <button role="menuitem" class="danger" @click=${() => this._convAction('delete')}>${isChannel ? 'Clear chat history' : 'Delete chat'}</button>

@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.3
+
+- Rooms: logins always go by flood (the room's reply gives your radio a fresh route back).
+- Rooms: when a password is saved, the login bar shows "Saved password ••••• will be used" with **Change** (and **Use saved password** to go back), instead of an empty password box that looked as if it had been cleared. The ⋯ menu says "Change room password…" when one is saved.
+
 ## 0.4.13-beta.2
 
 - Rooms: one login per check. With a saved password it sends just that; without, it tries no password. A login that gets no reply over the direct route is retried once by flood. Before, a check could send up to three logins and run into the core integration's sending limit, which showed as a failed login.
