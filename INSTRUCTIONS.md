@@ -1,187 +1,192 @@
 # Using MeshCore Chat
 
-The MeshCore Chat interface should be intuitive for common tasks; this document mostly covers dialogs (accessed by clicking gear icons, etc.) and integration functions that might not be as easy to find or understand.
+How to do the common things in MeshCore Chat, plus a few gotchas worth knowing before you change anything. It assumes you've installed it (see [README.md](./README.md)) and **MeshCore Chat** is in your sidebar.
 
-These instructions are a walkthrough of the administrative tasks the panel is built for, plus the operational gotchas worth knowing in advance. Assumes you've already followed the install steps in [README.md](./README.md) and the **MeshCore Chat** entry is in your sidebar.
-
-If you're brand new to MeshCore itself, [meshcore.io](https://meshcore.io) is the friendlier landing page; [docs.meshcore.io](https://docs.meshcore.io) is the protocol-and-firmware reference.
+New to MeshCore itself? [meshcore.io](https://meshcore.io) is the place to start; [docs.meshcore.io](https://docs.meshcore.io) covers the protocol and firmware.
 
 ---
 
 ## Quick start
 
-The panel lives in the HA sidebar under **MeshCore Chat**. It opens to the **Chat** tab; three more tabs sit along the top header: **Devices**, **Nodes**, **Settings**.
+The panel has five tabs along the top (on a phone, along the bottom):
 
-- **Chat** — channels, DMs, message history, cross-conversation search, and per-message route popups (click any message bubble for Copy / Reply, plus the route metadata: hop sequence, SNR, RSSI, and exact receive timestamp). **Show Route on Map** draws the route through the repeaters, matched to your contacts by their ID, with the distance of each leg.
-- **Devices** — per-device sensor cards for every managed repeater and client, plus action buttons (Flood Advert, Sync Clock, Req Telemetry, Req Status, Issue Command, Reboot).
-- **Nodes** — full network discovery view. Every node the companion has heard, filterable by Added / Discovered and by node type (the two filters combine). **🗺 Map** shows the same nodes on Home Assistant's map (Home Assistant 2026.10+): each node is labelled with its 2-character ID and coloured by type, nearby nodes group into a numbered circle (tap to zoom in, or turn grouping off with the ◉ button), and tapping a node opens its details.
-- **Settings** — your companion's profile, radio configuration, location source, identity, and a local Issue Command launcher. The companion card shows the same rich sensor tiles managed devices get (battery, signal, radio activity, message counts) plus a diagnostics table — but only once you enable **Self Diagnostics** in the upstream meshcore integration's options (it's off by default; the tiles self-hide until then). Those entities are created by the upstream integration; the chat panel only renders them.
+- **Chat**: channels and direct messages.
+- **Nodes**: every node your radio knows, on a map or in a list.
+- **My radio**: your companion radio's profile and radio settings.
+- **Repeaters**: the repeaters and clients you manage.
+- **Settings**: display preferences, saved in this browser.
 
-The header carries a device switcher (when more than one upstream `meshcore` config entry is present) plus a connection status indicator. If the badge says **Offline**, the companion radio isn't talking to HA — fix that in the upstream integration before the chat panel can do anything useful.
+The header shows which radio you're on (with a switcher if you have more than one), its battery, and whether it's connected. If it says **Offline**, your radio isn't talking to Home Assistant; fix that in the core MeshCore integration first.
 
 ---
 
 ## Permissions
 
-Most of the panel is usable by any authenticated Home Assistant user — reading messages, viewing sensor history, browsing the Nodes tab, opening dialogs, and searching all work without elevated privileges.
+Any Home Assistant user can read messages, browse nodes, open dialogs and search. These need an **administrator** (Settings → People → Users → **Administrator**); for anyone else the request is refused and nothing changes:
 
-The actions below are restricted to users with **administrator** rights on your HA instance (Settings → People → Users → click user → toggle **Administrator**). If a non-admin user triggers one of these, the WebSocket call returns an `unauthorized` error envelope and the panel shows an error toast — no change is made.
-
-**Admin-only actions:**
-
-| Where in the panel | Action |
+| Where | Action |
 |---|---|
-| Settings → radio configuration | Change TX power, frequency, bandwidth, spreading factor, coding rate, path-hash mode |
-| Settings → device profile | Rename the companion · change location source |
-| Settings → Key Management | Regenerate identity · Import identity |
-| Companion → Issue Command | Send any command to the local companion |
-| Devices tab → Issue Command | Send any command to a managed remote device |
-| Manage → Contacts | Add / Remove / Block · Clear Discovered |
-| Manage → Channels | Add / Edit / Remove (incl. channel-key changes) |
-| Devices → neighbor table | Remove neighbor · Cleanup stale neighbors |
-| Node detail → Trace | Run a path trace (sends packets, costs mesh airtime) |
+| My radio | Change radio settings · rename · location · Key Management · Command |
+| Repeaters | Command · Reboot · remove neighbours |
+| Contacts | Add · Add manually · Remove |
+| Chat → ⚙ Manage channels | Add · edit · remove channels |
+| Nodes | Clear stale nodes |
+| Node details | Trace (sends packets on the mesh) |
 
-This is enforced at the WebSocket layer, not just the UI — a hand-crafted WS request from a non-admin user is rejected the same way.
+This is enforced by Home Assistant itself, not just hidden in the panel.
 
 ---
 
-## Common tasks
+## Chat
 
-### Adding a contact (Discovered → Added)
+### Starting a conversation
 
-A contact is **Discovered** as soon as the companion hears its advertisement on the air. It becomes **Added** when you tell the companion to keep it in its on-device contact list — at which point you can DM it, trace a path to it, and the companion will continue to maintain a route to it.
+- **A channel**: click a channel under **Channels**. To add or remove channels, use the ＋ or ⚙ next to the Channels heading.
+- **A direct message**: click **Contacts** next to the Direct messages heading, find the contact, and click **Message**. Direct messages only appear in the list once they have messages in them.
 
-To promote one:
+Click a section heading to collapse it, if you only care about channels or DMs for a while.
 
-1. Open the **Chat** tab.
-2. Click **Manage** gear icon in the top-right of the conversation list.
-3. Switch to the **Contacts** sub-tab in the dialog.
-4. Use the filter chips to narrow to **Discovered**, optionally **Repeaters** or **Clients**.
-5. Find the node — sort by Last heard or type the name in the search box.
-6. Click **Add** on its row.
+### Reacting to a message
 
-The Discovered → Added flip happens on the device, not just in HA. Other peers learn about your additions implicitly via mesh advertising; you don't need to coordinate with anyone.
+Click a message and pick **React**, then any emoji. Reactions are sent in the [MeshCore One format](https://github.com/Avi0n/MeshCoreOne/blob/main/docs/Reactions.md), which MeshCore One, MeshCore Open and other apps understand; apps that don't will show it as a short message. We also understand reactions sent by MeshCore Open and simple `@[Name] 👍` messages.
 
-To go the other way, click **Remove** on an Added contact's row in the same dialog. The contact comes off the device's contact list immediately, but **the conversation tile and its message history stay in the Chat sidebar until the upstream `meshcore` integration is restarted** — that's because the underlying `binary_sensor.meshcore_<name>_messages` entity isn't auto-deleted on contact removal. Restart the integration (Settings → Devices & Services → MeshCore → ⋮ → Reload) to clear the stale tile. The contact stays Discovered as long as the companion keeps hearing it; if it falls quiet for long enough you can clear it from the **Nodes** tab via **Cleanup stale**.
+The reaction toggle in the chat header shows or hides the reaction messages themselves. With it on, a reaction to a message you never received shows as pending, so you can see what it's for.
 
-The same flow is available from the **Nodes** tab: click any Discovered node tile, then **Add Contact** in the detail dialog.
+In **Settings → Reactions** you can choose whether a channel message that's just `@[Name]` and one emoji counts as a message, a reaction, or both, and whether to show reactions to messages that haven't arrived.
 
-### Adding / removing channels
+### Replying
 
-MeshCore channels are slot-based — each slot has an index, a name, and a shared key derived from the name (or supplied manually).
+Click a message and pick **Reply**. MeshCore has no built-in replies, so a reply is just a message starting `@[Name]`. To avoid confusion you can only reply to someone's **newest** message; the panel tells you why if you try an older one. Incoming replies show a quote of the message they answer when it's clear which one it is (that person's only message in the last 10, within 30 minutes).
 
-**Add or update a channel:**
+### Message details, hashes and delete
 
-1. **Chat** tab → **Manage** → **Channels** sub-tab.
-2. Click **Add channel** (or click the row of an existing one to edit).
-3. Pick a free slot index and a name. Leave **Auto key** ticked unless you have a reason to type a key by hand — auto-derivation matches what other clients do by default.
-4. Click **Save**.
+Click any message for its details: hops, SNR, RSSI, the exact time, **Show route on map**, and its **hash** (also shown next to the hop count). The hash identifies the message across apps; that's what reactions point at. A hash marked `≈` is estimated because we don't know exactly when it was sent.
 
-**Remove a channel:**
+To delete a message, click it and pick **Delete**. To delete a whole conversation, use the ⋯ menu in its header. Both ask first. Deleting only removes it from Home Assistant, not from anyone's radio.
 
-1. Same dialog.
-2. Find the channel row and click **Remove**.
+### Searching
 
-The change takes effect on the radio immediately. Other panels and other connected clients refresh on the next event tick.
+Use the search in the Chat header to search across all conversations, with optional dates. Click a result to jump to it.
 
-### Searching messages across conversations
+---
 
-Click the magnifying-glass icon in the Chat tab header (near the **Manage** gear) to open the cross-conversation message search. Type a query and the dialog returns matching messages from any stored conversation, with optional from / to date filters. Click any result to jump directly to that conversation at the matching message. Results are ranked by recency.
+## Contacts
 
-### Sending commands to your companion
+Open **Contacts** from the Direct messages heading.
 
-The **Settings** tab has an Issue Command launcher near the bottom. Use it for anything that doesn't have a dedicated UI surface — querying internal state, prodding the radio, exporting logs, etc.
+### Adding a contact
 
-1. **Settings** tab.
-2. Scroll to the **Issue Command** section.
-3. Pick a category from the left (Device Management, Device Info, Channel Management, etc.).
-4. Pick a command. The right-hand panel populates the parameter form.
-5. Fill in any required fields and click **Run**.
-6. The response appears below the form. For commands that return JSON, the dialog renders the structure; for plain-text responses, the raw string.
+A node is **Discovered** when your radio hears it. It becomes a **Contact** when you add it to your radio's contact list, so you can message it, trace to it, and your radio keeps a route to it.
 
-The command set comes straight from the meshcore SDK — anything `mesh_core.commands.<method>` exposes is reachable here.
+1. **Contacts** → **Discovered** tab.
+2. Search, or sort by name or when last heard.
+3. Click the node, then **Add**.
 
-### Sending commands to a managed repeater/client
+You can also add from the **Nodes** tab: click a node, then **Add**.
 
-Repeaters and remote clients have their own CLI surface, accessed by sending login + command over the air. The Devices tab wires this into a per-card menu.
+### Adding a contact manually
 
-1. **Devices** tab.
-2. Click the gear icon on the repeater's card.
-3. **Issue Command**.
-4. Same picker UI as the local launcher, but the catalogue is the **remote** command set (different shape from local because it goes through the firmware's CLI parser, not the SDK).
-5. **Run**.
+For someone your radio hasn't heard yet: **Contacts** → **＋ Add manually**, then paste any of:
 
-The companion will log in to the repeater first (using the password from the upstream `meshcore` integration's repeater config) and then fire the command. The response shows up in the dialog. If the repeater is offline, the command times out — there's no acknowledgement that the device received it, only that the radio sent it.
+- a chat code or `meshcore://contact/add?…` link someone shared,
+- the text from their QR code,
+- a 64-character public key (you'll be asked for a name).
 
-A small subset of common ops also have first-class buttons on the card itself — **Flood Advert**, **Sync Clock**, **Req Telemetry**, **Req Status**, **Reboot**. Use those instead of digging through the command catalogue when they fit.
+It shows as **Unverified** until your radio actually hears from that key (an advert, or a direct message from them). Treat unverified contacts with care; anyone can paste any key and name.
 
-### Changing radio settings on the companion
+### Sharing a contact
 
-The companion's radio parameters — TX power, frequency, bandwidth, spreading factor, coding rate, and path hash mode — are edited together as a form on the **Settings** tab.
+Click **Share my contact** (top of Contacts), or open any contact and click **Share**. You get:
 
-1. **Settings** tab.
-2. Scroll to the **Radio** section.
-3. Edit any of the input fields: TX Power (dBm), Frequency (MHz), Bandwidth (kHz), Spreading Factor, Coding Rate, Path hash mode.
-4. Click **Apply Radio Settings** at the bottom of the section.
+- a **QR code** you can copy or save as an image,
+- a **chat code** and a **link** to copy,
+- **Send to nearby radios**, which broadcasts it over the air.
 
-> **Important:** changes to any of these radio settings might not go live until the companion radio reboots. See [Operational warnings](#operational-warnings) below.
+### Removing a contact
 
-### Tracing a path to a node
+Open the contact and click **Remove**, then confirm. It comes off your radio straight away. It stays as Discovered while your radio keeps hearing it.
 
-A trace measures the round-trip time and per-hop SNR to a target node, optionally over a specific path.
+---
 
-**From the Nodes tab** (most common):
+## Nodes
 
-1. **Nodes** tab.
-2. Click the target node.
-3. **Trace** in the detail dialog.
-4. Pick the path type in the trace dialog:
-    - **Discover** — the companion runs flood path discovery and traces over whatever route comes back. This is what you want 90% of the time.
-    - **Select repeaters (default)** — search for or select the repeaters that are in the path to your desired target. Be sure to arrange the repeaters in the correct order in the path section.
-    - **Enter path** — type the comma-separated hex hop sequence by hand (e.g. `86,AE`). Reach for this when you know the route should work but flood discovery isn't returning a usable result — for example, an intermediate repeater is reachable but doesn't reply to broadcast path-discovery probes. The MeshCoreOne iOS app has the same workaround.
-5. **Run trace**.
+- **Map | List** switches between the map and a list. Click a node for its details beside the map; the selected pin is highlighted.
+- **Filters**: Added/Discovered, node types (tick one, several or all), and **Heard** (24 hours, 7 days, 30 days, 1 year, or since a date). Settings → Nodes sets the default.
+- **Show on map** (from a contact or node's details) jumps to that node, if it has a location.
 
-> **Note:** the Select repeaters and Enter path types both display the resolved path at the bottom of the dialog. Target is automatically populated based on the node where you clicked the trace button. Be sure the resolved path is correct before running the trace.
+### Clearing stale nodes
 
-**From the Settings tab:** click **Trace** in the companion's quick-actions row. This launches a target picker first because the Settings tab doesn't have a pre-chosen target; pick the contact you want to trace and the dialog continues normally.
+Your radio remembers every node it's heard, which adds up. **⋯ → Clear stale** opens a dialog:
 
-The result view shows hops, total round-trip in ms, the per-hop path with SNR per hop, and the final SNR at your local radio on the echo. If the trace fails, the error toast names the failure mode (`not_in_mesh`, `path_discovery_timeout`, `send_failed`, etc.) — most of these mean "the radio link can't reach that node right now," not "your panel is broken."
+1. **Not heard for more than** any number of days. "Heard" is when your radio last heard them, by its own clock.
+2. **Types**: companions, repeaters, room servers, sensors, or all.
+3. **Which**: **Discovered** nodes, **Manually added** contacts that have never been heard from (these are removed from your radio too), or both.
 
-> **Note:** the trace dialog requires meshcore integration v2.6.0 or newer. On older versions the dialog reports a *"service not registered"* error.
+It shows how many will be removed before you confirm. Contacts you added from the mesh are never removed. Cleared nodes come back if your radio hears them again.
 
-### Adjusting message retention
+### Tracing a path
 
-The chat archive has two retention knobs that the panel UI doesn't expose — they live on Home Assistant's standard config-entry options dialog instead.
+A trace measures the round trip and per-hop SNR to a node.
 
-1. **Settings → Devices & Services**.
-2. Click the **MeshCore Chat** integration card.
-3. Click **Configure** gear icon.
-4. Two fields:
-    - **Max messages per conversation** — default `500`, range `50`–`5000`. Per-conversation cap; older messages are dropped FIFO once the limit is hit. Bump this if you have chatty channels and want longer scrollback.
-    - **Message retention days** — default `90`, range `1`–`365`. Age threshold for the startup retention pass. Anything older than this gets pruned the next time Home Assistant restarts.
-5. **Save**.
+1. Click the node (Nodes tab or Contacts), then **Trace**.
+2. Pick how to find the route:
+    - **Discover**: your radio finds a route itself. Usually what you want.
+    - **Select repeaters**: choose the repeaters in the path, in order.
+    - **Enter path**: type the hop IDs, e.g. `86,AE`. Useful when Discover fails but you know the route.
+3. **Run trace**.
 
-The per-conversation cap applies on the next message that lands. The day cutoff applies on the next HA restart.
+The result shows each hop's SNR and the total round trip, and can be shown on the map. A failure such as `path_discovery_timeout` usually means the radio can't reach that node right now.
+
+---
+
+## My radio
+
+- **Radio settings**: TX power, frequency, bandwidth, spreading factor, coding rate and path hash mode, under **Advanced**. Click **Apply**, then reboot (see the warning below).
+- **⚙ menu**: Rename, Key Management, Reboot and hidden sensors.
+- **Share my contact** and **Command…** for anything without its own button.
+
+With **Self Diagnostics** turned on in the core MeshCore integration's options, the page also shows battery, signal and message-count tiles for your radio.
+
+---
+
+## Repeaters
+
+Each repeater or client you manage has a card with its status and when it was last heard. Click it to open:
+
+- **⟳ Refresh status**: logs in and asks for fresh stats. **Last status** shows when they last arrived.
+- Sensor tiles (click one for its history), the neighbour table, and buttons for Flood Advert, Sync Clock, Req Telemetry and Req Status.
+- **⚙**: Command, Reboot, Start OTA and hidden sensors. Commands log in with the password set in the core MeshCore integration.
+
+To add or remove managed devices, or set their passwords, click **Manage devices**; it opens the core MeshCore integration's options.
+
+---
+
+## Message history
+
+Two settings live in Home Assistant's options rather than the panel: **Settings → Devices & Services → MeshCore Chat → Configure**.
+
+- **Max messages per conversation**: default 500 (50–5000). Older ones drop off as new ones arrive.
+- **Message retention days**: default 90 (1–365). Older messages are removed when Home Assistant restarts.
 
 ---
 
 ## Operational warnings
 
-These are the gotchas that bite users on first encounter. Read all three before changing anything in Settings.
+These are the gotchas that bite users on first encounter. Read all three before changing anything on the My radio tab.
 
 ### Radio settings require a companion reboot to take effect
 
 Changes to **TX power**, **frequency**, **bandwidth**, **spreading factor**, **coding rate**, or **path hash mode** are written to the companion device's persistent config when you save them — but the running radio keeps using the previous values until the radio itself restarts.
 
 Behaviour you'll see if you skip the reboot:
-- The Settings tab shows the new value (it reflects the persisted config).
+- The My radio tab shows the new value (it reflects the persisted config).
 - Other nodes still hear the radio on the *old* parameters.
 - Traces that should now be reachable on the new parameters fail.
 
 To apply the change:
 
-1. **Devices** tab (or **Settings** tab — works from either).
-2. Click the gear icon on the **companion** device card.
+1. **My radio** tab.
+2. Click the ⚙ cog.
 3. **Reboot**.
 4. Wait ~5 seconds for the radio to come back online; the connection status badge in the panel header flips to **Online** when it's ready.
 
@@ -189,7 +194,7 @@ This is a hardware/firmware constraint, not a panel limitation — it is reporte
 
 ### Renaming the companion changes its entity_ids in HA
 
-The companion's **name** is the user-visible string you set in **Settings → Companion profile**. It's also what HA uses to derive the `entity_id` for every sensor and binary_sensor the upstream `meshcore` integration registers for the device.
+The companion's **name** is the user-visible string you set in **My radio → ⚙ → Rename**. It's also what HA uses to derive the `entity_id` for every sensor and binary_sensor the upstream `meshcore` integration registers for the device.
 
 When you rename the companion, **every meshcore entity tied to it gets a new `entity_id`.** Concretely:
 
@@ -222,7 +227,7 @@ If your install is small and brand-new, a rename is no big deal. If you've built
 
 ### Regenerating or importing the companion identity also rewrites entity_ids
 
-The Settings tab's gear menu has a **Key Management** option with two destructive operations:
+The **My radio** tab's ⚙ menu has a **Key Management** option with two destructive operations:
 
 - **Regenerate Identity** — creates a new public/private key pair on the companion. Requires typing `REGENERATE` to confirm, since it's irreversible.
 - **Import Private Key** — adopts a hex private key you paste in. Requires a device reboot afterwards.
@@ -245,7 +250,7 @@ To refresh:
 4. Click the repeater you flashed.
 5. Click **Save** — you don't need to change anything; the save action triggers a `ver` query against the repeater and updates Home Assistant's device registry.
 
-The chat panel will pick up the new value on next refresh of the Devices tab (within ~30 s, or immediately if you switch tabs).
+The chat panel will pick up the new value on next refresh of the Repeaters tab (within ~30 s, or immediately if you switch tabs).
 
 This is a limitation of the upstream integration, not the chat panel — the panel only displays what HA already knows. A future change to `meshcore-ha` could add `ver` to the periodic poll cycle and make this automatic.
 
@@ -258,7 +263,7 @@ The fix is on the client device itself, in its MeshCore app:
 1. Enable **telemetry**, so the device has something to report.
 2. Allow your companion node to **request telemetry** — the device's permission/ACL for who may poll it.
 
-Once both are set, the next poll succeeds: the Online sensor flips to **on**, battery and telemetry sensors appear on the card, and the **Req Telemetry** button on the Devices tab returns data instead of timing out. To retry immediately instead of waiting for the next poll cycle, reload the upstream integration at **Settings → Devices & Services → MeshCore → ⋮ → Reload**.
+Once both are set, the next poll succeeds: the Online sensor flips to **on**, battery and telemetry sensors appear on the card, and the **Req Telemetry** button on the Repeaters tab returns data instead of timing out. To retry immediately instead of waiting for the next poll cycle, reload the upstream integration at **Settings → Devices & Services → MeshCore → ⋮ → Reload**.
 
 This is a property of the remote device, not a stale entity or stale config in Home Assistant — removing and re-adding the client doesn't change it.
 
@@ -266,8 +271,8 @@ This is a property of the remote device, not a stale entity or stale config in H
 
 Long-pressing a sensor row on a device card and choosing **Hide** stops that sensor from rendering on the card. To bring it back:
 
-1. **Devices** tab (or **Settings** tab for the companion).
-2. Click the gear icon on the device card.
+1. **Repeaters** tab and open the device (or **My radio** for your companion).
+2. Click the ⚙ cog.
 3. **View Hidden Sensors**.
 4. The modal lists every sensor you've hidden on that device with a per-row Restore button.
 
@@ -277,16 +282,16 @@ Hidden-sensor preferences are per-device and stored in panel-local state — the
 
 ## Known limitations
 
-- **Radio settings only take effect after a companion reboot.** Frequency, bandwidth, spreading factor, coding rate, TX power — change in Settings → Configure, save, then reboot the companion. The change is queued; the radio re-initialises on next boot.
-- **Renaming the companion changes its entity_ids.** See [Renaming the companion changes its entity_ids in HA](#renaming-the-companion-changes-its-entity_ids-in-ha) above. Plan automation references accordingly.
-- **No backend Python tests yet.** The integration is field-tested but not unit-tested. Issues are caught in production rather than CI. Track via the [GitHub issue tracker](https://github.com/mwolter805/meshcore-ha-chat/issues).
-- **No reauthentication or device discovery.** The companion has no auth and no automatic discovery — meshcore (the upstream integration) handles all device pairing.
+- **Radio settings need a reboot** to take effect. See above.
+- **Renaming or changing the identity of your radio changes its entity_ids.** See above.
+- **Reactions and replies aren't part of MeshCore.** They're a convention between apps; an app that doesn't know them shows ordinary messages.
+- **Device pairing is done by the core MeshCore integration**, not here.
 
 ---
 
 ## See also
 
-- [meshcore-dev/meshcore-ha](https://github.com/meshcore-dev/meshcore-ha) — the upstream integration that drives the radio. **Required.** All radio operations (sending messages, querying device info, configuring radio parameters, managing repeaters) ultimately go through it; this companion only renders and persists.
-- [meshcore.io](https://meshcore.io) — project home page.
-- [docs.meshcore.io](https://docs.meshcore.io) — protocol and firmware documentation.
-- [README.md](./README.md) — installation, screenshots, requirements.
+- [meshcore-dev/meshcore-ha](https://github.com/meshcore-dev/meshcore-ha): the core integration that talks to the radio. **Required.**
+- [MeshCore One reactions](https://github.com/Avi0n/MeshCoreOne/blob/main/docs/Reactions.md): the reaction format we use.
+- [meshcore.io](https://meshcore.io) and [docs.meshcore.io](https://docs.meshcore.io).
+- [README.md](./README.md): installation and requirements.
