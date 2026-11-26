@@ -6853,6 +6853,7 @@ let e,t,i,a,n,o,r,s,l,c,d,u,p,h,m,g,f,v,b,y,_,x,w,k,C,$,A,E,F,D,B,S,M,z,T,O,R,I,
 
       .device-card {
         display: flex;
+        flex-direction: row;
         align-items: center;
         gap: 12px;
         width: 100%;
@@ -6878,6 +6879,20 @@ let e,t,i,a,n,o,r,s,l,c,d,u,p,h,m,g,f,v,b,y,_,x,w,k,C,$,A,E,F,D,B,S,M,z,T,O,R,I,
       .device-card-text {
         flex: 1;
         min-width: 0;
+        text-align: left;
+      }
+
+      .device-card .device-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        font-size: 13px;
+        color: var(--secondary-text-color);
+      }
+
+      :host([narrow]) .device-card {
+        border-radius: 12px;
+        border: 1px solid var(--divider-color, #e0e0e0);
       }
 
       .device-card-chevron {

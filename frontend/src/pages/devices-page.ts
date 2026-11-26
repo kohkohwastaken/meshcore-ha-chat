@@ -360,6 +360,7 @@ export class DevicesPage extends LitElement {
 
       .device-card {
         display: flex;
+        flex-direction: row;
         align-items: center;
         gap: 12px;
         width: 100%;
@@ -385,6 +386,20 @@ export class DevicesPage extends LitElement {
       .device-card-text {
         flex: 1;
         min-width: 0;
+        text-align: left;
+      }
+
+      .device-card .device-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 10px;
+        font-size: 13px;
+        color: var(--secondary-text-color);
+      }
+
+      :host([narrow]) .device-card {
+        border-radius: 12px;
+        border: 1px solid var(--divider-color, #e0e0e0);
       }
 
       .device-card-chevron {

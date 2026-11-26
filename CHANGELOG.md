@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.35
+
+- Repeaters: device cards and Manage devices are laid out in a row again (icon, name and details, status, ›) instead of stacked in the middle of a wide card.
+
 ## 0.4.12-beta.34
 
 - Nodes: Clear stale is now a proper dialog. Any number of days (no 365 limit), tick which types (companions, repeaters, room servers, sensors) and which kinds (discovered, manually added, or both). It shows how many will be removed before you confirm.
