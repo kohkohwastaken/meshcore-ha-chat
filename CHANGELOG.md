@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.24
+
+- **Chat:** delete your own **unheard or failed** messages. Tap the message, then **Delete** (next to Resend) and confirm. Unheard reactions get a **Delete** link on their "You reacted…" line. This removes the message from Home Assistant only, not from anyone who did receive it.
+
 ## 0.4.12-beta.23
 
 - **Chat:** a **reactions toggle** (😊) in the conversation header shows reaction messages exactly as they were sent. Reactions still also appear as chips. It's a quick toggle, not a saved setting.

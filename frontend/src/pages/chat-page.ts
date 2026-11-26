@@ -5,7 +5,7 @@ import { MessageStore } from '../chat/message-store';
 import { UnreadController, markReadTailKey, pillLabel } from '../chat/unread-controller';
 import { buildRenderItems } from '../chat/message-parser';
 import { discoverChannelEntity, discoverContactEntity } from '../chat/entity-resolver';
-import { sendDirectMessage, sendChannelMessage, getConversationPreviews, deleteConversation, type ConversationPreview } from '../api';
+import { sendDirectMessage, sendChannelMessage, getConversationPreviews, deleteConversation, deleteMessage, type ConversationPreview } from '../api';
 import {
   AT_BOTTOM_THRESHOLD_PX,
   LAZY_LOAD_TRIGGER_PX,
@@ -1095,6 +1095,7 @@ export class ChatPage extends LitElement {
       @react-to-message=${(e: CustomEvent) => { e.stopPropagation(); this._onReact(e); }}
       @reply-to-sender=${(e: CustomEvent) => { e.stopPropagation(); this._onReplyToSender(e); }}
       @resend-message=${(e: CustomEvent) => { e.stopPropagation(); this._onResendMessage(e); }}
+      @delete-message=${(e: CustomEvent) => { e.stopPropagation(); void this._deleteOne((e.detail as { id: string }).id); }}
       @open-conversation=${(e: CustomEvent) => { e.stopPropagation(); this.selectedId = (e.detail as { id: string }).id; }}
     ></meshcore-message-panel>`;
   }
@@ -1131,7 +1132,7 @@ export class ChatPage extends LitElement {
     const budget = this._budget();
     return html`
       <div class="chat-container" @message-selected=${(e: CustomEvent) => { this._selMsgId = (e.detail as { msg: ChatMessage }).msg.id; }} @jump-to-message=${(e: CustomEvent) => this._findAndHighlightBubble(e.detail.id)}
-          @react-to-message=${this._onReact} @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @scroll=${this._onChatScroll}>
+          @react-to-message=${this._onReact} @reply-to-sender=${this._onReplyToSender} @resend-message=${this._onResendMessage} @delete-message=${(e: CustomEvent) => void this._deleteOne((e.detail as { id: string }).id)} @scroll=${this._onChatScroll}>
         ${this._messageStore.loadingOlder
           ? html`<div class="loading-older"><div class="loading-spinner"></div></div>`
           : html``}
@@ -1773,6 +1774,23 @@ export class ChatPage extends LitElement {
     return `${msg.sender} has sent newer messages. Replies don't say which message they answer, so other apps show them against ${msg.sender}'s latest message ("${snippet}"). Reply is only available on their newest message.`;
   }
   @state() private _confirmDelete = false;
+
+  /** Delete one of your messages (e.g. an unheard one). */
+  private async _deleteOne(id: string) {
+    this._selMsgId = null;
+    const entityId = this._currentEntityId;
+    if (!this.hass || !entityId || !this._messageStore) return;
+    if (!id.startsWith('optimistic_')) {
+      const storedId = id.startsWith('rt_') ? id.substring(3) : id;
+      const res = await deleteMessage(this.hass, entityId, storedId);
+      if (!res.success) {
+        alert("Couldn't delete that message. Try again in a moment.");
+        return;
+      }
+    }
+    this._messageStore.removeMessage(id);
+    this._refreshPreviews(0);
+  }
 
   private async _deleteChat() {
     this._confirmDelete = false;

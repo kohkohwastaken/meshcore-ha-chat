@@ -14,7 +14,7 @@ import './emoji-picker';
  * a panel beside the chat on wider screens ("side"). Same content in both.
  *
  * Fires (bubbling, composed): panel-close, react-to-message {emoji,msg},
- * reply-to-sender {mention,sender,text}, resend-message {text},
+ * reply-to-sender {mention,sender,text}, resend-message {text}, delete-message {id},
  * open-conversation {id}.
  */
 @customElement('meshcore-message-panel')
@@ -38,6 +38,7 @@ export class MeshCoreMessagePanel extends LitElement {
   @state() private _showMap = false;
   @state() private _copied = false;
   @state() private _confirmResend = false;
+  @state() private _confirmDelete = false;
   @state() private _reactOpen: string | null = null;
   @state() private _reactAll = false;
   private _shownId?: string;
@@ -104,6 +105,7 @@ export class MeshCoreMessagePanel extends LitElement {
     .more-link { background: none; border: none; color: var(--primary-color, #03a9f4); padding: 4px 0; cursor: pointer; font: inherit; font-size: 13px; }
     .none { font-size: 12px; color: var(--secondary-text-color); }
     .act.blocked { opacity: 0.45; }
+    .btn.danger { color: var(--error-color, #db4437); border-color: var(--error-color, #db4437); }
     .reply-why { font-size: 12px; line-height: 1.45; color: var(--secondary-text-color);
       background: rgba(127, 127, 127, 0.12); border-radius: 8px; padding: 8px 10px; margin-top: 8px; }
   `;
@@ -118,6 +120,7 @@ export class MeshCoreMessagePanel extends LitElement {
       this._showMap = this.mode === 'side';
       this._copied = false;
       this._confirmResend = false;
+      this._confirmDelete = false;
       this._reactOpen = null;
       this._reactAll = false;
     }
@@ -234,9 +237,15 @@ export class MeshCoreMessagePanel extends LitElement {
         <button class="btn" @click=${() => { this._confirmResend = false; }}>Cancel</button>
         <button class="btn primary" @click=${this._resend}>Resend</button></div>`;
     }
+    if (this._confirmDelete) {
+      return html`<div class="resend"><div class="note">Delete this message from Home Assistant? It's only removed here, not from anyone who did receive it.</div>
+        <button class="btn" @click=${() => { this._confirmDelete = false; }}>Cancel</button>
+        <button class="btn danger" @click=${() => { this._emit('delete-message', { id: m.id }); this._close(); }}>Delete</button></div>`;
+    }
     return html`<div class="resend"><div class="note">${failed
       ? 'No reply came back, so it most likely didn\'t arrive.'
       : 'No repeat was heard. It may still have been delivered, out of your radio\'s range.'}</div>
+      <button class="btn" @click=${() => { this._confirmDelete = true; this._confirmResend = false; }}>Delete</button>
       <button class="btn primary" @click=${() => { if (this.isChannel && !failed) this._confirmResend = true; else this._resend(); }}>Resend</button></div>`;
   }
 

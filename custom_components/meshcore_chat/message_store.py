@@ -588,6 +588,29 @@ class MessageStore:
 
     # ── save scheduling (debounced) ────────────────────────────────────────
 
+    async def delete_message(self, entity_id: str, message_id: str) -> bool:
+        """Delete one stored message. Returns False if it wasn't found."""
+        messages = await self._ensure_loaded(entity_id)
+        before = len(messages)
+        messages[:] = [m for m in messages if m.get("id") != message_id]
+        if len(messages) == before:
+            return False
+        self._conversation_dirty.add(entity_id)
+        self._schedule_conversation_save(entity_id)
+        if messages:
+            newest = messages[-1]
+            self._message_index[entity_id] = {
+                "message_count": len(messages),
+                "last_message_ts": newest.get("timestamp", ""),
+                "last_sender": newest.get("sender", ""),
+                "last_preview": (newest.get("text", "") or "")[:80],
+                "last_outgoing": bool(newest.get("outgoing", False)),
+            }
+        else:
+            self._message_index.pop(entity_id, None)
+        self._schedule_index_save()
+        return True
+
     async def delete_conversation(self, entity_id: str) -> bool:
         """Delete a conversation's stored messages and its index entry.
 

@@ -982,3 +982,16 @@ export async function deleteConversation(
     return { success: false };
   }
 }
+
+/** Delete one stored message from a conversation. */
+export async function deleteMessage(
+  hass: HomeAssistant, entityId: string, messageId: string,
+): Promise<{ success: boolean }> {
+  try {
+    return await hass.callWS<{ success: boolean }>({
+      type: 'meshcore_chat/delete_message', entity_id: entityId, message_id: messageId,
+    });
+  } catch {
+    return { success: false };
+  }
+}

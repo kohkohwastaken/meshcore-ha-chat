@@ -275,6 +275,13 @@ export class MessageStore {
     this._pendingCalls.delete(id);
   }
 
+  /** Drop a message from the loaded list (after deleting it from storage). */
+  removeMessage(id: string): void {
+    const base = id.startsWith('rt_') ? id.substring(3) : id;
+    this._messages = this._messages.filter((m) => m.id !== id && m.id !== base && m.id !== `rt_${base}`);
+    this._notify();
+  }
+
   markOptimisticFailed(id: string): void {
     const original = this._pendingCalls.get(id);
     this._pendingCalls.delete(id);

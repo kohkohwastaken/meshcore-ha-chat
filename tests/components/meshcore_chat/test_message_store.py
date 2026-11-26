@@ -1159,3 +1159,14 @@ async def test_delete_conversation_removes_index_and_messages(store: MessageStor
     assert eid not in store.get_message_index()
     assert eid not in store._loaded_conversations
     assert await store.delete_conversation(eid) is False
+
+
+async def test_delete_message_removes_one_and_updates_index(store: MessageStore) -> None:
+    """Deleting the newest message points the index at the one before it."""
+    eid = "binary_sensor.meshcore_abc123_def456_messages"
+    await store.store_message(eid, {"id": "m1", "text": "first", "timestamp": "2026-11-25T12:00:00"})
+    await store.store_message(eid, {"id": "m2", "text": "second", "timestamp": "2026-11-25T12:01:00", "outgoing": True})
+    assert await store.delete_message(eid, "m2") is True
+    assert store.get_message_index()[eid]["last_preview"] == "first"
+    assert [m["id"] for m in store._loaded_conversations[eid]] == ["m1"]
+    assert await store.delete_message(eid, "nope") is False
