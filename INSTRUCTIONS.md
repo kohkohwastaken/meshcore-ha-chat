@@ -62,8 +62,8 @@ Click a message and pick **Reply**. MeshCore has no built-in replies, so a reply
 
 A room server is a small bulletin board on the mesh: it keeps the last 32 posts and sends them to people who log in. Rooms you've added to your radio appear under **Rooms**.
 
-- **Opening a room** logs you in and catches you up on posts you missed. If you've logged in before, it tries without a password first (the room remembers you until it restarts), then your saved password, and only asks if both fail. Most rooms use the default guest password `hello` unless the owner changed it. Passwords can be up to 15 characters.
-- **Nothing is sent in the background.** After you log in, the room sends new posts to your radio by itself. Press **⟳ Check for new posts** in the header when you want to make sure you're up to date. It logs in again, which uses a little airtime.
+- **Opening a room** logs you in and catches you up on posts you missed. It sends one login: your saved password if you have one, otherwise no password (which works while the room still remembers you, until it restarts). It only asks for a password if that fails. If a login gets no reply over the room's usual route, it tries once more by flood. Most rooms use the default guest password `hello` unless the owner changed it. Passwords can be up to 15 characters.
+- **Nothing is sent in the background.** After you log in, the room sends new posts to your radio by itself. Press **⟳ Check for new posts** in the header when you want to make sure you're up to date. It logs in again, which uses a little airtime. The status line shows when you last logged in and when the last post arrived; it isn't a live connection.
 - **Who wrote it:** each post shows its author's name, or the first part of their key if you don't know them.
 - **Read-only:** if the room lets in read-only guests, a wrong password still gets you in, but you can't post. The panel says so and disables the message box.
 - **Posts delayed or paused:** if the room re-sends a post, it didn't hear your radio's reply. After a few misses it stops sending to you; the panel shows **Posts paused**, and Check for new posts starts it again.

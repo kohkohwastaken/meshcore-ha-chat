@@ -2,6 +2,13 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.2
+
+- Rooms: one login per check. With a saved password it sends just that; without, it tries no password. A login that gets no reply over the direct route is retried once by flood. Before, a check could send up to three logins and run into the core integration's sending limit, which showed as a failed login.
+- Rooms: if the core integration's sending limit is reached, the room says so ("try again in 20 seconds") instead of "Couldn't log in", and doesn't count it as a failure.
+- Rooms: a failed login lists what was tried ("saved password (direct) – no reply; saved password (flood) – no reply").
+- Rooms: the status says "Last logged in 4h ago · read-write · last post 2h ago" instead of "Logged in", since it isn't a live connection.
+
 ## 0.4.13-beta.1
 
 ### Rooms

@@ -4253,8 +4253,8 @@ async def test_ws_get_contacts_paginated_several_types(hass: HomeAssistant, comp
     assert [c["adv_name"] for c in conn.results[0][1]["contacts"]] == ["c", "s"]
 
 
-async def test_ws_room_login_blank_then_saved(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
-    """No password: blank first, then the remembered one; access comes from the reply."""
+async def test_ws_room_login_uses_saved_password_once(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """With a saved password, one login with it; access comes from the reply."""
     from types import SimpleNamespace
     key = "ab" * 32
     coordinator = MagicMock()
@@ -4276,7 +4276,31 @@ async def test_ws_room_login_blank_then_saved(hass: HomeAssistant, companion_ent
         await _call_ws(ws_api.ws_room_login, hass, conn, {"id": 1, "public_key": key, "remember": True})
     result = conn.results[0][1]
     assert result["ok"] and result["access"] == "read_write" and result["used"] == "saved"
-    assert [c for c in calls if c[0] == "send_login_sync"] == [("send_login_sync", ""), ("send_login_sync", "secret")]
+    assert [c for c in calls if c[0] == "send_login_sync"] == [("send_login_sync", "secret")]
+    assert result["tried"] == [{"password": "saved", "route": "flood", "result": "ok", "detail": ""}]
+
+
+async def test_ws_room_login_stops_at_rate_limit(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """A refusal from the parent's traffic limit stops further attempts and isn't counted as a failure."""
+    from homeassistant.exceptions import HomeAssistantError
+    key = "cd" * 32
+    coordinator = MagicMock()
+    coordinator.api.mesh_core.get_contact_by_key_prefix.return_value = {"public_key": key, "out_path_len": 2}
+    calls = []
+
+    async def fake(hass_, conn, msg, coord, command, *args, **kw):
+        calls.append(command)
+        raise HomeAssistantError("Mesh traffic login lane is empty; try again in 20 seconds")
+
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator), \
+         patch.object(ws_api, "_modern_parent", return_value=False), \
+         patch.object(ws_api, "_parent_command", side_effect=fake):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_room_login, hass, conn, {"id": 1, "public_key": key, "remember": True})
+    result = conn.results[0][1]
+    assert not result["ok"] and result["fails"] == 0
+    assert calls == ["send_login_sync"]
+    assert result["tried"][0]["result"] == "rate_limited" and "20 seconds" in result["tried"][0]["detail"]
 
 
 def test_room_access_levels() -> None:

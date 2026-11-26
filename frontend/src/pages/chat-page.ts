@@ -28,6 +28,18 @@ import type { PickedLocation } from '../components/share-pickers';
 import { DISPLAY_PREFS_EVENT, plainReactionMode, showPendingReactions, timestampFormat } from '../utils/display-prefs';
 import { LIMIT_SETTING_EVENT, LOW_BYTES, messageBudget, trackableChannelLimit, type MessageBudget } from '../utils/message-limit';
 
+/** One line describing each login attempt, for the room bar. */
+function describeRoomAttempts(tried: Array<{ password: string; route: string; result: string; detail: string }>): string {
+  const pw = (p: string) => (p === 'blank' ? 'no password' : p === 'saved' ? 'saved password' : 'your password');
+  const limited = tried.find((t) => t.result === 'rate_limited');
+  if (limited) {
+    const secs = /in (\d+) seconds?/.exec(limited.detail)?.[1];
+    return `Your radio's sending limit was reached${secs ? `; try again in ${secs} seconds` : '; try again shortly'}.`;
+  }
+  return 'Tried: ' + tried.map((t) => `${pw(t.password)} (${t.route}) – ${
+    t.result === 'ok' ? 'logged in' : t.result === 'no_reply' ? 'no reply' : `error: ${t.detail}`}`).join('; ') + '.';
+}
+
 /** Most characters in one room post (the official app's limit). */
 const ROOM_POST_MAX = 150;
 
@@ -948,6 +960,9 @@ export class ChatPage extends LitElement {
   @state() private _roomPw = '';
   @state() private _roomRemember = true;
   @state() private _roomNote = '';
+  /** Why the last login didn't work, in words. */
+  @state() private _roomWhy = '';
+  @state() private _roomLimited = false;
   private _roomOpened: string | null = null;
 
   /** The open conversation when it's a room server. */
@@ -984,10 +999,14 @@ export class ChatPage extends LitElement {
     try {
       const r = await roomLogin(this.hass, key, password === undefined ? {} : { password, remember: this._roomRemember }, this.config?.entry_id);
       this._rooms = { ...this._rooms, [key]: { access: r.ok ? r.access : (this._rooms[key]?.access ?? null), last_login: r.ok ? Math.floor(Date.now() / 1000) : (this._rooms[key]?.last_login ?? null), fails: r.fails, remembered: r.remembered } };
+      this._roomWhy = describeRoomAttempts(r.tried);
+      this._roomLimited = r.tried.some((t) => t.result === 'rate_limited');
       if (r.ok) {
         this._roomPrompt = null;
         this._roomPw = '';
         void this._messageStore?.refresh();
+      } else if (this._roomLimited) {
+        this._roomPrompt = 'failing';
       } else {
         // Nothing remembered and the room doesn't know us: just ask. Otherwise it may have changed.
         this._roomPrompt = password === undefined && !r.remembered ? 'password' : 'failing';
@@ -1038,9 +1057,16 @@ export class ChatPage extends LitElement {
       dot = health === 'ok' && st.access !== 'read_only' ? 'var(--success-color, #4caf50)' : st.access === 'read_only' ? '#9b9b9b' : 'var(--warning-color, #ff9800)';
       text = health === 'paused' ? "Posts paused: the room can't hear your radio"
         : health === 'delayed' ? 'Posts may be delayed'
-        : `Logged in · ${access}${st.last_login ? ` · checked ${this._agoSecs(st.last_login)}` : ''}`;
+        : `Last logged in ${st.last_login ? this._agoSecs(st.last_login) : ''} · ${access}${this._roomLastPost() ? ` · last post ${this._roomLastPost()}` : ''}`;
     }
     return html`<div class="room-status"><span class="room-dot" style="background:${dot}"></span>${text}</div>`;
+  }
+
+  /** How long ago the newest post from someone else arrived. */
+  private _roomLastPost(): string {
+    const incoming = (this._messageStore?.messages ?? []).filter((m) => !m.isOutgoing);
+    const newest = incoming.length ? Math.max(...incoming.map((m) => m.timestamp.getTime())) : 0;
+    return newest ? this._agoSecs(newest / 1000) : '';
   }
 
   private _agoSecs(secs: number): string {
@@ -1076,7 +1102,11 @@ export class ChatPage extends LitElement {
       return html`<div class="room-bar info"><div class="room-bar-text"><b>This room needs a password.</b> Most rooms use the default guest password <code>hello</code> unless the owner changed it. Up to 15 characters.</div>${form}</div>`;
     }
     if (this._roomPrompt === 'failing') {
-      return html`<div class="room-bar warn"><div class="room-bar-text"><b>Couldn't log in.</b> The room's password may have changed, or the room may be out of reach.${st?.remembered ? ' Your remembered password is kept until a new one works.' : ''}${this._roomNote ? html`<br><small>${this._roomNote}</small>` : ''}</div>
+      if (this._roomLimited) {
+        return html`<div class="room-bar warn"><div class="room-bar-text"><b>Not sent yet.</b> ${this._roomWhy}</div>
+          <button class="room-btn ghost" ?disabled=${busy} @click=${() => this._roomLogin(room)}>Try again</button></div>`;
+      }
+      return html`<div class="room-bar warn"><div class="room-bar-text"><b>Couldn't log in.</b> The room's password may have changed, or the room may be out of reach.${st?.remembered ? ' Your saved password is kept until a new one works.' : ''}${this._roomWhy ? html`<br><small>${this._roomWhy}</small>` : ''}${this._roomNote ? html`<br><small>${this._roomNote}</small>` : ''}</div>
         ${form}<button class="room-btn ghost" ?disabled=${busy} @click=${() => this._roomLogin(room)}>Try again</button></div>`;
     }
     if (st?.access === 'read_only' && !busy) {

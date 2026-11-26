@@ -2926,11 +2926,13 @@ def _room_access(result) -> str | None:
 async def ws_room_login(hass, connection, msg):
     """Log in to a room server so it sends the posts we've missed.
 
-    Without ``password``: try a blank password (works while the room still
-    knows us), then the remembered one. With ``password``: try just that,
-    and remember it once it works if ``remember``. Each attempt that gets no
-    reply over a direct route is retried once by flood, in case the route
-    has gone stale.
+    Without ``password``: the saved password if there is one (it works
+    whether or not the room still knows us), otherwise a blank one (works
+    while the room still knows us). With ``password``: just that, saved once
+    it works if ``remember``. A login that gets no reply over a direct route
+    is retried once by flood, in case the route has gone stale. If the
+    parent integration refuses to send (its traffic limit), we stop and say
+    so. ``tried`` reports each attempt.
     """
     coordinator = _get_coordinator(hass, msg.get("entry_id"))
     if not coordinator:
@@ -2949,31 +2951,49 @@ async def ws_room_login(hass, connection, msg):
 
     if "password" in msg:
         attempts = [("given", msg["password"])]
+    elif state.get("password"):
+        # A saved password works whether or not the room still knows us,
+        # so one login is enough.
+        attempts = [("saved", state["password"])]
     else:
         attempts = [("blank", "")]
-        if state.get("password"):
-            attempts.append(("saved", state["password"]))
 
-    flooded = False
-    access = None
-    used = None
-    for label, pwd in attempts:
+    tried: list[dict] = []
+
+    async def attempt(label: str, pwd: str, route: str):
+        """One login. Returns (access, stop): stop when the radio refused to send."""
         try:
             result = await _parent_command(hass, connection, msg, coordinator, "send_login_sync", contact, pwd)
-        except Exception as ex:  # noqa: BLE001 - treated as no reply
-            _LOGGER.debug("Room login (%s) to %s failed: %s", label, prefix, ex)
-            result = None
+        except Exception as ex:  # noqa: BLE001 - reported to the panel
+            text = str(ex) or type(ex).__name__
+            limited = "lane is empty" in text or "try again in" in text
+            no_reply = "no_response" in text or "timeout" in text.lower()
+            tried.append({"password": label, "route": route,
+                          "result": "rate_limited" if limited else "no_reply" if no_reply else "error",
+                          "detail": "" if no_reply else text})
+            return None, limited
         access = _room_access(result)
-        if access is None and not flooded and isinstance(contact, dict) and (contact.get("out_path_len") or -1) >= 0:
-            flooded = True
+        tried.append({"password": label, "route": route, "result": "ok" if access else "no_reply", "detail": ""})
+        return access, False
+
+    has_route = isinstance(contact, dict) and (contact.get("out_path_len") if contact.get("out_path_len") is not None else -1) >= 0
+    access = None
+    used = None
+    stopped = False
+    for label, pwd in attempts:
+        access, stopped = await attempt(label, pwd, "direct" if has_route else "flood")
+        if not access and not stopped and has_route and tried[-1]["result"] == "no_reply":
+            # The direct route may have gone stale: forget it and try once by flood.
             try:
                 await _parent_command(hass, connection, msg, coordinator, "reset_path", contact)
-                result = await _parent_command(hass, connection, msg, coordinator, "send_login_sync", contact, pwd)
-                access = _room_access(result)
+                has_route = False
+                access, stopped = await attempt(label, pwd, "flood")
             except Exception as ex:  # noqa: BLE001
-                _LOGGER.debug("Room flood login to %s failed: %s", prefix, ex)
+                tried.append({"password": label, "route": "flood", "result": "error", "detail": str(ex)})
         if access:
             used = label
+            break
+        if stopped:
             break
 
     now = int(time.time())
@@ -2981,7 +3001,7 @@ async def ws_room_login(hass, connection, msg):
         state.update({"access": access, "last_login": now, "fails": 0})
         if used == "given" and msg["remember"] and access != "read_only":
             state["password"] = msg["password"]
-    else:
+    elif not stopped:
         state["fails"] = int(state.get("fails", 0)) + 1
         state["last_fail"] = now
     await store.async_save(rooms)
@@ -2989,7 +3009,7 @@ async def ws_room_login(hass, connection, msg):
         "ok": bool(access),
         "access": access,
         "used": used,
-        "flooded": flooded,
+        "tried": tried,
         "remembered": bool(state.get("password")),
         "fails": state.get("fails", 0),
     })

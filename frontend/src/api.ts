@@ -1059,7 +1059,8 @@ export interface RoomLoginResult {
   ok: boolean;
   access: RoomAccess | null;
   used: 'blank' | 'saved' | 'given' | null;
-  flooded: boolean;
+  /** Each login sent, and what came of it. */
+  tried: Array<{ password: 'blank' | 'saved' | 'given'; route: 'direct' | 'flood'; result: 'ok' | 'no_reply' | 'rate_limited' | 'error'; detail: string }>;
   remembered: boolean;
   fails: number;
 }
