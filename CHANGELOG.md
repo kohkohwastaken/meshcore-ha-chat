@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.37
+
+- The panel header shows the MeshCore Chat logo instead of the plain "MeshCore Chat" title, at the same size.
+
 ## 0.4.12-beta.36
 
 - New sidebar icon: a speech bubble with "MC HAC" in MeshCore-style lettering, instead of the walkie-talkie. It follows your theme's icon colours.

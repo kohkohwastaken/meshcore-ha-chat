@@ -1,4 +1,5 @@
 import { LitElement, html, css } from 'lit';
+import { LOGO_VIEWBOX, logoContent } from './components/logo';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant, PanelConfig, Contact, Channel, MeshCoreDevice } from './types';
 import type { TraceResult } from './api';
@@ -154,6 +155,14 @@ export class MeshCorePanel extends LitElement {
         font-size: 18px;
         font-weight: 500;
         color: var(--primary-text-color);
+        display: flex;
+        align-items: center;
+      }
+
+      .panel-logo {
+        height: 26px;
+        width: auto;
+        display: block;
       }
 
       .device-info {
@@ -829,7 +838,9 @@ export class MeshCorePanel extends LitElement {
                   <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
                 </button>`
               : html``}
-            <div class="panel-title">MeshCore Chat</div>
+            <div class="panel-title" role="heading" aria-level="1" aria-label="MeshCore Chat">
+              <svg class="panel-logo" viewBox=${LOGO_VIEWBOX} aria-hidden="true">${logoContent}</svg>
+            </div>
           </div>
           <div class="header-right">
             ${device && this._getNodeStatus(device) !== null
