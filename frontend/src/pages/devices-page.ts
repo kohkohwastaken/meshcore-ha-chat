@@ -1,3 +1,4 @@
+import { formatFullDateTime } from '../utils/display-prefs';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import { panelStyles } from '../styles';
@@ -399,6 +400,18 @@ export class DevicesPage extends LitElement {
         font-size: 14px;
         cursor: pointer;
         padding: 4px 0 12px;
+      }
+
+      .last-status {
+        font-size: 12px;
+        color: var(--secondary-text-color);
+        margin: -6px 0 12px;
+      }
+
+      .action-btn.primary {
+        background: var(--primary-color, #03a9f4);
+        border-color: var(--primary-color, #03a9f4);
+        color: #fff;
       }
 
       .actions-row.top {
@@ -999,6 +1012,26 @@ export class DevicesPage extends LitElement {
   };
 
   /** Log in (with the saved password) and ask for fresh status. */
+  /** When this device's stats sensors last got a value, from Home Assistant's states. */
+  private _lastStatusTime(entities: Array<{ entity_id: string }>): Date | null {
+    let best = 0;
+    for (const e of entities) {
+      const st = this.hass?.states[e.entity_id] as { last_updated?: string; last_reported?: string; state?: string } | undefined;
+      if (!st || st.state === 'unavailable' || st.state === 'unknown') continue;
+      for (const v of [st.last_reported, st.last_updated]) {
+        const t = v ? Date.parse(v) : NaN;
+        if (Number.isFinite(t) && t > best) best = t;
+      }
+    }
+    return best ? new Date(best) : null;
+  }
+
+  private _renderLastStatus(entities: Array<{ entity_id: string }>) {
+    const t = this._lastStatusTime(entities);
+    const ago = t ? this._ago(t.getTime()) : '';
+    return html`<div class="last-status">Last status: ${t ? html`${formatFullDateTime(t)} <span>(${ago})</span>` : 'none received yet'}</div>`;
+  }
+
   private async _loginAndRefresh(device: ManagedDevice) {
     if (!this.hass) return;
     this._loggingIn = device.pubkey_prefix;
@@ -1106,10 +1139,16 @@ export class DevicesPage extends LitElement {
         </div>
 
         <div class="actions-row top">
+          <button class="action-btn primary" ?disabled=${this._loggingIn === device.pubkey_prefix}
+            title="Log in if needed and ask ${device.name} for its current stats"
+            @click=${() => this._loginAndRefresh(device)}>
+            ${this._loggingIn === device.pubkey_prefix ? 'Refreshing…' : '⟳ Refresh status'}
+          </button>
           <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._executeRemoteAction(device, 'advert')}>Flood advert</button>
           <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._executeRemoteAction(device, 'clock sync')}>Sync clock</button>
           <button class="action-btn" ?disabled=${!isOnline} @click=${() => this._openCommandDialog(device, false)}>Command…</button>
         </div>
+        ${this._renderLastStatus(entities)}
 
         ${!isOnline
           ? html`
@@ -1117,12 +1156,7 @@ export class DevicesPage extends LitElement {
                 ${statusClass === 'offline'
                   ? html`<b>${device.name} isn't answering.</b> It may be out of range or turned off. Stats will update when it next responds.`
                   : html`<b>No stats yet.</b> ${device.name} hasn't answered a status request, so battery, signal and traffic are blank.`}
-                <div style="margin-top:8px">
-                  <button class="action-btn" ?disabled=${this._loggingIn === device.pubkey_prefix}
-                    @click=${() => this._loginAndRefresh(device)}>
-                    ${this._loggingIn === device.pubkey_prefix ? 'Logging in…' : 'Log in and refresh'}
-                  </button>
-                </div>
+                Use <b>Refresh status</b> above to ask it now.
               </div>
             `
           : nothing}

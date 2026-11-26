@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.29
+
+- **Repeaters:** a **⟳ Refresh status** button on every repeater, always available. It logs in if needed and asks the repeater for its current stats. It replaces "Log in and refresh", which only showed when stats were blank.
+- **Repeaters:** a **Last status** line with the date and time (and how long ago) the repeater's stats last came in.
+
 ## 0.4.12-beta.28
 
 - **Chat:** **React** is hidden on your own **unheard or failed** messages, with a note explaining why. Others may not have the message, so a reaction would have nothing to attach to. Resend or Delete instead. Reply was already hidden on your own messages.
