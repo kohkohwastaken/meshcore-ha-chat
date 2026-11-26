@@ -2,147 +2,91 @@
 
 # MeshCore Chat for Home Assistant
 
-> **This is a fork** of [MeshCore Chat](https://github.com/mwolter805/meshcore-ha-chat) by Matt Wolter, maintained by [kohkohwastaken](https://github.com/kohkohwastaken). It adds node and route maps on Home Assistant's own map, with more to come; see the [changelog](CHANGELOG.md). Route matching is ported from [MeshCore Chattx](https://github.com/michalsiman/meshcore-ha-chattx) by Michal Šiman. Both are MIT-licensed. Report issues for this fork [here](https://github.com/kohkohwastaken/meshcore-ha-chat/issues).
+A chat panel for the [MeshCore](https://meshcore.io) mesh radio network, right in your Home Assistant sidebar. Channels and direct messages, a live node map, contacts, repeater management and your radio's settings, all in one place, with message history that survives restarts.
 
-A sidebar chat panel and persistent message store for the [MeshCore](https://meshcore.io) mesh radio network that was written by an agent, thoroughly reviewed and carefully tested by a human.
+It works alongside the [core MeshCore integration](https://github.com/meshcore-dev/meshcore-ha), which talks to the radio. Install both.
 
-Works as a **companion** to the [core meshcore integration](https://github.com/meshcore-dev/meshcore-ha) — install both. This integration does not drive the radio itself; it adds a chat UI, message persistence, and search on top of the events and services exposed by the core integration.
+> **This is a fork** of [MeshCore Chat](https://github.com/mwolter805/meshcore-ha-chat) by Matt Wolter, maintained by [kohkohwastaken](https://github.com/kohkohwastaken). Route matching is ported from [MeshCore Chattx](https://github.com/michalsiman/meshcore-ha-chattx) by Michal Šiman. Both are MIT-licensed. See the [changelog](CHANGELOG.md) for everything that's changed, and report issues for this fork [here](https://github.com/kohkohwastaken/meshcore-ha-chat/issues).
 
-> **Status:** v0.4 in active development.
+## What's in it
 
-## Features (v0.3)
+The panel has five tabs. On a phone they move to a bar along the bottom.
 
-- Sidebar chat panel with channels, DMs, and contact list
-- Persistent message history (survives Home Assistant restarts)
-- Trace / path-discovery dialog with route visualization
-- Per-conversation search
-- Unread counts, delivery status
-- Live device telemetry, neighbor tables, and remote command issue from the same UI
-- Network-wide node discovery view (typically hundreds of nodes)
+### 💬 Chat
 
-## Screenshots
+- **Channels and direct messages** in two sections you can collapse, each showing the last message and how long ago it was. Empty DMs are hidden.
+- **Reactions** that work with other apps: we send and read the [MeshCore One reaction format](https://github.com/Avi0n/MeshCoreOne/blob/main/docs/Reactions.md), which the community has settled on until MeshCore supports reactions itself. We also read reactions from MeshCore Open and plain `@[Name] 👍` messages. Any emoji works. A toggle in the chat header shows or hides the raw reaction messages.
+- **Replies** with a quote of the message being answered, when it's clear which one that is. You can only reply to someone's newest message, so replies never point at the wrong one.
+- **Message details**: hops, SNR, RSSI, the route on a map, the exact time, and each message's hash (shown next to the hop count).
+- **Delete** a single message or a whole conversation, with a confirmation first.
+- **Search** within a conversation, unread counts, and delivery status (Sent, Repeated, Waiting) with Resend.
 
-### The four main tabs
+### 👥 Contacts
 
-<table>
-<tr>
-<td width="50%"><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/chat-tab.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/chat-tab.jpg" alt="Chat tab"></a></td>
-<td width="50%"><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/devices-tab.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/devices-tab.jpg" alt="Devices tab"></a></td>
-</tr>
-<tr>
-<td><b>Chat</b> — channels and DMs in the left rail with All / Unread / DMs / Channels filters; messages rendered with sender, age, and delivery status (Repeated / Sent / Waiting).</td>
-<td><b>Devices</b> — per-device sensor tiles (SNR, RSSI, airtime, battery, message counts) with a neighbor table and quick-action buttons (Flood Advert, Sync Clock, Req Telemetry, Req Status).</td>
-</tr>
-<tr>
-<td><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/nodes-tab.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/nodes-tab.jpg" alt="Nodes tab"></a></td>
-<td><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/settings-tab.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/settings-tab.jpg" alt="Settings tab"></a></td>
-</tr>
-<tr>
-<td><b>Nodes</b> — full network discovery view (All / Added / Discovered, then Clients / Repeaters), with search, last-heard sort, and stale-record cleanup.</td>
-<td><b>Settings</b> — companion device profile, radio configuration (TX power, frequency, bandwidth, spreading factor, coding rate, path hash mode), rename, and location. When <b>Self Diagnostics</b> is enabled in the upstream meshcore integration, the companion card also shows the same rich tiles managed devices have (battery, signal, radio activity, message counts) plus a diagnostics sensor table.</td>
-</tr>
-</table>
+Opened from the **Contacts** button next to Direct messages.
 
-### Chat features
+- **Contacts** grouped into Companions, Room servers, Repeaters and Sensors, and **Discovered** nodes your radio has heard. Discovered loads 500 at a time as you scroll. Sort A–Z, Z–A, newest or oldest heard.
+- **Add manually** by pasting a chat code, a `meshcore://` link, a QR code's text, or a bare public key. Contacts added this way show as **Unverified** until your radio hears from them (an advert or a direct message).
+- **Share my contact** as a QR code (copy or save the image), a chat code, or a link, or send it to nearby radios over the air. You can share other contacts the same way.
 
-<table>
-<tr>
-<td width="50%"><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/chat-popup.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/chat-popup.jpg" alt="Message popup with route metadata"></a></td>
-<td width="50%"><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/manage-contacts-channels.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/manage-contacts-channels.jpg" alt="Manage contacts and channels"></a></td>
-</tr>
-<tr>
-<td><b>Message popup</b> — click or tap any message for Copy / Reply, plus the route metadata: hop sequence, SNR, RSSI, and exact receive timestamp.</td>
-<td><b>Manage contacts &amp; channels</b> — promote any discovered node to an Added contact, or remove it; channel list lives on the second tab.</td>
-</tr>
-</table>
+### 🗺️ Nodes
 
-### Nodes features
+- **Map or list** of every node your radio knows, on Home Assistant's own map. Tap a pin to see its details beside the map. The selected pin is highlighted.
+- **Filter** by Added/Discovered, by any mix of types, and by when they were last heard (24 hours, 7 days, 30 days, 1 year, or since a date you pick).
+- **Clear stale nodes**: remove nodes not heard for as many days as you choose, picking the types and whether to include discovered nodes, unverified manual contacts, or both. It tells you how many will go before you confirm.
+- **Trace** a path through chosen repeaters, or discover one, and see it on the map.
 
-<table>
-<tr>
-<td width="50%"><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/node-popup.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/node-popup.jpg" alt="Node detail popup"></a></td>
-<td width="50%"><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/trace-dialog.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/trace-dialog.jpg" alt="Path trace dialog"></a></td>
-</tr>
-<tr>
-<td><b>Node details</b> — click any node tile in the Nodes tab to open quick actions (Trace, Remove Contact), public-key prefix, type, last advert, and location.</td>
-<td><b>Path trace</b> — launched from the Trace quick action in the Node details dialog; pick repeaters in order to test a multi-hop path, or run a direct-neighbor probe; resolved path is shown alongside.</td>
-</tr>
-</table>
+### 📻 My radio
 
-### Device management
+Your companion radio's profile, battery and signal, location, and radio settings (TX power, frequency, bandwidth, spreading factor, coding rate, path hash mode). Rename, key management and commands are in the ⚙ menu.
 
-<table>
-<tr>
-<td width="50%"><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/device-settings.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/device-settings.jpg" alt="Device settings menu"></a></td>
-<td width="50%"><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/device-command.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/device-command.jpg" alt="Issue command picker"></a></td>
-</tr>
-<tr>
-<td><b>Device settings menu</b> — per-device gear menu: View Hidden Sensors, Issue Command, Reboot, Start OTA Update.</td>
-<td><b>Issue Command</b> — full command catalog grouped by category (Device Management, Device Info, etc.) — drives the underlying meshcore service from the panel.</td>
-</tr>
-<tr>
-<td><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/companion-settings.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/companion-settings.jpg" alt="Companion settings menu"></a></td>
-<td><a href="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/tile-more-info.jpg"><img src="https://raw.githubusercontent.com/mwolter805/meshcore-ha-chat/main/assets/screenshots/tile-more-info.jpg" alt="Sensor tile more-info"></a></td>
-</tr>
-<tr>
-<td><b>Companion settings menu</b> — same gear menu pattern for the local companion device, with Key Management as an additional option.</td>
-<td><b>Sensor history</b> — clicking any sensor tile opens Home Assistant's standard more-info dialog with full historical chart.</td>
-</tr>
-</table>
+### 📡 Repeaters
+
+One card per repeater or client you manage, showing its status and when it was last heard. Open a card for its sensor tiles, neighbour table and quick actions. **Refresh status** logs in and asks for fresh stats, and the card shows when the last status arrived. Click any tile for its full history.
+
+### ⚙️ Settings
+
+Saved per browser: message display, reaction preferences, date and time format, and which nodes to show by default.
 
 ## Installation
 
-### HACS (custom repository)
+### HACS
 
 [![Open meshcore-ha-chat in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=kohkohwastaken&repository=meshcore-ha-chat&category=integration)
 
-Click the badge above to open this repository in your HACS dashboard, or follow the manual steps:
+Click the badge, or add it by hand:
 
-1. In HACS → Integrations → ⋮ → Custom repositories
-2. Add `https://github.com/mwolter805/meshcore-ha-chat` as an "Integration"
-3. Install **MeshCore Chat**
-4. Restart Home Assistant
-5. Settings → Devices & Services → Add Integration → **MeshCore Chat**
+1. HACS → ⋮ → **Custom repositories**
+2. Add `https://github.com/kohkohwastaken/meshcore-ha-chat` as an **Integration**
+3. Install **MeshCore Chat** and restart Home Assistant
+4. Settings → Devices & Services → **Add Integration** → **MeshCore Chat**
+
+To try a beta, turn on **Show beta versions** in HACS, or pick a version from the **Redownload** dropdown.
 
 ### Manual
 
-Copy `custom_components/meshcore_chat/` into your HA `config/custom_components/` directory. Restart HA. Add the integration from the UI.
-
-## Usage
-
-For a walkthrough of common tasks (adding contacts, managing channels, issuing commands, tracing paths, changing radio settings) plus operational warnings (radio-reboot requirements, the entity_id rename gotcha), see [INSTRUCTIONS.md](./INSTRUCTIONS.md).
-
-> **Permissions.** Reading messages and browsing the panel works for any authenticated HA user. **Destructive actions** — radio reconfiguration, identity regeneration, channel-key changes, issuing commands, adding / removing / blocking contacts, and running path traces — require **administrator** rights on your HA instance. See [INSTRUCTIONS.md → Permissions](./INSTRUCTIONS.md#permissions) for the full list.
+Copy `custom_components/meshcore_chat/` into your Home Assistant `config/custom_components/` folder, restart, and add the integration from the UI.
 
 ## Requirements
 
-- Home Assistant 2025.6.0 or newer
-- The core [meshcore integration](https://github.com/meshcore-dev/meshcore-ha) **v2.7.0 or newer** installed and configured. MeshCore Chat 0.3.2 was tested with **v3.0.5**. The per-channel region scope selector and the "All regions" option rely on the message `scope` argument and the inbound `region_scope` / `flood_scope` fields that landed in the core integration's v2.7.0 (released 2026-05-31). The chat companion also calls the structured query services (`meshcore.get_contacts`, `meshcore.trace`) introduced in 2.6.0; on a core older than the floor the trace dialog returns a *"service not registered"* error and the contact list falls back to a legacy code path with a one-time warning in the logs.
+- Home Assistant **2025.6.0** or newer
+- The core [MeshCore integration](https://github.com/meshcore-dev/meshcore-ha) **2.7.0** or newer, installed and set up with your radio
 
-## Security
+## Usage
 
-Security issues can be reported privately — see [SECURITY.md](SECURITY.md). For how the integration handles untrusted, mesh-sourced data and where its trust boundaries are, see [docs/security-posture.md](docs/security-posture.md).
+For walkthroughs of common tasks and things worth knowing (radio reboots, renaming entities), see [INSTRUCTIONS.md](./INSTRUCTIONS.md).
 
-[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/mwolter805/meshcore-ha-chat/badge)](https://scorecard.dev/viewer/?uri=github.com/mwolter805/meshcore-ha-chat)
-[![CodeQL](https://github.com/mwolter805/meshcore-ha-chat/actions/workflows/codeql.yml/badge.svg)](https://github.com/mwolter805/meshcore-ha-chat/actions/workflows/codeql.yml)
-
-## Relationship to other projects
-
-- [meshcore-dev/meshcore-ha](https://github.com/meshcore-dev/meshcore-ha) — the core integration that drives the MeshCore radio. **Required.**  
-  [![Open meshcore-ha in HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=meshcore-dev&repository=meshcore-ha&category=integration)
-
-## Use cases
-
-- **Off-grid mesh chat panel.** Run a tablet in your kitchen showing the MeshCore Chat sidebar; talk to local mesh peers without leaving Home Assistant.
-- **Search recent traffic.** "Who pinged the @[Repeater Cliff] node yesterday?" — date-range message search across all conversations.
-- **Path diagnostics.** Trace the route a message took (hops, SNR, RSSI per repeater) right from the message bubble.
-- **Managed-device dashboard.** Monitor battery, last-heard, neighbour SNR, and uptime on every repeater you've added — one card per device.
+> **Permissions.** Any Home Assistant user can read messages and use the panel. Changing radio settings, keys or channels, issuing commands, adding or removing contacts, clearing nodes and running traces need an **administrator**.
 
 ## Known limitations
 
-- **Requires meshcore ≥ 2.7.0.** The per-channel region scope selector and "All regions" option need core-integration support that landed in v2.7.0; Trace and Get Contacts use upstream services from 2.6.0, and older cores fall back to direct coordinator reads where supported.
-- **Message archive is not a long-term log.** Default retention is 90 days, capped at 500 messages per conversation. Configurable via Settings → MeshCore Chat → Configure (range 1–365 days, 50–5000 messages).
-- **Discover-mode traces don't always return.** Flood path discovery on multi-hop routes sometimes silently drops. If a **Discover** trace fails, switch to **Select repeaters** or **Enter path** in the trace dialog to specify the route explicitly.
+- **Message history isn't a permanent log.** By default it keeps 90 days and up to 500 messages per conversation. Change this in Settings → Devices & Services → MeshCore Chat → Configure.
+- **Reactions and replies aren't part of MeshCore itself.** They're text conventions between apps, so an app that doesn't know them shows them as ordinary messages.
+- **Discover traces don't always come back** on long routes. If one fails, pick the repeaters yourself or enter the path.
+
+## Security
+
+Report security issues privately; see [SECURITY.md](SECURITY.md). For how the integration treats data from the mesh, see [docs/security-posture.md](docs/security-posture.md).
 
 ## Removal
 
@@ -158,7 +102,7 @@ To uninstall:
 
 ## Development
 
-Contributions and bug reports welcome — file issues at [github.com/mwolter805/meshcore-ha-chat/issues](https://github.com/mwolter805/meshcore-ha-chat/issues).
+Contributions and bug reports welcome — file issues at [github.com/kohkohwastaken/meshcore-ha-chat/issues](https://github.com/kohkohwastaken/meshcore-ha-chat/issues).
 
 ### Repo layout
 
