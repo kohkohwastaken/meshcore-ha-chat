@@ -1,4 +1,4 @@
-<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/banner-dark.png"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/banner-light.png" alt="MeshCore Chat for Home Assistant" width="760"></picture></p>
+<p align="center"><img src="https://raw.githubusercontent.com/kohkohwastaken/meshcore-ha-chat/main/assets/banner-dark.png" alt="MeshCore Chat for Home Assistant" width="760"></p>
 
 # MeshCore Chat for Home Assistant
 
