@@ -965,6 +965,7 @@ export class ChatPage extends LitElement {
               ${this._renderChatArea()}
             </div>
             ${this._renderMessagePanel('sheet')}
+            ${this._renderDeleteConfirm()}
           </div>
         `;
       } else {
@@ -1888,8 +1889,7 @@ export class ChatPage extends LitElement {
                   ${this._contactHasLocation()
                     ? html`<button role="menuitem" @click=${() => this._convAction('show-on-map')}>Show on map</button>`
                     : html`<button role="menuitem" disabled title="This contact hasn't shared a location in its adverts">Show on map (no location shared)</button>`}
-                  <button role="menuitem" @click=${() => this._convAction('trace')}>Trace route</button>
-                  <button role="menuitem" @click=${() => this._convAction('manage-contacts')}>Contacts</button>`}
+                  <button role="menuitem" @click=${() => this._convAction('trace')}>Trace route</button>`}
             <button role="menuitem" @click=${() => this._convAction('search')}>Search this conversation</button>
             <button role="menuitem" class="danger" @click=${() => this._convAction('delete')}>${isChannel ? 'Clear chat history' : 'Delete chat'}</button>
           </div>` : ''}

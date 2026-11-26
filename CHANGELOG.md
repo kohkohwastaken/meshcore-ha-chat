@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.31
+
+- **Chat:** removed **Contacts** from the ⋯ menu in direct messages.
+- **Chat (phones):** **Delete chat** / **Clear chat history** now shows its confirmation popup when a conversation is open on a phone. Before, the popup only appeared on desktop, so on phones the option did nothing.
+
 ## 0.4.12-beta.30
 
 - **Contacts → ＋ Add manually:** add someone your radio hasn't heard by pasting any of:
