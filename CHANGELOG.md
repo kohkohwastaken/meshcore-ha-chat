@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.12-beta.38
+
+- Header logo on one line (bubble, MESHCORE, HOME ASSISTANT CHAT), with HOME ASSISTANT CHAT large enough to read.
+
 ## 0.4.12-beta.37
 
 - The panel header shows the MeshCore Chat logo instead of the plain "MeshCore Chat" title, at the same size.

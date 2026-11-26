@@ -160,7 +160,8 @@ export class MeshCorePanel extends LitElement {
       }
 
       .panel-logo {
-        height: 26px;
+        height: 24px;
+        max-width: 100%;
         width: auto;
         display: block;
       }
