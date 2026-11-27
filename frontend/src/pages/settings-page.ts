@@ -102,6 +102,11 @@ export class SettingsPage extends LitElement {
   @state() private _confirmDialogOpen = false;
   @state() private _locationSource: 'gps' | 'manual' | 'ha_location' = 'manual';
   @state() private _importKeyValue = '';
+  // Exported private key: held only while the Key Management dialog is open.
+  @state() private _exportedKey = '';
+  @state() private _exportReveal = false;
+  @state() private _exportBusy = false;
+  @state() private _exportError = '';
 
   // Entity registry cache and companion device entities
   @state() private _deviceEntities: Record<string, EntityInfo[]> = {};
@@ -1557,6 +1562,7 @@ export class SettingsPage extends LitElement {
             Regenerate Identity
           </button>
         </div>
+        ${this._renderExportKey()}
         <div class="danger-zone" style="margin-top: 0;">
           <div class="danger-zone-title">Import Private Key</div>
           <div style="font-size: 12px; color: var(--secondary-text-color); margin-bottom: 8px;">
@@ -1819,6 +1825,104 @@ export class SettingsPage extends LitElement {
       },
     };
     this._confirmDialogOpen = true;
+  }
+
+  private _renderExportKey() {
+    const admin = !!this.hass?.user?.is_admin;
+    const key = this._exportedKey;
+    const masked = key ? '•'.repeat(24) + key.slice(-8) : '';
+    return html`
+      <div class="danger-zone" style="margin-top: 0;">
+        <div class="danger-zone-title">Export Private Key</div>
+        <div style="font-size: 12px; color: var(--secondary-text-color); margin-bottom: 8px;">
+          Your radio's secret identity. Anyone with it can pretend to be your radio and read
+          direct messages sent to it. Keep it as a backup or to move this identity to another
+          radio with Import below. It is read from the radio when you ask and never saved by
+          Home Assistant.
+        </div>
+        ${!admin
+          ? html`<div style="font-size: 12px;">Only Home Assistant admins can export the key.</div>`
+          : !key
+            ? html`
+                <button class="danger-button" ?disabled=${this._exportBusy}
+                  @click=${this._showExportKeyConfirm}>
+                  ${this._exportBusy ? 'Reading from radio…' : 'Export private key…'}
+                </button>
+                ${this._exportError
+                  ? html`<div style="font-size: 12px; color: var(--error-color); margin-top: 6px;">${this._exportError}</div>`
+                  : ''}`
+            : html`
+                <div style="font-family: monospace; font-size: 12px; word-break: break-all;
+                  padding: 8px; border-radius: 6px; background: var(--secondary-background-color);
+                  user-select: ${this._exportReveal ? 'text' : 'none'};">
+                  ${this._exportReveal ? key : masked}
+                </div>
+                <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                  <button class="action-btn" @click=${() => { this._exportReveal = !this._exportReveal; }}>
+                    ${this._exportReveal ? 'Hide' : 'Reveal'}
+                  </button>
+                  <button class="action-btn" @click=${this._copyExportedKey}>Copy</button>
+                  <button class="action-btn" @click=${this._downloadExportedKey}>Download backup</button>
+                  <button class="action-btn" @click=${this._clearExportedKey}>Done</button>
+                </div>`}
+      </div>
+    `;
+  }
+
+  private _showExportKeyConfirm() {
+    this._confirmAction = {
+      title: 'Export Private Key',
+      message: 'This shows the secret key that is your radio\'s identity. Anyone who gets it can impersonate your radio and read direct messages sent to it. Only continue on a device you trust, and store the key somewhere safe.',
+      requireTyped: 'EXPORT',
+      onConfirm: () => this._exportKey(),
+    };
+    this._confirmDialogOpen = true;
+  }
+
+  private async _exportKey() {
+    if (!this.hass) return;
+    this._exportBusy = true;
+    this._exportError = '';
+    try {
+      const payload: Record<string, unknown> = { type: 'meshcore_chat/export_identity' };
+      if (this.config?.entry_id) payload.entry_id = this.config.entry_id;
+      const res = await this.hass.callWS<{ private_key: string }>(payload as any);
+      this._exportedKey = res.private_key;
+      this._exportReveal = false;
+    } catch (err: any) {
+      this._exportError = err?.code === 'export_disabled'
+        ? "This radio's firmware has private key export turned off, so the key can't be read."
+        : `Couldn't read the key from the radio${err?.message ? `: ${err.message}` : ''}.`;
+    } finally {
+      this._exportBusy = false;
+    }
+  }
+
+  private async _copyExportedKey() {
+    try {
+      await navigator.clipboard.writeText(this._exportedKey);
+      this._showStatusMessage('Private key copied', 'success');
+    } catch {
+      this._exportReveal = true;
+      this._showStatusMessage("Couldn't copy. The key is shown so you can select it", 'error');
+    }
+  }
+
+  private _downloadExportedKey() {
+    const name = (this._deviceConfig as any)?.name || 'radio';
+    const safe = String(name).replace(/[^\w.-]+/g, '_');
+    const blob = new Blob([this._exportedKey + '\n'], { type: 'text/plain' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `meshcore-${safe}-private-key.txt`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  }
+
+  private _clearExportedKey() {
+    this._exportedKey = '';
+    this._exportReveal = false;
+    this._exportError = '';
   }
 
   private _handleImportKeyConfirm() {
@@ -2320,6 +2424,7 @@ export class SettingsPage extends LitElement {
 
   private _closeKeyManagementModal() {
     this._keyManagementModalOpen = false;
+    this._clearExportedKey();
   }
 
   // _fireMoreInfo removed — not currently used in settings context

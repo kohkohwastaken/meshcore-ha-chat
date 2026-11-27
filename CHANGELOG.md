@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.14
+
+- **Export private key.** My radio → ⚙ → Key Management now has *Export Private Key*, next to Import. Admins only; you type EXPORT to confirm. The key is read from the radio on request, shown masked with Reveal, Copy and Download backup, and cleared when you close the dialog. Home Assistant never saves it. It's in the same 128-character form Import accepts. Radios whose firmware has export turned off say so.
+
 ## 0.4.13-beta.13
 
 - My radio: the remembered manual location is kept by MeshCore Chat on the Home Assistant server, per radio, instead of in the browser, so every device and browser sees it.

@@ -4341,3 +4341,28 @@ async def test_manual_location_is_remembered_on_the_server(hass: HomeAssistant, 
     await ws_api._remember_manual_location(hass, coordinator, 95, 0)
     _store, saved = await ws_api._manual_locations(hass)
     assert saved["58e107fbe67b"] == [51.293, 0.429]
+
+
+async def test_ws_export_identity(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """Export returns the 64-byte key as hex; firmware with export off gives a clear error."""
+    from types import SimpleNamespace
+    from meshcore.events import EventType
+    coordinator = MagicMock()
+    coordinator.pubkey = "abcd"
+    key = bytes(range(64))
+    coordinator.api.mesh_core.commands.export_private_key = AsyncMock(
+        return_value=SimpleNamespace(type=EventType.PRIVATE_KEY, payload={"private_key": key})
+    )
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_export_identity, hass, conn, {"id": 1})
+    assert conn.results[0][1] == {"private_key": key.hex(), "public_key": "abcd"}
+
+    coordinator.api.mesh_core.commands.export_private_key = AsyncMock(
+        return_value=SimpleNamespace(type=EventType.DISABLED, payload={"reason": "private_key_export_disabled"})
+    )
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_export_identity, hass, conn, {"id": 2})
+    assert not conn.results
+    assert conn.errors[0][1] == "export_disabled"

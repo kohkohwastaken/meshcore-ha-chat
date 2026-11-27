@@ -440,6 +440,7 @@ def async_register_ws_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_mark_read)
     websocket_api.async_register_command(hass, ws_regenerate_identity)
     websocket_api.async_register_command(hass, ws_import_identity)
+    websocket_api.async_register_command(hass, ws_export_identity)
     websocket_api.async_register_command(hass, ws_set_location_source)
     websocket_api.async_register_command(hass, ws_add_contact)
     websocket_api.async_register_command(hass, ws_add_contact_manual)
@@ -4154,4 +4155,47 @@ async def ws_get_messages_around(
             "has_more_after": has_more_after,
             "anchor_found": anchor_found,
         },
+    )
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/export_identity",
+        vol.Optional("entry_id"): str,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_export_identity(hass, connection, msg):
+    """Read the radio's private key (admin only). Never stored or logged.
+
+    Returns ``{private_key: <128 hex>, public_key}`` in the firmware-native
+    64-byte form that ``import_identity`` accepts. Firmware built without
+    key export answers DISABLED → ``export_disabled`` error.
+    """
+    coordinator = _get_coordinator(hass, msg.get("entry_id"))
+    if not coordinator:
+        connection.send_error(msg["id"], "not_found", _t("no_meshcore_coordinator"))
+        return
+    try:
+        mesh = coordinator.api.mesh_core
+        result = await mesh.commands.export_private_key()
+    except Exception as ex:  # noqa: BLE001
+        connection.send_error(msg["id"], "export_failed", type(ex).__name__)
+        return
+    etype = str(getattr(getattr(result, "type", None), "value", getattr(result, "type", "")))
+    payload = getattr(result, "payload", None) or {}
+    key = payload.get("private_key") if isinstance(payload, dict) else None
+    if etype == "disabled":
+        connection.send_error(
+            msg["id"], "export_disabled",
+            "This radio's firmware has private key export turned off.",
+        )
+        return
+    if not isinstance(key, (bytes, bytearray)) or len(key) != 64:
+        connection.send_error(msg["id"], "export_failed", "The radio did not return a key.")
+        return
+    connection.send_result(
+        msg["id"],
+        {"private_key": bytes(key).hex(), "public_key": str(getattr(coordinator, "pubkey", "") or "")},
     )
