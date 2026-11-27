@@ -2,6 +2,11 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.7
+
+- My radio: the tiles' small graphs show their highest and lowest values, "24 h ago … now" and the unit, with a key when a graph has more than one line. Hover a graph to read the value at that time.
+- My radio: clicking a tile (or its graph) opens a larger chart with **all** of that tile's lines, labelled axes, 6 h – 30 d periods and hover read-outs: Radio activity shows transmitting and receiving, Sent shows flood and direct, Received shows flood, direct and errors, Signal shows noise floor and last-packet RSSI. Each line has **Open in Home Assistant** for that sensor's own history and settings.
+
 ## 0.4.13-beta.6
 
 - The integration's icon (shown in HACS, Devices & Services and update dialogs) is now the new MC HAC speech-bubble logo instead of the original radio icon.

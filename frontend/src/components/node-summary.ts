@@ -117,9 +117,143 @@ export class NodeSummary extends LitElement {
       vector-effect: non-scaling-stroke;
     }
 
-    .spark .s-ok { stroke: var(--success-color, #4caf50); }
-    .spark .s-tx { stroke: #2196f3; }
-    .spark .s-rx { stroke: var(--success-color, #4caf50); }
+    .s-ok, .s-rx { stroke: var(--success-color, #4caf50); }
+    .s-tx { stroke: #2196f3; }
+    .s-err { stroke: var(--error-color, #f44336); }
+    .key { font-weight: 500; }
+    .key.s-ok, .key.s-rx { color: var(--success-color, #4caf50); }
+    .key.s-tx { color: #2196f3; }
+    .key.s-err { color: var(--error-color, #f44336); }
+
+    .spark-wrap {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      column-gap: 6px;
+      margin-top: 8px;
+      font-size: 10px;
+      color: var(--secondary-text-color);
+    }
+
+    .spark-y {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      text-align: right;
+      line-height: 1;
+    }
+
+    .spark-plot {
+      position: relative;
+      cursor: zoom-in;
+    }
+
+    .spark-plot .spark { margin-top: 0; }
+
+    .spark-cur { stroke: var(--secondary-text-color); stroke-width: 1; stroke-dasharray: 2 2; vector-effect: non-scaling-stroke; }
+
+    .spark-tip {
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 100%;
+      margin-bottom: 2px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #fff;
+      border-radius: 4px;
+      padding: 2px 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      pointer-events: none;
+    }
+
+    .spark-x {
+      display: flex;
+      justify-content: space-between;
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .detail-scrim {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.55);
+      z-index: 50;
+    }
+
+    .detail {
+      position: fixed;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%, -50%);
+      width: min(720px, 94vw);
+      max-height: 90vh;
+      overflow: auto;
+      background: var(--card-background-color, #1e1e1e);
+      color: var(--primary-text-color);
+      border-radius: 14px;
+      padding: 14px 16px;
+      z-index: 51;
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+    }
+
+    .detail-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-size: 16px;
+    }
+
+    .detail-close {
+      border: none;
+      background: none;
+      color: var(--secondary-text-color);
+      font-size: 18px;
+      cursor: pointer;
+    }
+
+    .detail-chart {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+
+    .detail-chart polyline { fill: none; stroke-width: 1.8; }
+    .detail-chart .grid { stroke: var(--divider-color, #333); stroke-width: 1; }
+    .detail-chart .axis { fill: var(--secondary-text-color); font-size: 11px; }
+    .detail-chart .cur { stroke: var(--secondary-text-color); stroke-dasharray: 3 3; }
+
+    .detail-read, .detail-empty {
+      font-size: 12.5px;
+      color: var(--secondary-text-color);
+      margin-top: 6px;
+      min-height: 18px;
+    }
+
+    .detail-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 18px;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    .detail-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .link-btn {
+      border: none;
+      background: none;
+      color: var(--primary-color, #03a9f4);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      padding: 0;
+    }
 
     .spark-cap, .noise-line {
       font-size: 11px;
@@ -535,6 +669,7 @@ export class NodeSummary extends LitElement {
         ${heroTiles}
       </div>
 
+      ${companion ? this._renderDetail() : nothing}
       ${companion ? this._renderDiagnosticsHint() : nothing}
       ${companion ? this._renderCompanionActivityCard() : this._renderMessageActivityCard()}
       ${health}
@@ -621,20 +756,170 @@ export class NodeSummary extends LitElement {
     this._rangeStats = hours === 24 ? this._spark : await fetchStats(this.hass, ids, hours);
   }
 
-  /** A small line graph of one series (or two), for a tile. */
-  private _sparkline(lines: Array<{ key: string; field: 'change' | 'mean'; cls: string }>) {
+  /** The series behind each companion tile, for its small graph and its larger chart. */
+  private static readonly TILE_CHARTS: Record<string, { title: string; unit: string; lines: Array<{ key: string; how: 'mean' | 'rate' | 'pct'; label: string; cls: string }> }> = {
+    battery: { title: 'Battery', unit: '%', lines: [{ key: 'battery_percentage', how: 'mean', label: 'Battery', cls: 's-ok' }] },
+    signal: { title: 'Signal', unit: 'dBm', lines: [
+      { key: 'noise_floor', how: 'mean', label: 'Noise floor', cls: 's-ok' },
+      { key: 'last_rssi', how: 'mean', label: 'Last packet RSSI', cls: 's-tx' }] },
+    airtime: { title: 'Radio activity', unit: '% of time', lines: [
+      { key: 'tx_airtime', how: 'pct', label: 'Transmitting', cls: 's-tx' },
+      { key: 'rx_airtime', how: 'pct', label: 'Receiving', cls: 's-rx' }] },
+    sent: { title: 'Messages sent', unit: 'msg/min', lines: [
+      { key: 'sent_flood', how: 'rate', label: 'Flood', cls: 's-tx' },
+      { key: 'sent_direct', how: 'rate', label: 'Direct', cls: 's-rx' }] },
+    received: { title: 'Messages received', unit: 'msg/min', lines: [
+      { key: 'recv_flood', how: 'rate', label: 'Flood', cls: 's-tx' },
+      { key: 'recv_direct', how: 'rate', label: 'Direct', cls: 's-rx' },
+      { key: 'recv_errors', how: 'rate', label: 'Errors', cls: 's-err' }] },
+  };
+
+  /** Each line of a tile chart as [time, value] points, from the given statistics. */
+  private _chartLines(chart: string, stats: StatSeries, hours: number) {
+    const def = NodeSummary.TILE_CHARTS[chart];
     const ids = this._companionIds();
-    const series = lines.map((l) => (this._spark[ids[l.key]] || []).map((p) => (l.field === 'change' ? (p.change ?? 0) : p.mean))
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v)));
-    const all = series.flat();
-    if (all.length < 2) return nothing;
-    const min = Math.min(...all);
-    const max = Math.max(...all);
-    const span = max - min || 1;
-    const pts = (vals: number[]) => vals.map((v, i) => `${((i / Math.max(1, vals.length - 1)) * 200).toFixed(1)},${(38 - ((v - min) / span) * 34).toFixed(1)}`).join(' ');
-    return html`<svg class="spark" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true">
-      ${series.map((vals, i) => (vals.length > 1 ? svg`<polyline class=${lines[i].cls} points=${pts(vals)}></polyline>` : nothing))}
-    </svg>`;
+    const per = periodMinutes(statsPeriod(hours));
+    return def.lines.filter((l) => ids[l.key]).map((l) => ({
+      ...l,
+      entity: ids[l.key],
+      points: (stats[ids[l.key]] || []).map((p) => {
+        const v = l.how === 'mean' ? p.mean : typeof p.change === 'number' ? Math.max(0, p.change) / per * (l.how === 'pct' ? 100 : 1) : null;
+        return [p.start, v] as [number, number | null];
+      }).filter((pt): pt is [number, number] => typeof pt[1] === 'number' && Number.isFinite(pt[1])),
+    }));
+  }
+
+  private static _fmtVal(v: number): string {
+    const a = Math.abs(v);
+    return a >= 100 ? v.toFixed(0) : a >= 10 ? v.toFixed(1) : v.toFixed(2).replace(/\.?0+$/, '') || '0';
+  }
+
+  private static _fmtTime(ts: number): string {
+    const d = new Date(ts);
+    const today = new Date().toDateString() === d.toDateString();
+    return today ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
+  @state() private _hover: { chart: string; x: number; text: string } | null = null;
+
+  /** A tile's small graph of the last 24 h, with its range and unit labelled. */
+  private _sparkline(chart: string) {
+    const def = NodeSummary.TILE_CHARTS[chart];
+    const lines = this._chartLines(chart, this._spark, 24).filter((l) => l.points.length > 1);
+    if (!lines.length) return nothing;
+    const all = lines.flatMap((l) => l.points.map((p) => p[1]));
+    let min = Math.min(...all);
+    let max = Math.max(...all);
+    if (def.lines[0].how !== 'mean') min = 0;
+    if (max - min < 1e-9) max = min + 1;
+    const t0 = Math.min(...lines.map((l) => l.points[0][0]));
+    const t1 = Math.max(...lines.map((l) => l.points[l.points.length - 1][0]));
+    const x = (t: number) => ((t - t0) / Math.max(1, t1 - t0)) * 200;
+    const y = (v: number) => 38 - ((v - min) / (max - min)) * 34;
+    const onMove = (e: MouseEvent) => {
+      const box = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const frac = Math.min(1, Math.max(0, (e.clientX - box.left) / box.width));
+      const t = t0 + frac * (t1 - t0);
+      const parts = lines.map((l) => {
+        const near = l.points.reduce((best, p) => (Math.abs(p[0] - t) < Math.abs(best[0] - t) ? p : best), l.points[0]);
+        return `${lines.length > 1 ? `${l.label} ` : ''}${NodeSummary._fmtVal(near[1])}`;
+      });
+      this._hover = { chart, x: frac * 100, text: `${NodeSummary._fmtTime(t)} · ${parts.join(' · ')} ${def.unit}` };
+    };
+    const hover = this._hover?.chart === chart ? this._hover : null;
+    return html`
+      <div class="spark-wrap" @click=${(e: Event) => e.stopPropagation()}>
+        <div class="spark-y"><span>${NodeSummary._fmtVal(max)}</span><span>${NodeSummary._fmtVal(min)}</span></div>
+        <div class="spark-plot" @mousemove=${onMove} @mouseleave=${() => { this._hover = null; }}
+          @click=${() => this._openChart(chart)}>
+          <svg class="spark" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true">
+            ${lines.map((l) => svg`<polyline class=${l.cls} points=${l.points.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(' ')}></polyline>`)}
+            ${hover ? svg`<line class="spark-cur" x1=${hover.x * 2} x2=${hover.x * 2} y1="0" y2="40"></line>` : nothing}
+          </svg>
+          ${hover ? html`<div class="spark-tip">${hover.text}</div>` : nothing}
+        </div>
+        <div></div>
+        <div class="spark-x"><span>24 h ago</span><span>${def.unit}${lines.length > 1 ? html` · ${lines.map((l) => html`<span class="key ${l.cls}">${l.label}</span>`)}` : ''}</span><span>now</span></div>
+      </div>`;
+  }
+
+  // ─── A tile's larger chart (all its lines) ─────────────────────────
+  @state() private _detail: string | null = null;
+  @state() private _detailRange = 24;
+  @state() private _detailStats: StatSeries = {};
+  @state() private _detailHover: { x: number; t: number } | null = null;
+
+  private _openChart(chart: string) {
+    this._detail = chart;
+    this._detailHover = null;
+    void this._loadDetail(this._detailRange);
+  }
+
+  private async _loadDetail(hours: number) {
+    this._detailRange = hours;
+    if (!this.hass || !this._detail) return;
+    const ids = this._companionIds();
+    const want = NodeSummary.TILE_CHARTS[this._detail].lines.map((l) => ids[l.key]).filter(Boolean);
+    this._detailStats = hours === 24 ? this._spark : await fetchStats(this.hass, want, hours);
+  }
+
+  private _renderDetail() {
+    if (!this._detail) return nothing;
+    const chart = this._detail;
+    const def = NodeSummary.TILE_CHARTS[chart];
+    const hours = this._detailRange;
+    const lines = this._chartLines(chart, this._detailStats, hours);
+    const pts = lines.flatMap((l) => l.points);
+    const W = 640, H = 240, L = 48, R = 12, T = 12, B = 28;
+    let body: unknown = html`<div class="detail-empty">No recorded data for this period yet.</div>`;
+    if (pts.length > 1) {
+      let min = Math.min(...pts.map((p) => p[1]));
+      let max = Math.max(...pts.map((p) => p[1]));
+      if (def.lines[0].how !== 'mean') min = 0;
+      if (max - min < 1e-9) max = min + 1;
+      const t1 = Date.now();
+      const t0 = t1 - hours * 3600_000;
+      const x = (t: number) => L + ((t - t0) / (t1 - t0)) * (W - L - R);
+      const y = (v: number) => T + (1 - (v - min) / (max - min)) * (H - T - B);
+      const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => min + f * (max - min));
+      const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => t0 + f * (t1 - t0));
+      const hover = this._detailHover;
+      const onMove = (e: MouseEvent) => {
+        const box = (e.currentTarget as SVGElement).getBoundingClientRect();
+        const px = ((e.clientX - box.left) / box.width) * W;
+        if (px < L || px > W - R) { this._detailHover = null; return; }
+        this._detailHover = { x: px, t: t0 + ((px - L) / (W - L - R)) * (t1 - t0) };
+      };
+      const nearest = (l: { points: Array<[number, number]> }, t: number) =>
+        l.points.reduce((best, p) => (Math.abs(p[0] - t) < Math.abs(best[0] - t) ? p : best), l.points[0]);
+      body = html`
+        <svg class="detail-chart" viewBox="0 0 ${W} ${H}" @mousemove=${onMove} @mouseleave=${() => { this._detailHover = null; }}>
+          ${ticks.map((v) => svg`<line class="grid" x1=${L} x2=${W - R} y1=${y(v)} y2=${y(v)}></line>
+            <text class="axis" x=${L - 6} y=${y(v) + 4} text-anchor="end">${NodeSummary._fmtVal(v)}</text>`)}
+          ${xTicks.map((t, i) => svg`<text class="axis" x=${x(t)} y=${H - 8} text-anchor=${i === 0 ? 'start' : i === 4 ? 'end' : 'middle'}>${i === 4 ? 'now' : NodeSummary._fmtTime(t)}</text>`)}
+          ${lines.map((l) => (l.points.length > 1 ? svg`<polyline class=${l.cls} points=${l.points.map((p) => `${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join(' ')}></polyline>` : nothing))}
+          ${hover ? svg`<line class="cur" x1=${hover.x} x2=${hover.x} y1=${T} y2=${H - B}></line>` : nothing}
+        </svg>
+        <div class="detail-read">${hover
+          ? html`<b>${NodeSummary._fmtTime(hover.t)}</b> · ${lines.filter((l) => l.points.length).map((l) => html`<span class="key ${l.cls}">${l.label}</span> ${NodeSummary._fmtVal(nearest(l, hover.t)[1])} `)}${def.unit}`
+          : html`Hover the chart to read values. Values are ${def.unit}${def.lines[0].how === 'mean' ? '' : ', worked out from the radio\'s running totals'}.`}</div>`;
+    }
+    const ranges: Array<[string, number]> = [['6 h', 6], ['24 h', 24], ['48 h', 48], ['7 d', 168], ['30 d', 720]];
+    return html`
+      <div class="detail-scrim" @click=${() => { this._detail = null; }}></div>
+      <div class="detail" role="dialog" aria-label=${def.title}>
+        <div class="detail-head">
+          <b>${def.title}</b>
+          <span class="range-chips">${ranges.map(([label, h]) => html`<button class="range-chip ${hours === h ? 'on' : ''}"
+            aria-pressed=${hours === h} @click=${() => this._loadDetail(h)}>${label}</button>`)}</span>
+          <button class="detail-close" aria-label="Close" @click=${() => { this._detail = null; }}>✕</button>
+        </div>
+        ${body}
+        <div class="detail-legend">${lines.map((l) => html`
+          <span class="detail-line"><span class="key ${l.cls}">${l.label}</span>
+            <button class="link-btn" @click=${() => this._fireMoreInfo(l.entity)}>Open in Home Assistant</button></span>`)}</div>
+      </div>`;
   }
 
   /** Activity chart data from the totals' per-period change, as messages per minute. */
@@ -862,7 +1147,7 @@ export class NodeSummary extends LitElement {
     const ev = evaluateSensor('battery_pct', pct);
 
     return html`
-      <div class="hero-tile" @click=${() => this._fireMoreInfo(battery.entity_id)}>
+      <div class="hero-tile" @click=${() => (this.device?.type === 'companion' ? this._openChart('battery') : this._fireMoreInfo(battery.entity_id))}>
         <div class="hero-tile-head">
           <span>Battery${this._renderInfoTip(ev)}</span>
           <span class="status-dot ${ev.band}"></span>
@@ -881,7 +1166,7 @@ export class NodeSummary extends LitElement {
           .max=${100}
           .band=${ev.band}>
         </meshcore-stat-bar>
-        ${this.device?.type === 'companion' ? this._sparkline([{ key: 'battery_percentage', field: 'mean', cls: 's-ok' }]) : nothing}
+        ${this.device?.type === 'companion' ? this._sparkline('battery') : nothing}
       </div>
     `;
   }
@@ -895,7 +1180,7 @@ export class NodeSummary extends LitElement {
     const ev = evaluateSensor('rssi', rssiVal);
 
     return html`
-      <div class="hero-tile" @click=${() => this._fireMoreInfo(rssi.entity_id)}>
+      <div class="hero-tile" @click=${() => (this.device?.type === 'companion' ? this._openChart('signal') : this._fireMoreInfo(rssi.entity_id))}>
         <div class="hero-tile-head">
           <span>Last message strength${this._renderInfoTip(ev)}</span>
           <span class="status-dot ${ev.band}"></span>
@@ -924,11 +1209,10 @@ export class NodeSummary extends LitElement {
     const noise = this._findEntityIdMatching('noise_floor');
     if (!noise) return nothing;
     return html`
-      <div class="noise-line" @click=${(e: Event) => { e.stopPropagation(); this._fireMoreInfo(noise.entity_id); }}>
+      <div class="noise-line">
         Noise floor ${this._formatNumber(this._readNumber(noise.entity_id), 0)} dBm
       </div>
-      ${this._sparkline([{ key: 'noise_floor', field: 'mean', cls: 's-ok' }])}
-      <div class="spark-cap">Noise floor · last 24 h</div>`;
+      ${this._sparkline('signal')}`;
   }
 
   private _renderRadioActivityTile() {
@@ -1033,7 +1317,7 @@ export class NodeSummary extends LitElement {
     if (sentDirect) consumed.add(sentDirect.entity_id);
 
     return html`
-      <div class="hero-tile" @click=${() => this._fireMoreInfo(nbSent.entity_id)}>
+      <div class="hero-tile" @click=${() => (this.device?.type === 'companion' ? this._openChart('sent') : this._fireMoreInfo(nbSent.entity_id))}>
         <div class="hero-tile-head">
           <span>Messages Sent${this._renderInfoTip({
             band: 'info',
@@ -1052,7 +1336,7 @@ export class NodeSummary extends LitElement {
           .segments=${segs}
           .legend=${'inline'}>
         </meshcore-stacked-bar>
-        ${this.device?.type === 'companion' ? this._sparkline([{ key: 'nb_sent', field: 'change', cls: 's-tx' }]) : nothing}
+        ${this.device?.type === 'companion' ? this._sparkline('sent') : nothing}
       </div>
     `;
   }
@@ -1104,7 +1388,7 @@ export class NodeSummary extends LitElement {
     if (recvErrorsInfo) consumed.add(recvErrorsInfo.entity_id);
 
     return html`
-      <div class="hero-tile" @click=${() => this._fireMoreInfo(nbRecv.entity_id)}>
+      <div class="hero-tile" @click=${() => (this.device?.type === 'companion' ? this._openChart('received') : this._fireMoreInfo(nbRecv.entity_id))}>
         <div class="hero-tile-head">
           <span>Messages Received${this._renderInfoTip({
             band: 'info',
@@ -1154,7 +1438,7 @@ export class NodeSummary extends LitElement {
             ? html`<span><span class="msg-swatch dup"></span>Dup ${totalDups}</span>`
             : nothing}
         </div>
-        ${this.device?.type === 'companion' ? this._sparkline([{ key: 'nb_recv', field: 'change', cls: 's-rx' }]) : nothing}
+        ${this.device?.type === 'companion' ? this._sparkline('received') : nothing}
       </div>
     `;
   }
@@ -1343,7 +1627,7 @@ export class NodeSummary extends LitElement {
     const totalUsed = txN + rxN;
     const onTxClick = (e: Event) => {
       e.stopPropagation();
-      if (txAir) this._fireMoreInfo(txAir.entity_id);
+      this._openChart('airtime');
     };
     const onRxClick = (e: Event) => {
       e.stopPropagation();
@@ -1352,7 +1636,7 @@ export class NodeSummary extends LitElement {
 
     return html`
       <div class="hero-tile"
-           @click=${() => txAir && this._fireMoreInfo(txAir.entity_id)}>
+           @click=${() => this._openChart('airtime')}>
         <div class="hero-tile-head">
           <span>Radio activity${this._renderInfoTip({
             band: dotBand,
@@ -1394,7 +1678,7 @@ export class NodeSummary extends LitElement {
             </span>
           </div>
         </div>
-        ${this._sparkline([{ key: 'tx_airtime', field: 'change', cls: 's-tx' }, { key: 'rx_airtime', field: 'change', cls: 's-rx' }])}
+        ${this._sparkline('airtime')}
       </div>
     `;
   }
