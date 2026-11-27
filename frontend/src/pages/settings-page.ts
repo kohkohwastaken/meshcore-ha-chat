@@ -1,5 +1,5 @@
-import { formatContact } from '../utils/rich-messages';
 import '../components/location-map';
+import '../components/share-contact-dialog';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant, PanelConfig, DeviceConfig, MeshCoreDevice } from '../types';
@@ -213,7 +213,7 @@ export class SettingsPage extends LitElement {
 
     .general-rows {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 0 24px;
     }
 
@@ -879,6 +879,9 @@ export class SettingsPage extends LitElement {
       if (this._deviceConfig?.location_source) {
         this._locationSource = this._deviceConfig.location_source as 'gps' | 'manual' | 'ha_location';
       }
+      if ((this._deviceConfig?.location_source ?? 'manual') === 'manual') {
+        this._rememberManual(Number(this._deviceConfig?.latitude), Number(this._deviceConfig?.longitude));
+      }
     } catch (error) {
       if (!current()) return;
       this._error = `Failed to load device configuration: ${String(error)}`;
@@ -1038,7 +1041,10 @@ export class SettingsPage extends LitElement {
       <!-- Rename Success Modal (persistent dialog) -->
       ${this._renderRenameSuccessModal()}
 
-      ${this._shareOpen ? this._renderShareModal() : nothing}
+      ${this._shareOpen && this._deviceConfig?.pubkey ? html`<meshcore-share-contact-dialog
+        .hass=${this.hass} .entryId=${this.config?.entry_id}
+        .target=${{ name: this._deviceConfig.name || '', publicKey: this._deviceConfig.pubkey, type: 1, self: true }}
+        @share-closed=${() => { this._shareOpen = false; }}></meshcore-share-contact-dialog>` : nothing}
 
       ${this._renameOpen ? html`
         <div class="modal-overlay" @click=${() => { this._renameOpen = false; }}>
@@ -1398,6 +1404,26 @@ export class SettingsPage extends LitElement {
     `;
   }
 
+  /** The last manual coordinates set for this radio, kept in this browser so
+   *  switching to GPS and back doesn't lose them (the radio only keeps one). */
+  private _manualKey(): string {
+    return `meshcore-manual-location-${(this._deviceConfig?.pubkey || '').slice(0, 12)}`;
+  }
+
+  private _rememberManual(lat: number, lon: number) {
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
+    try { localStorage.setItem(this._manualKey(), JSON.stringify([lat, lon])); } catch { /* storage unavailable */ }
+  }
+
+  private _rememberedManual(): [number, number] | null {
+    try {
+      const v = JSON.parse(localStorage.getItem(this._manualKey()) || 'null');
+      return Array.isArray(v) && v.length === 2 && v.every((n) => Number.isFinite(n)) ? [v[0], v[1]] : null;
+    } catch {
+      return null;
+    }
+  }
+
   /** Battery as a small badge next to Connected; click for its chart. */
   private _renderBatteryBadge(entities: Array<{ entity_id: string }>) {
     const pctId = entities.find((e) => e.entity_id.includes('battery_percentage'))?.entity_id;
@@ -1423,15 +1449,22 @@ export class SettingsPage extends LitElement {
     const sourceChanged = this._locationSource !== (this._deviceConfig.location_source ?? 'manual');
     const coordsChanged = this._hasChanges('location', ['latitude', 'longitude']);
     const locationChanged = sourceChanged || coordsChanged;
-    const displayLat = isHaLocation && zoneHome
-      ? String(zoneHome.attributes.latitude ?? 0)
-      : String(this._editValues['latitude'] ?? this._deviceConfig.latitude ?? 0);
-    const displayLon = isHaLocation && zoneHome
-      ? String(zoneHome.attributes.longitude ?? 0)
-      : String(this._editValues['longitude'] ?? this._deviceConfig.longitude ?? 0);
+    const isManual = this._locationSource === 'manual';
+    const isGps = this._locationSource === 'gps';
+    // Manual: what's being edited, else the radio's coordinates if it's on
+    // manual, else the last manual spot remembered in this browser.
+    const remembered = this._rememberedManual();
+    const radioManual = (this._deviceConfig.location_source ?? 'manual') === 'manual';
+    const manualLat = this._editValues['latitude'] ?? (radioManual ? this._deviceConfig.latitude : remembered?.[0]) ?? '';
+    const manualLon = this._editValues['longitude'] ?? (radioManual ? this._deviceConfig.longitude : remembered?.[1]) ?? '';
+    const displayLat = isHaLocation && zoneHome ? String(zoneHome.attributes.latitude ?? 0) : isGps ? '' : String(manualLat);
+    const displayLon = isHaLocation && zoneHome ? String(zoneHome.attributes.longitude ?? 0) : isGps ? '' : String(manualLon);
+    // The map shows where the radio is: its GPS fix when on GPS.
+    const mapSrcLat = isGps ? this._deviceConfig.latitude : displayLat;
+    const mapSrcLon = isGps ? this._deviceConfig.longitude : displayLon;
 
-    const mapLat = Number(displayLat);
-    const mapLon = Number(displayLon);
+    const mapLat = Number(mapSrcLat);
+    const mapLon = Number(mapSrcLon);
     return html`
       ${Number.isFinite(mapLat) && Number.isFinite(mapLon) && (mapLat !== 0 || mapLon !== 0) ? html`
         <meshcore-location-map class="loc-card-map" fill .getHass=${() => this.hass} .lat=${mapLat} .lon=${mapLon}
@@ -1453,7 +1486,8 @@ export class SettingsPage extends LitElement {
             min="-90"
             max="90"
             .value=${displayLat}
-            ?disabled=${isHaLocation}
+            placeholder=${isGps ? 'From GPS' : ''}
+            ?disabled=${!isManual}
             @input=${(e: Event) => {
               this._editValues['latitude'] = Number((e.target as HTMLInputElement).value);
               this.requestUpdate();
@@ -1469,7 +1503,8 @@ export class SettingsPage extends LitElement {
             min="-180"
             max="180"
             .value=${displayLon}
-            ?disabled=${isHaLocation}
+            placeholder=${isGps ? 'From GPS' : ''}
+            ?disabled=${!isManual}
             @input=${(e: Event) => {
               this._editValues['longitude'] = Number((e.target as HTMLInputElement).value);
               this.requestUpdate();
@@ -1635,40 +1670,6 @@ export class SettingsPage extends LitElement {
   @state() private _shareOpen = false;
   @state() private _renameOpen = false;
 
-  /** "Share my contact": the codes other people paste or open to add this radio. */
-  private _renderShareModal() {
-    const cfg = this._deviceConfig;
-    if (!cfg) return nothing;
-    const code = formatContact(cfg.pubkey, 1, cfg.name);
-    const link = `meshcore://contact/add?name=${encodeURIComponent(cfg.name)}&public_key=${cfg.pubkey.toLowerCase()}&type=1`;
-    const row = (label: string, value: string, help: string) => html`
-      <div style="margin-bottom:14px">
-        <div style="font-size:13px;font-weight:600;margin-bottom:4px">${label}</div>
-        <div style="display:flex;gap:6px">
-          <input class="form-input" style="flex:1;font-family:monospace;font-size:12px" readonly .value=${value}
-            @focus=${(e: Event) => (e.target as HTMLInputElement).select()} />
-          <button class="action-btn" @click=${() => this._copyToClipboard(value)}>Copy</button>
-        </div>
-        <div style="font-size:12px;color:var(--secondary-text-color);margin-top:4px">${help}</div>
-      </div>`;
-    return html`
-      <div class="modal-overlay" @click=${() => { this._shareOpen = false; }}>
-        <div class="modal-card" role="dialog" aria-modal="true" aria-label="Share my contact"
-             style="max-width:480px" @click=${(e: Event) => e.stopPropagation()}>
-          <div class="modal-header">
-            <span class="modal-title">Share my contact</span>
-            <button class="modal-close" aria-label="Close" @click=${() => { this._shareOpen = false; }}>&times;</button>
-          </div>
-          <div class="modal-body" style="padding:16px 20px">
-            ${row('Contact code', code, 'Paste into a MeshCore chat on its own and others can tap it to add you.')}
-            ${row('Link', link, 'Opens in the MeshCore apps to add you as a contact.')}
-            <div style="font-size:12px;color:var(--secondary-text-color)">Sending a Flood advert also lets nearby radios discover you.</div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
   private async _copyToClipboard(text: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -1757,14 +1758,19 @@ export class SettingsPage extends LitElement {
         }
         settings['latitude'] = zoneHome.attributes.latitude;
         settings['longitude'] = zoneHome.attributes.longitude;
-      } else {
-        // Manual/GPS: apply user-edited coordinate changes if any
-        for (const key of coordKeys) {
-          if (this._editValues[key] !== undefined) {
-            settings[key] = this._editValues[key];
-          }
+      } else if (this._locationSource === 'manual') {
+        // Manual: the edited coordinates; when switching back from GPS with
+        // no edits, the last manual spot remembered in this browser.
+        const remembered = (this._deviceConfig.location_source ?? 'manual') !== 'manual' ? this._rememberedManual() : null;
+        coordKeys.forEach((key, i) => {
+          const v = this._editValues[key] ?? remembered?.[i];
+          if (v !== undefined) settings[key] = v;
+        });
+        if (settings['latitude'] !== undefined && settings['longitude'] !== undefined) {
+          this._rememberManual(Number(settings['latitude']), Number(settings['longitude']));
         }
       }
+      // GPS: the radio sets its own coordinates, so none are sent.
 
       if (Object.keys(settings).length > 0) {
         const result = await setDeviceConfig(this.hass, settings, this.config?.entry_id);

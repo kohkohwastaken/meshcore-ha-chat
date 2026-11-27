@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.12
+
+- My radio: with the location source on **GPS**, Latitude and Longitude are empty and locked ("From GPS"); the map shows the radio's GPS position. Your last manual coordinates are remembered in this browser and come back when you switch to Manual (and are sent when you apply).
+- My radio: **General** is laid out two by two.
+- My radio: **Share my contact** opens the same share window as in Contacts (QR code, chat code, link, send to nearby radios). Both use one shared component, so changes apply to both.
+
 ## 0.4.13-beta.11
 
 - My radio: **📍 Drop a pin on the map** (was "Place on a larger map") only shows when the location source is Manual.
