@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.10
+
+- My radio: **General** is a full-width box under the radio card, with hardware, connection and public key side by side.
+- My radio: **Location** on the left and **Advanced radio settings** on the right (open by default, with its warning).
+- My radio: **📍 Place on a larger map** (manual location only) opens a large map with a draggable pin; drag it and press **Use this location** to fill in the coordinates, then **Apply Location Settings** as before.
+
 ## 0.4.13-beta.9
 
 - My radio: tiles in two rows. Signal: Noise floor · SNR · RSSI. Traffic: Radio activity · Messages sent · Messages received. SNR has its own tile and graph (it can dip below 0 dB; LoRa still decodes a little under the noise).

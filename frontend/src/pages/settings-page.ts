@@ -189,7 +189,40 @@ export class SettingsPage extends LitElement {
     panelStyles,
     css`
     .loc-card-map {
+      margin-bottom: 8px;
+    }
+
+    .place-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       margin-bottom: 14px;
+      border: 1px solid var(--divider-color, #444);
+      border-radius: 6px;
+      background: none;
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: 13px;
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .general-wide {
+      margin-bottom: 16px;
+    }
+
+    .general-rows {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 2fr);
+      gap: 0 24px;
+    }
+
+    @media (max-width: 900px) {
+      .general-rows { grid-template-columns: 1fr; }
+    }
+
+    .settings-grid > details.device-section {
+      align-self: start;
     }
 
     .battery-badge {
@@ -890,26 +923,26 @@ export class SettingsPage extends LitElement {
           <!-- Companion Device Card (full width at top) -->
           ${this.selectedDevice ? this._renderCompanionCard() : nothing}
 
-          <div class="settings-grid">
-            <div class="device-section">
-              <div class="card-title">General</div>
-              ${this._renderDeviceInfo()}
-            </div>
+          <div class="device-section general-wide">
+            <div class="card-title">General</div>
+            <div class="general-rows">${this._renderDeviceInfo()}</div>
+          </div>
 
+          <div class="settings-grid">
             <div class="device-section">
               <div class="card-title">Location</div>
               ${this._renderLocation()}
             </div>
-          </div>
 
-          <details class="device-section fold">
-            <summary class="card-title">Advanced radio settings</summary>
-            <div class="fold-warning">
-              Changing these can take you off the mesh. Everyone you talk to must use the same
-              frequency, bandwidth, spreading factor and coding rate.
-            </div>
-            ${this._renderRadioSettings()}
-          </details>
+            <details class="device-section fold" open>
+              <summary class="card-title">Advanced radio settings</summary>
+              <div class="fold-warning">
+                Changing these can take you off the mesh. Everyone you talk to must use the same
+                frequency, bandwidth, spreading factor and coding rate.
+              </div>
+              ${this._renderRadioSettings()}
+            </details>
+          </div>
 
         </div>
       </div>
@@ -1426,7 +1459,14 @@ export class SettingsPage extends LitElement {
     return html`
       ${Number.isFinite(mapLat) && Number.isFinite(mapLon) && (mapLat !== 0 || mapLon !== 0) ? html`
         <meshcore-location-map class="loc-card-map" fill .getHass=${() => this.hass} .lat=${mapLat} .lon=${mapLon}
-          .label=${this._deviceConfig.name ?? ''}></meshcore-location-map>` : nothing}
+          .label=${this._deviceConfig.name ?? ''} .editable=${!isHaLocation}
+          @location-picked=${(e: CustomEvent<{ lat: number; lon: number }>) => {
+            this._editValues['latitude'] = Number(e.detail.lat.toFixed(6));
+            this._editValues['longitude'] = Number(e.detail.lon.toFixed(6));
+            this.requestUpdate();
+          }}></meshcore-location-map>` : nothing}
+      ${!isHaLocation ? html`<button class="place-btn" @click=${() => (this.renderRoot.querySelector('.loc-card-map') as unknown as { openLarge?: () => void } | null)?.openLarge?.()}>
+        📍 Place on a larger map</button>` : nothing}
       <div class="section-row">
         <div class="form-group-inline">
           <label class="form-label">Latitude</label>

@@ -34,6 +34,16 @@ export class MeshCoreLocationMap extends LitElement {
   @property({ type: String }) label = '';
   /** Fill the width of its container (for a tile) instead of the chat-sized frame. */
   @property({ type: Boolean, reflect: true }) fill = false;
+  /** In the large map, let the user drag the pin to choose a new spot ("location-picked"). */
+  @property({ type: Boolean }) editable = false;
+  /** Where the pin was dragged to in the large map, before it's confirmed. */
+  @state() private _picked: [number, number] | null = null;
+
+  /** Open the large map (with a draggable pin when editable). */
+  openLarge() {
+    this._picked = null;
+    this._large = true;
+  }
   @state() private _ok: boolean | null = null;
   @state() private _large = false;
   private _observer?: ResizeObserver;
@@ -52,6 +62,12 @@ export class MeshCoreLocationMap extends LitElement {
     .cap { position: absolute; left: 10px; bottom: 10px; z-index: 3; background: var(--card-background-color, #222); color: var(--primary-text-color, #fff);
       border-radius: 8px; padding: 6px 10px; font-size: 13px; max-width: 70%; }
     .note { font-size: 12px; opacity: 0.7; }
+    .cap.pick { max-width: calc(100% - 20px); display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .pick-btns { display: flex; gap: 6px; margin-left: auto; }
+    .pick-btns button { border: none; border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer;
+      background: var(--primary-color, #03a9f4); color: var(--text-primary-color, #fff); }
+    .pick-btns button:last-child { background: none; border: 1px solid var(--divider-color, #555); color: var(--primary-text-color, #fff); }
+    .pick-btns button:disabled { opacity: 0.5; cursor: default; }
     :host([fill]) .frame { width: 100%; height: 130px; }
   `;
 
@@ -85,10 +101,19 @@ export class MeshCoreLocationMap extends LitElement {
       map.autoFit = false;
       // ha-map draws a lone marker from editableLocations (as its location
       // editor does); "location" is [lat, lon].
+      const inLarge = !!map.closest('.large');
+      const draggable = inLarge && this.editable;
       m.editableLocations = [{
         id: 'shared', location: [this.lat, this.lon], radius: 0, name: this.label || 'Location',
-        icon: 'mdi:map-marker', location_editable: false, radius_editable: false,
+        icon: 'mdi:map-marker', location_editable: draggable, radius_editable: false,
       }];
+      if (draggable) {
+        // ha-map reports a dragged pin as "location-updated" with [lat, lon].
+        map.addEventListener('location-updated', (e: Event) => {
+          const loc = (e as CustomEvent<{ location?: [number, number] }>).detail?.location;
+          if (Array.isArray(loc) && loc.length === 2) this._picked = [Number(loc[0]), Number(loc[1])];
+        });
+      }
       void this._centre(map);
     }
   }
@@ -124,6 +149,14 @@ export class MeshCoreLocationMap extends LitElement {
     }
   }
 
+  private _usePicked = () => {
+    if (!this._picked) return;
+    const [lat, lon] = this._picked;
+    this.dispatchEvent(new CustomEvent('location-picked', { detail: { lat, lon }, bubbles: true, composed: true }));
+    this._large = false;
+    this._picked = null;
+  };
+
   private _recentre() {
     const map = this.renderRoot.querySelector('.large ha-map') as HaMapElement | null;
     const d = 0.003;
@@ -158,7 +191,17 @@ export class MeshCoreLocationMap extends LitElement {
             <button aria-label="Re-centre on the location" title="Re-centre" @click=${this._recentre}>${icon('M12 2v4M12 18v4M2 12h4M18 12h4M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z')}</button>
             <a href=${this._externalUrl()} target="_blank" rel="noopener noreferrer" aria-label="Open in maps app" title="Open in maps app">${icon('M14 3h7v7M10 14L21 3M21 14v7H3V3h7')}</a>
           </div>
-          <div class="cap">${this.label ? html`<b>${this.label}</b><br>` : ''}${this.lat.toFixed(5)}, ${this.lon.toFixed(5)}</div>
+          ${this.editable
+            ? html`<div class="cap pick">
+                ${this._picked
+                  ? html`<b>New spot</b> ${this._picked[0].toFixed(5)}, ${this._picked[1].toFixed(5)}`
+                  : html`Drag the pin to where your radio is.`}
+                <span class="pick-btns">
+                  <button ?disabled=${!this._picked} @click=${this._usePicked}>Use this location</button>
+                  <button @click=${() => { this._large = false; this._picked = null; }}>Cancel</button>
+                </span>
+              </div>`
+            : html`<div class="cap">${this.label ? html`<b>${this.label}</b><br>` : ''}${this.lat.toFixed(5)}, ${this.lon.toFixed(5)}</div>`}
         </div>` : nothing}
     `;
   }

@@ -37,12 +37,6 @@ const LOCATION: RawSpec[] = [
   { key: 'longitude', state: '-118.2437', name: 'Longitude' },
 ];
 
-// A 0,0 placeholder — the companion's "no fix" state. The Location tile
-// must hide for this exactly as it does when the entities are absent.
-const LOCATION_BLANK: RawSpec[] = [
-  { key: 'latitude', state: '0.0', name: 'Latitude' },
-  { key: 'longitude', state: '0.0', name: 'Longitude' },
-];
 
 // The entities created only when Self Diagnostics is enabled upstream, plus
 // battery (battery-powered companion variant — exercises the no-double-draw
