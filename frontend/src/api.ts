@@ -1092,3 +1092,22 @@ export async function getRoomStatus(hass: HomeAssistant): Promise<Record<string,
 export async function roomForgetPassword(hass: HomeAssistant, publicKey: string): Promise<void> {
   await hass.callWS({ type: 'meshcore_chat/room_forget_password', public_key: publicKey });
 }
+
+export interface RadioLimits {
+  contacts: number | null;
+  max_contacts: number | null;
+  discovered: number | null;
+  /** Only set when the core integration's "limit discovered contacts" is on. */
+  discovered_limit: number | null;
+}
+
+/** Contact-list limits for the My radio card (one local query to the radio). */
+export async function getRadioLimits(hass: HomeAssistant, entryId?: string): Promise<RadioLimits | null> {
+  try {
+    const msg: Record<string, unknown> = { type: 'meshcore_chat/radio_limits' };
+    if (entryId) msg.entry_id = entryId;
+    return await hass.callWS<RadioLimits>(msg);
+  } catch {
+    return null;
+  }
+}

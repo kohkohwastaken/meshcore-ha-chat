@@ -446,6 +446,7 @@ def async_register_ws_commands(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_get_unverified_contacts)
     websocket_api.async_register_command(hass, ws_clear_stale_nodes)
     websocket_api.async_register_command(hass, ws_room_login)
+    websocket_api.async_register_command(hass, ws_radio_limits)
     websocket_api.async_register_command(hass, ws_room_status)
     websocket_api.async_register_command(hass, ws_room_forget_password)
     websocket_api.async_register_command(hass, ws_remove_contact)
@@ -2856,6 +2857,48 @@ async def ws_clear_stale_nodes(hass, connection, msg):
 
     connection.send_result(msg["id"], {
         "discovered": len(stale_discovered), "manual": removed_manual,
+    })
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "meshcore_chat/radio_limits",
+        vol.Optional("entry_id"): str,
+    }
+)
+@websocket_api.async_response
+async def ws_radio_limits(hass, connection, msg):
+    """Contact-list size limits, for the My radio card.
+
+    ``max_contacts`` comes from asking the radio (a local query over its
+    connection; no airtime), cached for the session. Discovered nodes are
+    kept by the core integration, not the radio, so their only limit is its
+    optional "limit discovered contacts" setting.
+    """
+    coordinator = _get_coordinator(hass, msg.get("entry_id"))
+    if not coordinator:
+        connection.send_error(msg["id"], "not_found", "No MeshCore coordinator found")
+        return
+    bucket = hass.data.setdefault(DOMAIN, {}).setdefault("_radio_limits", {})
+    key = coordinator.config_entry.entry_id
+    max_contacts = bucket.get(key)
+    if max_contacts is None:
+        try:
+            result = await _parent_command(hass, connection, msg, coordinator, "send_device_query")
+            value = _find_payload_value(getattr(result, "payload", result), "max_contacts")
+            if isinstance(value, int) and value > 0:
+                max_contacts = bucket[key] = value
+        except Exception as ex:  # noqa: BLE001 - the card just omits the limit
+            _LOGGER.debug("Couldn't read the radio's contact limit: %s", ex)
+    settings = getattr(coordinator, "settings", None)
+    limited = bool(getattr(settings, "limit_discovered_contacts", False))
+    discovered = getattr(coordinator, "_discovered_contacts", None)
+    contacts = getattr(coordinator, "_contacts", None)
+    connection.send_result(msg["id"], {
+        "contacts": len(contacts) if isinstance(contacts, dict) else None,
+        "max_contacts": max_contacts,
+        "discovered": len(discovered) if isinstance(discovered, dict) else None,
+        "discovered_limit": int(getattr(settings, "max_discovered_contacts", 0)) if limited else None,
     })
 
 

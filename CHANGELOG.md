@@ -2,6 +2,15 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.5
+
+### My radio
+- Small 24-hour graphs in the Battery, Signal (now also showing the noise floor), Radio activity, Sent and Received tiles, from Home Assistant's recorded statistics.
+- Radio activity shows the last 24 hours (worked out from the radio's airtime totals), instead of the average since the radio last restarted.
+- Message activity chart now works for your own radio (it was empty before), with 6 h / 24 h / 48 h / 7 d / 30 d periods. It's worked out from the radio's running totals, so a radio restart doesn't show as a dip. **Raw totals in History** opens Home Assistant's History page for those sensors.
+- New **Health** section: uptime, send queue, radio faults since restart, contacts on radio out of the radio's limit, discovered nodes (with the core integration's limit if you've turned it on), and firmware with any available update.
+- If Self Diagnostics is off in the MeshCore integration, a note explains what it adds and links to the setting.
+
 ## 0.4.13-beta.4
 
 - My radio and Repeaters: the location tile shows a small map of the node's position (tap the expand button for a larger map) instead of repeating the coordinates already shown in the Location settings.

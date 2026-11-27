@@ -4311,3 +4311,22 @@ def test_room_access_levels() -> None:
     assert ws_api._room_access(ok(permissions=0)) == "read_write"
     assert ws_api._room_access(ok(permissions=2)) == "read_only"
     assert ws_api._room_access(None) is None
+
+
+async def test_ws_radio_limits(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """The radio's contact limit comes from a device query; discovered limit only when enabled."""
+    from types import SimpleNamespace
+    coordinator = MagicMock()
+    coordinator.config_entry.entry_id = "rl1"
+    coordinator._contacts = {"a": {}, "b": {}}
+    coordinator._discovered_contacts = {"c": {}}
+    coordinator.settings = SimpleNamespace(limit_discovered_contacts=False, max_discovered_contacts=100)
+
+    async def fake(*args, **kw):
+        return SimpleNamespace(type="EventType.DEVICE_INFO", payload={"max_contacts": 350, "max_channels": 40})
+
+    with patch.object(ws_api, "_get_coordinator", return_value=coordinator), \
+         patch.object(ws_api, "_parent_command", side_effect=fake):
+        conn = _Connection()
+        await _call_ws(ws_api.ws_radio_limits, hass, conn, {"id": 1})
+    assert conn.results[0][1] == {"contacts": 2, "max_contacts": 350, "discovered": 1, "discovered_limit": None}

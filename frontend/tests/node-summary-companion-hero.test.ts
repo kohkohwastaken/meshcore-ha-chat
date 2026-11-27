@@ -194,19 +194,16 @@ describe('node-summary companion hero — Self Diagnostics ENABLED', () => {
     expect(table).toBeTruthy();
     const tableText = table?.textContent ?? '';
     expect(tableText).toContain('Noise Floor');
-    expect(tableText).toContain('TX Queue Length');
+    // The send queue moved to the Health section.
+    const health = el.shadowRoot?.querySelector('.health-grid')?.textContent ?? '';
+    expect(health).toContain('Send queue');
   });
 
-  it('renders the radio fault flags as OK / Detected problem rows', () => {
-    const table = el.shadowRoot?.querySelector('.sensor-grid');
-    const tableText = table?.textContent ?? '';
-    // The three decoded fault binary_sensors appear as Status rows.
-    expect(tableText).toContain('Radio Fault: Packet Pool');
-    expect(tableText).toContain('Radio Fault: CAD Timeout');
-    expect(tableText).toContain('Radio Fault: RX-Start Timeout');
-    // err_pool_full is 'on' -> Detected; the other two 'off' -> OK.
-    expect(tableText).toContain('Detected');
-    expect(tableText).toContain('OK');
+  it('summarises the radio fault flags in Health, since the last restart', () => {
+    const health = el.shadowRoot?.querySelector('.health-grid')?.textContent ?? '';
+    expect(health).toContain('Radio faults since restart');
+    // err_pool_full is 'on'.
+    expect(health).toContain('Message pool full');
   });
 });
 

@@ -1,4 +1,4 @@
-import { LitElement, html, css, nothing, type TemplateResult } from 'lit';
+import { LitElement, html, svg, css, nothing, type TemplateResult } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant, ManagedDevice } from '../types';
 import type { EntityInfo } from '../utils/classify-entity';
@@ -14,6 +14,8 @@ import './stacked-bar';
 import './info-tip';
 import './message-rate-chart';
 import './location-map';
+import { fetchStats, historyUrl, periodMinutes, statsPeriod, totalChange, type StatSeries } from '../utils/companion-stats';
+import { getRadioLimits, type RadioLimits } from '../api';
 import type { StackedBarSegment } from './stacked-bar';
 import type { RatePoint } from './message-rate-chart';
 
@@ -91,7 +93,138 @@ export class NodeSummary extends LitElement {
    *  so we fetch once per device rather than on every hass state push. */
   private _rateHistoryKey: string | null = null;
 
+  // ─── Companion statistics (recorder) ──────────────────────────────────
+  /** Last 24 h at 5-minute resolution, for the tiles' small graphs. */
+  @state() private _spark: StatSeries = {};
+  /** The activity chart's range, in hours, and its data. */
+  @state() private _range = 48;
+  @state() private _rangeStats: StatSeries = {};
+  @state() private _limits: RadioLimits | null = null;
+  private _companionKey: string | null = null;
+  private _companionTimer?: ReturnType<typeof setInterval>;
+
   static styles = css`
+    .spark {
+      display: block;
+      width: 100%;
+      height: 40px;
+      margin-top: 8px;
+    }
+
+    .spark polyline {
+      fill: none;
+      stroke-width: 1.6;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .spark .s-ok { stroke: var(--success-color, #4caf50); }
+    .spark .s-tx { stroke: #2196f3; }
+    .spark .s-rx { stroke: var(--success-color, #4caf50); }
+
+    .spark-cap, .noise-line {
+      font-size: 11px;
+      color: var(--secondary-text-color);
+      margin-top: 4px;
+    }
+
+    .noise-line {
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .activity-head {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .range-chips {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+
+    .range-chip {
+      border: 1px solid var(--divider-color, #444);
+      background: none;
+      color: var(--secondary-text-color);
+      border-radius: 12px;
+      padding: 2px 9px;
+      font: inherit;
+      font-size: 11px;
+      text-transform: none;
+      letter-spacing: 0;
+      cursor: pointer;
+    }
+
+    .range-chip.on {
+      background: var(--primary-color, #03a9f4);
+      border-color: var(--primary-color, #03a9f4);
+      color: var(--text-primary-color, #fff);
+    }
+
+    .raw-link {
+      font-size: 11.5px;
+      text-transform: none;
+      letter-spacing: 0;
+      color: var(--primary-color, #03a9f4);
+      text-decoration: none;
+    }
+
+    .activity-empty, .diag-hint {
+      font-size: 13px;
+      color: var(--secondary-text-color);
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: rgba(127, 127, 127, 0.08);
+    }
+
+    .diag-hint {
+      margin-top: 12px;
+      background: rgba(3, 169, 244, 0.08);
+      border: 1px solid rgba(3, 169, 244, 0.3);
+      color: var(--primary-text-color);
+    }
+
+    .diag-hint a {
+      color: var(--primary-color, #03a9f4);
+    }
+
+    .health-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0 24px;
+    }
+
+    @media (max-width: 700px) {
+      .health-grid { grid-template-columns: 1fr; }
+    }
+
+    .health-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 2px;
+      border-bottom: 1px solid var(--divider-color, #2a2a2a);
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    .hk { color: var(--secondary-text-color); }
+    .hv { margin-left: auto; font-weight: 500; display: flex; gap: 6px; align-items: center; }
+
+    .hbadge {
+      font-size: 11px;
+      border-radius: 10px;
+      padding: 1px 8px;
+      font-weight: 600;
+    }
+
+    .hbadge.ok { background: rgba(76, 175, 80, 0.15); color: var(--success-color, #4caf50); }
+    .hbadge.warn { background: rgba(255, 152, 0, 0.15); color: var(--warning-color, #ff9800); }
+    .hbadge.info { background: rgba(3, 169, 244, 0.15); color: var(--primary-color, #03a9f4); }
+
     /* container-type lets the sensor grid's @container query react to this
        card's own width rather than the raw viewport. */
     :host { display: block; container-type: inline-size; }
@@ -393,6 +526,8 @@ export class NodeSummary extends LitElement {
     // table rows.
     const consumed = new Set<string>();
     const heroTiles = this._renderHeroTiles(consumed);
+    const companion = this.device.type === 'companion';
+    const health = companion ? this._renderCompanionHealth(consumed) : nothing;
     const groups = this._buildGroups(consumed);
 
     return html`
@@ -400,7 +535,9 @@ export class NodeSummary extends LitElement {
         ${heroTiles}
       </div>
 
-      ${this._renderMessageActivityCard()}
+      ${companion ? this._renderDiagnosticsHint() : nothing}
+      ${companion ? this._renderCompanionActivityCard() : this._renderMessageActivityCard()}
+      ${health}
 
       ${groups.length > 0
         ? html`
@@ -425,6 +562,16 @@ export class NodeSummary extends LitElement {
   updated(changed: Map<string, unknown>) {
     if (!this.hass || !this.device) return;
     if (!changed.has('hass') && !changed.has('device') && !changed.has('entities')) return;
+    if (this.device.type === 'companion') {
+      const key = this.entities.map((e) => e.entity_id).sort().join(',');
+      if (key !== this._companionKey) {
+        this._companionKey = key;
+        void this._loadCompanionStats();
+        if (!this._limits) void getRadioLimits(this.hass, this.device.entry_id).then((l) => { this._limits = l; });
+        if (!this._companionTimer) this._companionTimer = setInterval(() => void this._loadCompanionStats(), 300_000);
+      }
+      return;
+    }
     const nbSent = this._findEntityIdMatching('nb_sent');
     const key = nbSent?.entity_id ?? null;
     if (key && key !== this._rateHistoryKey) {
@@ -434,6 +581,168 @@ export class NodeSummary extends LitElement {
       this._rateHistoryKey = null;
       this._rateHistory = [];
     }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    if (this._companionTimer) clearInterval(this._companionTimer);
+    this._companionTimer = undefined;
+    this._companionKey = null;
+  }
+
+  /** The companion's statistics entities, by sensor key. */
+  private _companionIds(): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const key of ['nb_sent', 'sent_flood', 'sent_direct', 'nb_recv', 'recv_flood', 'recv_direct', 'recv_errors',
+      'tx_airtime', 'rx_airtime', 'noise_floor', 'last_rssi', 'battery_percentage']) {
+      const e = this.entities.find((x) => x.entity_id.startsWith('sensor.') && x.entity_id.includes(key)
+        && !x.entity_id.includes(`${key}_rate`) && !x.entity_id.includes(`${key}_util`));
+      if (e) out[key] = e.entity_id;
+    }
+    return out;
+  }
+
+  private async _loadCompanionStats() {
+    if (!this.hass) return;
+    const ids = Object.values(this._companionIds());
+    if (!ids.length) { this._spark = {}; this._rangeStats = {}; return; }
+    const [spark, range] = await Promise.all([
+      fetchStats(this.hass, ids, 24),
+      this._range === 24 ? Promise.resolve(null) : fetchStats(this.hass, ids, this._range),
+    ]);
+    this._spark = spark;
+    this._rangeStats = range ?? spark;
+  }
+
+  private async _setRange(hours: number) {
+    this._range = hours;
+    if (!this.hass) return;
+    const ids = Object.values(this._companionIds());
+    this._rangeStats = hours === 24 ? this._spark : await fetchStats(this.hass, ids, hours);
+  }
+
+  /** A small line graph of one series (or two), for a tile. */
+  private _sparkline(lines: Array<{ key: string; field: 'change' | 'mean'; cls: string }>) {
+    const ids = this._companionIds();
+    const series = lines.map((l) => (this._spark[ids[l.key]] || []).map((p) => (l.field === 'change' ? (p.change ?? 0) : p.mean))
+      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v)));
+    const all = series.flat();
+    if (all.length < 2) return nothing;
+    const min = Math.min(...all);
+    const max = Math.max(...all);
+    const span = max - min || 1;
+    const pts = (vals: number[]) => vals.map((v, i) => `${((i / Math.max(1, vals.length - 1)) * 200).toFixed(1)},${(38 - ((v - min) / span) * 34).toFixed(1)}`).join(' ');
+    return html`<svg class="spark" viewBox="0 0 200 40" preserveAspectRatio="none" aria-hidden="true">
+      ${series.map((vals, i) => (vals.length > 1 ? svg`<polyline class=${lines[i].cls} points=${pts(vals)}></polyline>` : nothing))}
+    </svg>`;
+  }
+
+  /** Activity chart data from the totals' per-period change, as messages per minute. */
+  private _companionRatePoints(): RatePoint[] {
+    const ids = this._companionIds();
+    const per = periodMinutes(statsPeriod(this._range));
+    const map: Array<[string, string]> = [['sent_flood', 'sent_flood'], ['sent_direct', 'sent_direct'],
+      ['recv_flood', 'recv_flood'], ['recv_direct', 'recv_direct'], ['errors', 'recv_errors']];
+    const byTs: Record<number, Record<string, number>> = {};
+    for (const [seriesKey, key] of map) {
+      for (const p of this._rangeStats[ids[key]] || []) {
+        if (typeof p.change !== 'number') continue;
+        (byTs[p.start] ??= {})[seriesKey] = Math.max(0, p.change) / per;
+      }
+    }
+    return Object.entries(byTs).map(([ts, values]) => ({ timestamp: Number(ts), values })).sort((a, b) => a.timestamp - b.timestamp);
+  }
+
+  private _renderCompanionActivityCard() {
+    const ids = this._companionIds();
+    if (!ids.nb_sent && !ids.nb_recv) return nothing;
+    const data = this._companionRatePoints();
+    const ranges: Array<[string, number]> = [['6 h', 6], ['24 h', 24], ['48 h', 48], ['7 d', 168], ['30 d', 720]];
+    const rawIds = ['nb_sent', 'nb_recv', 'recv_errors', 'tx_airtime', 'rx_airtime'].map((k) => ids[k]).filter(Boolean);
+    return html`
+      <div class="subsection-label activity-head">
+        <span>Message activity</span>
+        <span class="range-chips" role="group" aria-label="Period">
+          ${ranges.map(([label, h]) => html`<button class="range-chip ${this._range === h ? 'on' : ''}"
+            aria-pressed=${this._range === h} @click=${() => this._setRange(h)}>${label}</button>`)}
+        </span>
+        <a class="raw-link" href=${historyUrl(rawIds, this._range)}
+          title="Home Assistant's History shows these as running totals, which reset when the radio restarts"
+          @click=${(e: Event) => { e.preventDefault(); history.pushState(null, '', historyUrl(rawIds, this._range)); window.dispatchEvent(new CustomEvent('location-changed')); }}>Raw totals in History ↗</a>
+      </div>
+      ${data.length
+        ? html`<meshcore-message-rate-chart .data=${data} .timeRange=${this._range}></meshcore-message-rate-chart>`
+        : html`<div class="activity-empty">No recorded activity for this period yet. Home Assistant records these every 5 minutes.</div>`}
+    `;
+  }
+
+  /** Uptime, send queue, faults, contact space and firmware, for the companion. */
+  private _renderCompanionHealth(consumed: Set<string>) {
+    const rows: TemplateResult[] = [];
+    const uptime = this._findByMetric('uptime_hours');
+    if (uptime) {
+      consumed.add(uptime.entity_id);
+      const min = this._readUptimeMinutes(uptime);
+      const d = Math.floor(min / 1440);
+      const h = Math.floor((min % 1440) / 60);
+      rows.push(html`<div class="health-row" @click=${() => this._fireMoreInfo(uptime.entity_id)}><span class="hk">Uptime</span>
+        <span class="hv">${Number.isFinite(min) ? (d ? `${d} d ${h} h` : `${h} h ${Math.floor(min % 60)} min`) : '—'}</span></div>`);
+    }
+    const queue = this._findEntityIdMatching('tx_queue_len');
+    if (queue) {
+      consumed.add(queue.entity_id);
+      rows.push(html`<div class="health-row" @click=${() => this._fireMoreInfo(queue.entity_id)}><span class="hk">Send queue</span>
+        <span class="hv">${this._formatNumber(this._readNumber(queue.entity_id), 0)}</span></div>`);
+    }
+    const faults = this.entities.filter((e) => e.entity_id.startsWith('binary_sensor.') && /err_(pool_full|cad_timeout|rx_timeout)/.test(e.entity_id));
+    if (faults.length) {
+      faults.forEach((f) => consumed.add(f.entity_id));
+      const names: Record<string, string> = { pool_full: 'Message pool full', cad_timeout: 'Channel-check timeout', rx_timeout: 'Receive timeout' };
+      const on = faults.filter((f) => this.hass?.states[f.entity_id]?.state === 'on');
+      rows.push(html`<div class="health-row" title="Each stays set until the radio restarts"
+        @click=${() => this._fireMoreInfo((on[0] ?? faults[0]).entity_id)}><span class="hk">Radio faults since restart</span>
+        <span class="hv">${on.length
+          ? html`<span class="hbadge warn">${on.map((f) => Object.entries(names).find(([k]) => f.entity_id.includes(`err_${k}`))?.[1] ?? f.label).join(', ')}</span>`
+          : html`<span class="hbadge ok">None</span>`}</span></div>`);
+    }
+    const lim = this._limits;
+    const nodeCount = this._findEntityIdMatching('node_count');
+    const contacts = lim?.contacts ?? (nodeCount ? this._readNumber(nodeCount.entity_id) : NaN);
+    if (Number.isFinite(contacts)) {
+      rows.push(html`<div class="health-row" title="Contacts stored on your radio, out of the most it can hold">
+        <span class="hk">Contacts on radio</span><span class="hv">${contacts}${lim?.max_contacts ? ` / ${lim.max_contacts}` : ''}</span></div>`);
+    }
+    if (lim?.discovered != null) {
+      rows.push(html`<div class="health-row" title="Kept by Home Assistant, not on your radio">
+        <span class="hk">Discovered nodes</span><span class="hv">${lim.discovered.toLocaleString()}${lim.discovered_limit
+          ? ` / ${lim.discovered_limit.toLocaleString()}` : html` <span class="hbadge info">no limit set</span>`}</span></div>`);
+    }
+    const fw = this._firmwareEntity();
+    if (fw) {
+      const st = this.hass?.states[fw];
+      const latest = st?.attributes?.latest_version as string | undefined;
+      const installed = st?.attributes?.installed_version as string | undefined;
+      rows.push(html`<div class="health-row" @click=${() => this._fireMoreInfo(fw)}><span class="hk">Firmware</span>
+        <span class="hv">${installed ?? '—'}${st?.state === 'on' && latest ? html` <span class="hbadge info">${latest} available</span>` : nothing}</span></div>`);
+    }
+    if (!rows.length) return nothing;
+    return html`<div class="subsection-label">Health</div><div class="health-grid">${rows}</div>`;
+  }
+
+  /** The core integration's firmware update entity for this radio. */
+  private _firmwareEntity(): string | null {
+    const own = this.entities.find((e) => e.entity_id.startsWith('update.'));
+    if (own) return own.entity_id;
+    const p6 = (this.device as CompanionDeviceDescriptor | undefined)?.pubkey_prefix?.slice(0, 6).toLowerCase();
+    if (!p6 || !this.hass) return null;
+    return Object.keys(this.hass.states).find((id) => id.startsWith('update.') && id.includes(p6) && id.endsWith('firmware')) ?? null;
+  }
+
+  private _renderDiagnosticsHint() {
+    if (this._companionIds().nb_sent || this._companionIds().noise_floor) return nothing;
+    return html`<div class="diag-hint">Turn on <b>Self Diagnostics</b> in the MeshCore integration to see signal, airtime and
+      traffic stats for your radio. It reads them over your radio's connection and doesn't use any airtime.
+      <a href="/config/integrations/integration/meshcore" @click=${(e: Event) => { e.preventDefault(); history.pushState(null, '', '/config/integrations/integration/meshcore'); window.dispatchEvent(new CustomEvent('location-changed')); }}>Open MeshCore settings</a></div>`;
   }
 
   /** Derive a `_rate` sibling entity_id from a totals entity_id. The rate
@@ -572,6 +881,7 @@ export class NodeSummary extends LitElement {
           .max=${100}
           .band=${ev.band}>
         </meshcore-stat-bar>
+        ${this.device?.type === 'companion' ? this._sparkline([{ key: 'battery_percentage', field: 'mean', cls: 's-ok' }]) : nothing}
       </div>
     `;
   }
@@ -604,8 +914,21 @@ export class NodeSummary extends LitElement {
           .max=${-30}
           .band=${ev.band}>
         </meshcore-stat-bar>
+        ${this.device?.type === 'companion' ? this._renderNoiseLine() : nothing}
       </div>
     `;
+  }
+
+  /** Companion: noise floor now, with its last 24 h. */
+  private _renderNoiseLine() {
+    const noise = this._findEntityIdMatching('noise_floor');
+    if (!noise) return nothing;
+    return html`
+      <div class="noise-line" @click=${(e: Event) => { e.stopPropagation(); this._fireMoreInfo(noise.entity_id); }}>
+        Noise floor ${this._formatNumber(this._readNumber(noise.entity_id), 0)} dBm
+      </div>
+      ${this._sparkline([{ key: 'noise_floor', field: 'mean', cls: 's-ok' }])}
+      <div class="spark-cap">Noise floor · last 24 h</div>`;
   }
 
   private _renderRadioActivityTile() {
@@ -660,6 +983,7 @@ export class NodeSummary extends LitElement {
         </div>
         <div class="hero-tile-value">
           <span class="primary">${totalUsed.toFixed(1)}<span class="unit">%</span></span>
+          <span class="secondary">busy · ${window}</span>
         </div>
         <div class="ra-bar-wrap">
           <meshcore-stacked-bar
@@ -728,6 +1052,7 @@ export class NodeSummary extends LitElement {
           .segments=${segs}
           .legend=${'inline'}>
         </meshcore-stacked-bar>
+        ${this.device?.type === 'companion' ? this._sparkline([{ key: 'nb_sent', field: 'change', cls: 's-tx' }]) : nothing}
       </div>
     `;
   }
@@ -829,6 +1154,7 @@ export class NodeSummary extends LitElement {
             ? html`<span><span class="msg-swatch dup"></span>Dup ${totalDups}</span>`
             : nothing}
         </div>
+        ${this.device?.type === 'companion' ? this._sparkline([{ key: 'nb_recv', field: 'change', cls: 's-rx' }]) : nothing}
       </div>
     `;
   }
@@ -991,8 +1317,16 @@ export class NodeSummary extends LitElement {
 
     const pct = (m: number) =>
       Number.isFinite(m) ? Math.min(100, Math.max(0, (m / uptimeMin) * 100)) : 0;
-    const txN = pct(txMin);
-    const rxN = pct(rxMin);
+    // Prefer the last 24 h, from recorded statistics: airtime minutes gained
+    // over the minutes covered. Falls back to the since-restart average.
+    const ids = this._companionIds();
+    const txPts = this._spark[ids.tx_airtime ?? ''] || [];
+    const rxPts = this._spark[ids.rx_airtime ?? ''] || [];
+    const covered = Math.max(txPts.length, rxPts.length) * 5;
+    const recent = covered >= 60;
+    const txN = recent ? Math.min(100, (totalChange(txPts) / covered) * 100) : pct(txMin);
+    const rxN = recent ? Math.min(100, (totalChange(rxPts) / covered) * 100) : pct(rxMin);
+    const windowLabel = recent ? (covered >= 1440 ? 'last 24 h' : `last ${Math.round(covered / 60)} h`) : 'since restart';
     const idleN = Math.max(0, 100 - txN - rxN);
 
     // Reuse the repeater airtime-utilisation threshold bands for the dot.
@@ -1023,17 +1357,16 @@ export class NodeSummary extends LitElement {
           <span>Radio activity${this._renderInfoTip({
             band: dotBand,
             fillPct: 0,
-            tooltip: 'Lifetime-average half-duplex composition: cumulative TX / RX ' +
-                     'airtime divided by uptime since the node last booted. The radio ' +
-                     'can transmit OR receive, never both. Unlike a managed repeater ' +
-                     '(which reports utilisation over the last interval), the companion ' +
-                     'exposes only cumulative airtime, so this is a long-run average and ' +
-                     'will not reflect short recent bursts.',
+            tooltip: 'Share of time your radio spent transmitting or receiving. ' +
+                     'Worked out from its running airtime totals as recorded by Home ' +
+                     'Assistant over the last 24 hours; until there is an hour of ' +
+                     'history it shows the average since the radio last restarted.',
           })}</span>
           <span class="status-dot ${dotBand}"></span>
         </div>
         <div class="hero-tile-value">
           <span class="primary">${totalUsed.toFixed(1)}<span class="unit">%</span></span>
+          <span class="secondary">busy · ${windowLabel}</span>
         </div>
         <div class="ra-bar-wrap">
           <meshcore-stacked-bar
@@ -1061,6 +1394,7 @@ export class NodeSummary extends LitElement {
             </span>
           </div>
         </div>
+        ${this._sparkline([{ key: 'tx_airtime', field: 'change', cls: 's-tx' }, { key: 'rx_airtime', field: 'change', cls: 's-rx' }])}
       </div>
     `;
   }
