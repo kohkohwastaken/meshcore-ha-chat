@@ -2,6 +2,12 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.9
+
+- My radio: tiles in two rows. Signal: Noise floor · SNR · RSSI. Traffic: Radio activity · Messages sent · Messages received. SNR has its own tile and graph (it can dip below 0 dB; LoRa still decodes a little under the noise).
+- My radio: the map moved into the Location card, above the coordinates; it follows the coordinates as you edit them.
+- My radio: **🗺 Show on map** in the card header opens the Nodes map centred on your radio.
+
 ## 0.4.13-beta.8
 
 - My radio: new layout. Six equal tiles, three per row (Noise floor · Last message strength · Radio activity / Sent · Received · Location), so the graphs have room and there's no empty space. Two per row on narrower screens, one on phones.

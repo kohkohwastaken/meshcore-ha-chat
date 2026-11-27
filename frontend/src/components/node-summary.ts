@@ -120,6 +120,8 @@ export class NodeSummary extends LitElement {
     .s-ok, .s-rx { stroke: var(--success-color, #4caf50); }
     .s-tx { stroke: #2196f3; }
     .s-err { stroke: var(--error-color, #f44336); }
+    .s-snr { stroke: #9c6ade; }
+    .key.s-snr { color: #9c6ade; }
     .key { font-weight: 500; }
     .key.s-ok, .key.s-rx { color: var(--success-color, #4caf50); }
     .key.s-tx { color: #2196f3; }
@@ -745,7 +747,7 @@ export class NodeSummary extends LitElement {
   private _companionIds(): Record<string, string> {
     const out: Record<string, string> = {};
     for (const key of ['nb_sent', 'sent_flood', 'sent_direct', 'nb_recv', 'recv_flood', 'recv_direct', 'recv_errors',
-      'tx_airtime', 'rx_airtime', 'noise_floor', 'last_rssi', 'battery_percentage']) {
+      'tx_airtime', 'rx_airtime', 'noise_floor', 'last_rssi', 'last_snr', 'battery_percentage']) {
       const e = this.entities.find((x) => x.entity_id.startsWith('sensor.') && x.entity_id.includes(key)
         && !x.entity_id.includes(`${key}_rate`) && !x.entity_id.includes(`${key}_util`));
       if (e) out[key] = e.entity_id;
@@ -776,7 +778,8 @@ export class NodeSummary extends LitElement {
   private static readonly TILE_CHARTS: Record<string, { title: string; unit: string; lines: Array<{ key: string; how: 'mean' | 'rate' | 'pct'; label: string; cls: string }> }> = {
     battery: { title: 'Battery', unit: '%', lines: [{ key: 'battery_percentage', how: 'mean', label: 'Battery', cls: 's-ok' }] },
     noise: { title: 'Noise floor', unit: 'dBm', lines: [{ key: 'noise_floor', how: 'mean', label: 'Noise floor', cls: 's-ok' }] },
-    signal: { title: 'Last packet strength', unit: 'dBm', lines: [{ key: 'last_rssi', how: 'mean', label: 'RSSI', cls: 's-tx' }] },
+    signal: { title: 'RSSI', unit: 'dBm', lines: [{ key: 'last_rssi', how: 'mean', label: 'RSSI', cls: 's-tx' }] },
+    snr: { title: 'SNR', unit: 'dB', lines: [{ key: 'last_snr', how: 'mean', label: 'SNR', cls: 's-snr' }] },
     airtime: { title: 'Radio activity', unit: '% of time', lines: [
       { key: 'tx_airtime', how: 'pct', label: 'Transmitting', cls: 's-tx' },
       { key: 'rx_airtime', how: 'pct', label: 'Receiving', cls: 's-rx' }] },
@@ -1154,12 +1157,36 @@ export class NodeSummary extends LitElement {
     if (battery) consumed.add(battery.entity_id);
     return html`
       ${this._renderNoiseTile(consumed)}
+      ${this._renderSnrTile(consumed)}
       ${this._renderSignalTile()}
       ${this._renderCompanionRadioActivityTile()}
       ${this._renderMessagesSentTile(consumed)}
       ${this._renderMessagesReceivedTile(consumed)}
-      ${this._renderLocationTile()}
     `;
+  }
+
+  /** Companion: signal-to-noise of the last packet heard, with its last 24 h. */
+  private _renderSnrTile(consumed: Set<string>) {
+    const snr = this._findEntityIdMatching('last_snr');
+    if (!snr) return nothing;
+    consumed.add(snr.entity_id);
+    const v = this._readNumber(snr.entity_id);
+    return html`
+      <div class="hero-tile" @click=${() => this._openChart('snr')}>
+        <div class="hero-tile-head">
+          <span>SNR${this._renderInfoTip({
+            band: 'info',
+            fillPct: 0,
+            tooltip: 'How far the last packet your radio heard stood above the background noise. Higher is a cleaner link. ' +
+                     'LoRa can still decode packets a little below 0 dB, so small negative values are normal for distant nodes.',
+          })}</span>
+          <span class="status-dot info"></span>
+        </div>
+        <div class="hero-tile-value">
+          <span class="primary">${Number.isFinite(v) ? v.toFixed(1) : '—'}<span class="unit">dB</span></span>
+        </div>
+        ${this._sparkline('snr')}
+      </div>`;
   }
 
   /** Companion: the radio's noise floor, with its last 24 h. */
@@ -1230,7 +1257,7 @@ export class NodeSummary extends LitElement {
     return html`
       <div class="hero-tile" @click=${() => (this.device?.type === 'companion' ? this._openChart('signal') : this._fireMoreInfo(rssi.entity_id))}>
         <div class="hero-tile-head">
-          <span>Last message strength${this._renderInfoTip(ev)}</span>
+          <span>${this.device?.type === 'companion' ? 'RSSI' : 'Last message strength'}${this._renderInfoTip(ev)}</span>
           <span class="status-dot ${ev.band}"></span>
         </div>
         <div class="hero-tile-value">
@@ -1238,6 +1265,7 @@ export class NodeSummary extends LitElement {
             ${this._formatNumber(rssiVal, 0)}<span class="unit">dBm</span>
           </span>
           ${Number.isFinite(snrVal)
+            && this.device?.type !== 'companion'
             ? html`<span class="secondary">· SNR ${snrVal.toFixed(1)} dB</span>`
             : nothing}
         </div>
@@ -1534,78 +1562,7 @@ export class NodeSummary extends LitElement {
     return Math.round(n).toLocaleString();
   }
 
-  private _renderLocationTile() {
-    const lat = this._findEntityIdMatching('latitude');
-    const lon = this._findEntityIdMatching('longitude');
-    let latVal = lat ? this._readNumber(lat.entity_id) : NaN;
-    let lonVal = lon ? this._readNumber(lon.entity_id) : NaN;
-    let source: 'entity' | 'fallback' = 'entity';
 
-    // Fallback to caller-supplied lat/lon (typically Contact.adv_lat/lon
-    // for managed devices that don't have dedicated location sensors).
-    if (!Number.isFinite(latVal) && Number.isFinite(this.fallbackLatitude!)) {
-      latVal = this.fallbackLatitude!;
-      source = 'fallback';
-    }
-    if (!Number.isFinite(lonVal) && Number.isFinite(this.fallbackLongitude!)) {
-      lonVal = this.fallbackLongitude!;
-      source = 'fallback';
-    }
-
-    const hasGps = Number.isFinite(latVal) && Number.isFinite(lonVal)
-                   && (latVal !== 0 || lonVal !== 0);
-
-    // Nothing to show: no usable coordinates (no GPS entity/fallback, or a
-    // 0,0 placeholder). Hide the tile entirely rather than render an empty
-    // "—" that just wastes hero space.
-    if (!hasGps) return nothing;
-
-    // "Updated X ago" timestamp resolution:
-    //  - Entity-based location: HA state's `last_updated` (ISO string).
-    //  - Fallback location:    `fallbackUpdated` prop (Unix seconds,
-    //    typically Contact.last_advert).
-    let updatedDate: Date | null = null;
-    if (source === 'entity' && lat) {
-      const iso = this.hass?.states[lat.entity_id]?.last_updated;
-      if (iso) {
-        const d = new Date(iso);
-        if (!Number.isNaN(d.getTime())) updatedDate = d;
-      }
-    } else if (source === 'fallback' && Number.isFinite(this.fallbackUpdated!)) {
-      updatedDate = new Date(this.fallbackUpdated! * 1000);
-    }
-    const updatedText = hasGps && updatedDate
-      ? this._formatRelativeTime(updatedDate)
-      : '';
-
-    const onClick = () => {
-      if (lat) this._fireMoreInfo(lat.entity_id);
-    };
-
-    return html`
-      <div class="hero-tile loc-tile">
-        <div class="hero-tile-head" @click=${onClick} style="cursor:pointer">
-          <span>Location${source === 'fallback'
-            ? html`<span style="opacity:0.55;text-transform:none;letter-spacing:0;font-size:10px;margin-left:4px;">via contact</span>`
-            : nothing}</span>
-          ${updatedText ? html`<span class="loc-updated">Updated ${updatedText}</span>` : nothing}
-        </div>
-        <meshcore-location-map fill .getHass=${() => this.hass} .lat=${latVal} .lon=${lonVal}
-          .label=${this.device?.name ?? ''}></meshcore-location-map>
-      </div>
-    `;
-  }
-
-  /** Format a Date as a short relative-time string like
-   *  "just now" / "5 min ago" / "2 h ago" / "3 d ago". */
-  private _formatRelativeTime(d: Date): string {
-    const deltaSec = (Date.now() - d.getTime()) / 1000;
-    if (!Number.isFinite(deltaSec) || deltaSec < 0) return 'just now';
-    if (deltaSec < 60)    return 'just now';
-    if (deltaSec < 3600)  return `${Math.floor(deltaSec / 60)} min ago`;
-    if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)} h ago`;
-    return `${Math.floor(deltaSec / 86400)} d ago`;
-  }
 
   // _renderMeshNodeCountTile removed: the companion's added-node count moved
   // to the Settings-tab device header (next to Firmware / Key) as a compact

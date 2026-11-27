@@ -145,11 +145,13 @@ describe('node-summary companion hero — Self Diagnostics ENABLED', () => {
     const text = el.shadowRoot?.textContent ?? '';
     // Battery is a badge in the card header now, not a tile.
     expect(text).toContain('Noise floor');
-    expect(text).toContain('Last message strength'); // Signal tile
+    expect(text).toContain('SNR');
+    expect(text).toContain('RSSI'); // Signal tile, titled RSSI for the companion
     expect(text).toContain('Radio activity');         // derived from airtime/uptime
     expect(text).toContain('Messages Sent');
     expect(text).toContain('Messages Received');
-    expect(text).toContain('Location'); // real coords present -> tile shows
+    // The map moved to the Location settings card below the tiles.
+    expect(heroHeads(el).some((t) => t.startsWith('Location'))).toBe(false);
     // Mesh nodes moved to the Settings-tab header; no longer a hero tile.
     expect(text).not.toContain('Mesh nodes');
   });
@@ -243,21 +245,16 @@ describe('node-summary companion hero — Power tile visibility', () => {
       .map((h) => (h.textContent ?? '').trim());
     expect(heads.some((t) => t.startsWith('Battery'))).toBe(false);
     // Other diagnostic tiles still render.
-    expect(text).toContain('Last message strength');
+    expect(text).toContain('RSSI');
     el.remove();
   });
 });
 
-describe('node-summary companion hero — Location tile visibility', () => {
-  it('shows the Location tile when coordinates are present', async () => {
+describe('node-summary companion hero — no Location tile', () => {
+  it('leaves the map to the Location settings card', async () => {
     const el = await mount([...BASE, ...LOCATION, ...DIAGNOSTICS]);
-    expect(el.shadowRoot?.textContent ?? '').toContain('Location');
-    el.remove();
-  });
-
-  it('hides the Location tile for a 0,0 placeholder fix', async () => {
-    const el = await mount([...BASE, ...LOCATION_BLANK, ...DIAGNOSTICS]);
-    expect(el.shadowRoot?.textContent ?? '').not.toContain('Location');
+    const heads = Array.from(el.shadowRoot?.querySelectorAll('.hero-tile-head') ?? []).map((h) => (h.textContent ?? '').trim());
+    expect(heads.some((t) => t.startsWith('Location'))).toBe(false);
     el.remove();
   });
 });

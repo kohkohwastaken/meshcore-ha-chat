@@ -1005,6 +1005,7 @@ export class MeshCorePanel extends LitElement {
             .selectedDevice=${this._selectedDevice}
             .narrow=${this.narrow}
             @companion-trace-requested=${this._onCompanionTraceRequested}
+            @node-action=${this._handleNodeAction}
             @device-renamed=${this._onDeviceRenamed}></meshcore-settings-page>`;
       case 'settings':
         return html`<meshcore-preferences-page></meshcore-preferences-page>`;

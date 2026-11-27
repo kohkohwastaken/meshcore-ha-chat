@@ -1,4 +1,5 @@
 import { formatContact } from '../utils/rich-messages';
+import '../components/location-map';
 import { LitElement, html, css, nothing } from 'lit';
 import { customElement, property, state } from 'lit/decorators.js';
 import type { HomeAssistant, PanelConfig, DeviceConfig, MeshCoreDevice } from '../types';
@@ -187,6 +188,10 @@ export class SettingsPage extends LitElement {
   static styles = [
     panelStyles,
     css`
+    .loc-card-map {
+      margin-bottom: 14px;
+    }
+
     .battery-badge {
       display: inline-flex;
       align-items: center;
@@ -1088,6 +1093,7 @@ export class SettingsPage extends LitElement {
             <button class="settings-btn" @click=${() => (this._settingsModalOpen = true)} title="Device settings" aria-label="Device settings">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
             </button>
+            ${this._renderShowOnMap(d)}
             ${this._renderBatteryBadge(entities)}
             <div class="status-badge ${isOnline ? 'online' : 'offline'}">
               <span class="status-dot ${isOnline ? 'online' : 'offline'}"></span>
@@ -1371,6 +1377,18 @@ export class SettingsPage extends LitElement {
     `;
   }
 
+  /** Jump to the Nodes map, centred on this radio. */
+  private _renderShowOnMap(d: { name: string; pubkey_prefix: string }) {
+    const lat = Number(this._deviceConfig?.latitude);
+    const lon = Number(this._deviceConfig?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return nothing;
+    return html`<button class="battery-badge" title="Open the Nodes map, centred on your radio"
+      @click=${() => this.dispatchEvent(new CustomEvent('node-action', {
+        detail: { action: 'show-on-map', node: { public_key: '', pubkey_prefix: d.pubkey_prefix, adv_name: d.name, type: 1, adv_lat: lat, adv_lon: lon } },
+        bubbles: true, composed: true,
+      }))}>🗺 Show on map</button>`;
+  }
+
   /** Battery as a small badge next to Connected; click for its chart. */
   private _renderBatteryBadge(entities: Array<{ entity_id: string }>) {
     const pctId = entities.find((e) => e.entity_id.includes('battery_percentage'))?.entity_id;
@@ -1403,7 +1421,12 @@ export class SettingsPage extends LitElement {
       ? String(zoneHome.attributes.longitude ?? 0)
       : String(this._editValues['longitude'] ?? this._deviceConfig.longitude ?? 0);
 
+    const mapLat = Number(displayLat);
+    const mapLon = Number(displayLon);
     return html`
+      ${Number.isFinite(mapLat) && Number.isFinite(mapLon) && (mapLat !== 0 || mapLon !== 0) ? html`
+        <meshcore-location-map class="loc-card-map" fill .getHass=${() => this.hass} .lat=${mapLat} .lon=${mapLon}
+          .label=${this._deviceConfig.name ?? ''}></meshcore-location-map>` : nothing}
       <div class="section-row">
         <div class="form-group-inline">
           <label class="form-label">Latitude</label>
@@ -1417,6 +1440,7 @@ export class SettingsPage extends LitElement {
             ?disabled=${isHaLocation}
             @input=${(e: Event) => {
               this._editValues['latitude'] = Number((e.target as HTMLInputElement).value);
+              this.requestUpdate();
             }}
           />
         </div>
@@ -1432,6 +1456,7 @@ export class SettingsPage extends LitElement {
             ?disabled=${isHaLocation}
             @input=${(e: Event) => {
               this._editValues['longitude'] = Number((e.target as HTMLInputElement).value);
+              this.requestUpdate();
             }}
           />
         </div>
