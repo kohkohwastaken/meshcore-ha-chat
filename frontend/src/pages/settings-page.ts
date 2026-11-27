@@ -879,9 +879,6 @@ export class SettingsPage extends LitElement {
       if (this._deviceConfig?.location_source) {
         this._locationSource = this._deviceConfig.location_source as 'gps' | 'manual' | 'ha_location';
       }
-      if ((this._deviceConfig?.location_source ?? 'manual') === 'manual') {
-        this._rememberManual(Number(this._deviceConfig?.latitude), Number(this._deviceConfig?.longitude));
-      }
     } catch (error) {
       if (!current()) return;
       this._error = `Failed to load device configuration: ${String(error)}`;
@@ -1404,24 +1401,18 @@ export class SettingsPage extends LitElement {
     `;
   }
 
-  /** The last manual coordinates set for this radio, kept in this browser so
-   *  switching to GPS and back doesn't lose them (the radio only keeps one). */
-  private _manualKey(): string {
-    return `meshcore-manual-location-${(this._deviceConfig?.pubkey || '').slice(0, 12)}`;
-  }
-
+  /** The last manual coordinates for this radio, kept by MeshCore Chat on the
+   *  Home Assistant server (the radio only stores one position, so switching
+   *  to GPS and back would otherwise lose them). Saved whenever coordinates
+   *  are applied; this just keeps the local copy in step. */
   private _rememberManual(lat: number, lon: number) {
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
-    try { localStorage.setItem(this._manualKey(), JSON.stringify([lat, lon])); } catch { /* storage unavailable */ }
+    if (!this._deviceConfig || !Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return;
+    this._deviceConfig = { ...this._deviceConfig, manual_location: [lat, lon] };
   }
 
   private _rememberedManual(): [number, number] | null {
-    try {
-      const v = JSON.parse(localStorage.getItem(this._manualKey()) || 'null');
-      return Array.isArray(v) && v.length === 2 && v.every((n) => Number.isFinite(n)) ? [v[0], v[1]] : null;
-    } catch {
-      return null;
-    }
+    const v = this._deviceConfig?.manual_location;
+    return Array.isArray(v) && v.length === 2 && v.every((n) => Number.isFinite(n)) ? [v[0], v[1]] : null;
   }
 
   /** Battery as a small badge next to Connected; click for its chart. */

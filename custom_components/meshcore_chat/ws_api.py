@@ -1035,6 +1035,12 @@ async def ws_get_device_config(hass, connection, msg):
 
     # Location source
     config["location_source"] = getattr(coordinator, "location_source", "manual")
+    # The last manual coordinates, kept on the server: the radio only stores
+    # one position, so switching to GPS would otherwise lose them.
+    if config["location_source"] == "manual":
+        await _remember_manual_location(hass, coordinator, config.get("latitude"), config.get("longitude"))
+    _mstore, saved = await _manual_locations(hass)
+    config["manual_location"] = saved.get(_radio_key(coordinator))
 
     # Connection info
     entry_data = coordinator.config_entry.data if coordinator.config_entry else {}
@@ -1179,6 +1185,35 @@ def _send_device_config_failure(connection, msg_id, field, reason, changed):
         "command_failed",
         f"Failed to set {field}: {reason} (already applied: {applied})",
     )
+
+
+async def _manual_locations(hass) -> tuple[Store, dict]:
+    """Last manual coordinates per radio: {radio key prefix: [lat, lon]}."""
+    bucket = hass.data.setdefault(DOMAIN, {})
+    cached = bucket.get("_manual_locations")
+    if cached is None:
+        store = Store(hass, 1, "meshcore_chat.manual_locations")
+        data = await store.async_load() or {}
+        cached = bucket["_manual_locations"] = (store, data if isinstance(data, dict) else {})
+    return cached
+
+
+def _radio_key(coordinator) -> str:
+    return str(getattr(coordinator, "pubkey", "") or coordinator.config_entry.entry_id)[:12].lower()
+
+
+async def _remember_manual_location(hass, coordinator, lat, lon) -> None:
+    try:
+        lat, lon = float(lat), float(lon)
+    except (TypeError, ValueError):
+        return
+    if (lat == 0 and lon == 0) or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return
+    store, saved = await _manual_locations(hass)
+    key = _radio_key(coordinator)
+    if saved.get(key) != [lat, lon]:
+        saved[key] = [lat, lon]
+        await store.async_save(saved)
 
 
 @websocket_api.websocket_command(
@@ -1362,6 +1397,7 @@ async def ws_set_device_config(hass, connection, msg):
                 )
                 return
             changed.append("coords")
+            await _remember_manual_location(hass, coordinator, settings["latitude"], settings["longitude"])
 
         # Handle radio settings - all four must be provided together
         radio_keys = {"frequency", "bandwidth", "spreading_factor", "coding_rate"}

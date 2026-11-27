@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.13
+
+- My radio: the remembered manual location is kept by MeshCore Chat on the Home Assistant server, per radio, instead of in the browser, so every device and browser sees it.
+
 ## 0.4.13-beta.12
 
 - My radio: with the location source on **GPS**, Latitude and Longitude are empty and locked ("From GPS"); the map shows the radio's GPS position. Your last manual coordinates are remembered in this browser and come back when you switch to Manual (and are sent when you apply).

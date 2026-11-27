@@ -4330,3 +4330,14 @@ async def test_ws_radio_limits(hass: HomeAssistant, companion_entry: MockConfigE
         conn = _Connection()
         await _call_ws(ws_api.ws_radio_limits, hass, conn, {"id": 1})
     assert conn.results[0][1] == {"contacts": 2, "max_contacts": 350, "discovered": 1, "discovered_limit": None}
+
+
+async def test_manual_location_is_remembered_on_the_server(hass: HomeAssistant, companion_entry: MockConfigEntry) -> None:
+    """Manual coordinates are kept per radio; 0,0 and out-of-range values are ignored."""
+    coordinator = MagicMock()
+    coordinator.pubkey = "58E107FBE67B87F3"
+    await ws_api._remember_manual_location(hass, coordinator, 51.293, 0.429)
+    await ws_api._remember_manual_location(hass, coordinator, 0, 0)
+    await ws_api._remember_manual_location(hass, coordinator, 95, 0)
+    _store, saved = await ws_api._manual_locations(hass)
+    assert saved["58e107fbe67b"] == [51.293, 0.429]

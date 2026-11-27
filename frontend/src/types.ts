@@ -333,6 +333,8 @@ export interface DeviceConfig {
   connection_type?: string;
   connection_address?: string;
   [key: string]: unknown;
+  /** Last manual coordinates, kept by MeshCore Chat on the server. */
+  manual_location?: [number, number] | null;
 }
 
 /**
