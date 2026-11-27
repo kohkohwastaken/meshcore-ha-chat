@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.6
+
+- The integration's icon (shown in HACS, Devices & Services and update dialogs) is now the new MC HAC speech-bubble logo instead of the original radio icon.
+
 ## 0.4.13-beta.5
 
 ### My radio
