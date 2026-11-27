@@ -13,6 +13,7 @@ import './stat-bar';
 import './stacked-bar';
 import './info-tip';
 import './message-rate-chart';
+import './location-map';
 import type { StackedBarSegment } from './stacked-bar';
 import type { RatePoint } from './message-rate-chart';
 
@@ -303,6 +304,13 @@ export class NodeSummary extends LitElement {
       font-size: 11px;
       color: var(--secondary-text-color);
       margin-top: 2px;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 400;
+    }
+
+    .loc-tile meshcore-location-map {
+      margin-top: 6px;
     }
 
     .dup-annotation {
@@ -928,22 +936,15 @@ export class NodeSummary extends LitElement {
     };
 
     return html`
-      <div class="hero-tile" @click=${onClick}>
-        <div class="hero-tile-head">
+      <div class="hero-tile loc-tile">
+        <div class="hero-tile-head" @click=${onClick} style="cursor:pointer">
           <span>Location${source === 'fallback'
             ? html`<span style="opacity:0.55;text-transform:none;letter-spacing:0;font-size:10px;margin-left:4px;">via contact</span>`
             : nothing}</span>
+          ${updatedText ? html`<span class="loc-updated">Updated ${updatedText}</span>` : nothing}
         </div>
-        <div class="hero-tile-value">
-          ${hasGps
-            ? html`<span class="coord-pair">
-                ${latVal.toFixed(4)}, ${lonVal.toFixed(4)}
-              </span>`
-            : html`<span class="primary">—</span>`}
-        </div>
-        ${updatedText
-          ? html`<div class="loc-updated">Updated ${updatedText}</div>`
-          : nothing}
+        <meshcore-location-map fill .getHass=${() => this.hass} .lat=${latVal} .lon=${lonVal}
+          .label=${this.device?.name ?? ''}></meshcore-location-map>
       </div>
     `;
   }

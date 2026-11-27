@@ -32,6 +32,8 @@ export class MeshCoreLocationMap extends LitElement {
   @property({ type: Number }) lat = 0;
   @property({ type: Number }) lon = 0;
   @property({ type: String }) label = '';
+  /** Fill the width of its container (for a tile) instead of the chat-sized frame. */
+  @property({ type: Boolean, reflect: true }) fill = false;
   @state() private _ok: boolean | null = null;
   @state() private _large = false;
   private _observer?: ResizeObserver;
@@ -50,6 +52,7 @@ export class MeshCoreLocationMap extends LitElement {
     .cap { position: absolute; left: 10px; bottom: 10px; z-index: 3; background: var(--card-background-color, #222); color: var(--primary-text-color, #fff);
       border-radius: 8px; padding: 6px 10px; font-size: 13px; max-width: 70%; }
     .note { font-size: 12px; opacity: 0.7; }
+    :host([fill]) .frame { width: 100%; height: 130px; }
   `;
 
   connectedCallback() {

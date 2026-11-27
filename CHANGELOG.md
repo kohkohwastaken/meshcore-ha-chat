@@ -2,6 +2,10 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.4
+
+- My radio and Repeaters: the location tile shows a small map of the node's position (tap the expand button for a larger map) instead of repeating the coordinates already shown in the Location settings.
+
 ## 0.4.13-beta.3
 
 - Rooms: logins always go by flood (the room's reply gives your radio a fresh route back).
