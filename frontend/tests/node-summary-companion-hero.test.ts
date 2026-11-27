@@ -143,7 +143,8 @@ describe('node-summary companion hero — Self Diagnostics ENABLED', () => {
 
   it('renders the rich repeater-style hero tiles', () => {
     const text = el.shadowRoot?.textContent ?? '';
-    expect(text).toContain('Battery');
+    // Battery is a badge in the card header now, not a tile.
+    expect(text).toContain('Noise floor');
     expect(text).toContain('Last message strength'); // Signal tile
     expect(text).toContain('Radio activity');         // derived from airtime/uptime
     expect(text).toContain('Messages Sent');
@@ -153,9 +154,10 @@ describe('node-summary companion hero — Self Diagnostics ENABLED', () => {
     expect(text).not.toContain('Mesh nodes');
   });
 
-  it('draws the battery tile exactly once (no double battery)', () => {
+  it('has no battery tile (battery is a header badge) and no battery row', () => {
     const batteryHeads = heroHeads(el).filter((t) => t.startsWith('Battery'));
-    expect(batteryHeads).toHaveLength(1);
+    expect(batteryHeads).toHaveLength(0);
+    expect(el.shadowRoot?.querySelector('.sensor-grid')?.textContent ?? '').not.toContain('Battery');
   });
 
   it('derives radio-activity utilisation from airtime ÷ uptime', () => {
@@ -190,11 +192,9 @@ describe('node-summary companion hero — Self Diagnostics ENABLED', () => {
   });
 
   it('populates the SENSORS table with the remaining diagnostics', () => {
-    const table = el.shadowRoot?.querySelector('.sensor-grid');
-    expect(table).toBeTruthy();
-    const tableText = table?.textContent ?? '';
-    expect(tableText).toContain('Noise Floor');
-    // The send queue moved to the Health section.
+    // Noise floor has its own tile; the send queue moved to the Health section.
+    const tiles = el.shadowRoot?.querySelector('.hero-row')?.textContent ?? '';
+    expect(tiles).toContain('Noise floor');
     const health = el.shadowRoot?.querySelector('.health-grid')?.textContent ?? '';
     expect(health).toContain('Send queue');
   });

@@ -167,6 +167,10 @@ export class NodeSummary extends LitElement {
       pointer-events: none;
     }
 
+    .spark-x .key {
+      margin-left: 6px;
+    }
+
     .spark-x {
       display: flex;
       justify-content: space-between;
@@ -369,6 +373,18 @@ export class NodeSummary extends LitElement {
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 12px;
       margin-bottom: 16px;
+    }
+
+    .hero-row.three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    @media (max-width: 900px) {
+      .hero-row.three { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 560px) {
+      .hero-row.three { grid-template-columns: 1fr; }
     }
     .hero-tile {
       background: var(--secondary-background-color, #f0f0f0);
@@ -665,7 +681,7 @@ export class NodeSummary extends LitElement {
     const groups = this._buildGroups(consumed);
 
     return html`
-      <div class="hero-row">
+      <div class="hero-row ${companion ? 'three' : ''}">
         ${heroTiles}
       </div>
 
@@ -759,9 +775,8 @@ export class NodeSummary extends LitElement {
   /** The series behind each companion tile, for its small graph and its larger chart. */
   private static readonly TILE_CHARTS: Record<string, { title: string; unit: string; lines: Array<{ key: string; how: 'mean' | 'rate' | 'pct'; label: string; cls: string }> }> = {
     battery: { title: 'Battery', unit: '%', lines: [{ key: 'battery_percentage', how: 'mean', label: 'Battery', cls: 's-ok' }] },
-    signal: { title: 'Signal', unit: 'dBm', lines: [
-      { key: 'noise_floor', how: 'mean', label: 'Noise floor', cls: 's-ok' },
-      { key: 'last_rssi', how: 'mean', label: 'Last packet RSSI', cls: 's-tx' }] },
+    noise: { title: 'Noise floor', unit: 'dBm', lines: [{ key: 'noise_floor', how: 'mean', label: 'Noise floor', cls: 's-ok' }] },
+    signal: { title: 'Last packet strength', unit: 'dBm', lines: [{ key: 'last_rssi', how: 'mean', label: 'RSSI', cls: 's-tx' }] },
     airtime: { title: 'Radio activity', unit: '% of time', lines: [
       { key: 'tx_airtime', how: 'pct', label: 'Transmitting', cls: 's-tx' },
       { key: 'rx_airtime', how: 'pct', label: 'Receiving', cls: 's-rx' }] },
@@ -849,6 +864,11 @@ export class NodeSummary extends LitElement {
   @state() private _detailRange = 24;
   @state() private _detailStats: StatSeries = {};
   @state() private _detailHover: { x: number; t: number } | null = null;
+
+  /** Open a tile's larger chart (also used by the battery badge in the card header). */
+  openChart(chart: string) {
+    this._openChart(chart);
+  }
 
   private _openChart(chart: string) {
     this._detail = chart;
@@ -1128,14 +1148,42 @@ export class NodeSummary extends LitElement {
   // card when a battery is present and renders nothing otherwise (no "USB /
   // mains" placeholder).
   private _renderCompanionHero(consumed: Set<string>) {
+    // Battery is a badge in the card header (settings-page); its chart opens
+    // through openChart('battery').
+    const battery = this._findByMetric('battery_pct');
+    if (battery) consumed.add(battery.entity_id);
     return html`
-      ${this._renderBatteryTile()}
+      ${this._renderNoiseTile(consumed)}
       ${this._renderSignalTile()}
       ${this._renderCompanionRadioActivityTile()}
       ${this._renderMessagesSentTile(consumed)}
       ${this._renderMessagesReceivedTile(consumed)}
       ${this._renderLocationTile()}
     `;
+  }
+
+  /** Companion: the radio's noise floor, with its last 24 h. */
+  private _renderNoiseTile(consumed: Set<string>) {
+    const noise = this._findEntityIdMatching('noise_floor');
+    if (!noise) return nothing;
+    consumed.add(noise.entity_id);
+    const v = this._readNumber(noise.entity_id);
+    return html`
+      <div class="hero-tile" @click=${() => this._openChart('noise')}>
+        <div class="hero-tile-head">
+          <span>Noise floor${this._renderInfoTip({
+            band: 'info',
+            fillPct: 0,
+            tooltip: 'Background radio noise your radio hears on its frequency. Lower (more negative) is quieter. ' +
+                     'A rise usually means interference nearby.',
+          })}</span>
+          <span class="status-dot info"></span>
+        </div>
+        <div class="hero-tile-value">
+          <span class="primary">${this._formatNumber(v, 0)}<span class="unit">dBm</span></span>
+        </div>
+        ${this._sparkline('noise')}
+      </div>`;
   }
 
   private _renderBatteryTile() {
@@ -1199,20 +1247,9 @@ export class NodeSummary extends LitElement {
           .max=${-30}
           .band=${ev.band}>
         </meshcore-stat-bar>
-        ${this.device?.type === 'companion' ? this._renderNoiseLine() : nothing}
+        ${this.device?.type === 'companion' ? this._sparkline('signal') : nothing}
       </div>
     `;
-  }
-
-  /** Companion: noise floor now, with its last 24 h. */
-  private _renderNoiseLine() {
-    const noise = this._findEntityIdMatching('noise_floor');
-    if (!noise) return nothing;
-    return html`
-      <div class="noise-line">
-        Noise floor ${this._formatNumber(this._readNumber(noise.entity_id), 0)} dBm
-      </div>
-      ${this._sparkline('signal')}`;
   }
 
   private _renderRadioActivityTile() {

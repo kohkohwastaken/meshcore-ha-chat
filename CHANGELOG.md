@@ -2,6 +2,13 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.8
+
+- My radio: new layout. Six equal tiles, three per row (Noise floor · Last message strength · Radio activity / Sent · Received · Location), so the graphs have room and there's no empty space. Two per row on narrower screens, one on phones.
+- My radio: the noise floor has its own tile and graph.
+- My radio: battery is a small badge next to Connected (with a level bar); click it for its chart.
+- My radio: graph keys no longer run together.
+
 ## 0.4.13-beta.7
 
 - My radio: the tiles' small graphs show their highest and lowest values, "24 h ago … now" and the unit, with a key when a graph has more than one line. Hover a graph to read the value at that time.

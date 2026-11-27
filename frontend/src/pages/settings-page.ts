@@ -187,6 +187,37 @@ export class SettingsPage extends LitElement {
   static styles = [
     panelStyles,
     css`
+    .battery-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: none;
+      border-radius: 12px;
+      padding: 3px 10px;
+      margin-right: 4px;
+      background: rgba(127, 127, 127, 0.15);
+      color: var(--primary-text-color);
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+
+    .batt-icon {
+      position: relative;
+      display: inline-block;
+      width: 20px;
+      height: 9px;
+      border: 1px solid var(--secondary-text-color);
+      border-radius: 2px;
+      padding: 1px;
+    }
+
+    .batt-icon span {
+      display: block;
+      height: 100%;
+      border-radius: 1px;
+    }
+
       :host {
         display: block;
         width: 100%;
@@ -1057,6 +1088,7 @@ export class SettingsPage extends LitElement {
             <button class="settings-btn" @click=${() => (this._settingsModalOpen = true)} title="Device settings" aria-label="Device settings">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
             </button>
+            ${this._renderBatteryBadge(entities)}
             <div class="status-badge ${isOnline ? 'online' : 'offline'}">
               <span class="status-dot ${isOnline ? 'online' : 'offline'}"></span>
               ${isOnline ? 'Connected' : 'Offline'}
@@ -1337,6 +1369,23 @@ export class SettingsPage extends LitElement {
         <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" style="vertical-align: -2px; margin-right: 4px;"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>Radio changes require device reboot to take effect
       </div>
     `;
+  }
+
+  /** Battery as a small badge next to Connected; click for its chart. */
+  private _renderBatteryBadge(entities: Array<{ entity_id: string }>) {
+    const pctId = entities.find((e) => e.entity_id.includes('battery_percentage'))?.entity_id;
+    if (!pctId || !this.hass) return nothing;
+    const pct = Number(this.hass.states[pctId]?.state);
+    if (!Number.isFinite(pct)) return nothing;
+    const voltId = entities.find((e) => e.entity_id.includes('battery_voltage'))?.entity_id;
+    const volts = voltId ? Number(this.hass.states[voltId]?.state) : NaN;
+    const level = Math.max(0, Math.min(100, pct));
+    const colour = level <= 15 ? 'var(--error-color, #f44336)' : level <= 30 ? 'var(--warning-color, #ff9800)' : 'var(--success-color, #4caf50)';
+    return html`<button class="battery-badge" title="Battery · click for its history"
+      @click=${() => (this.renderRoot.querySelector('meshcore-node-summary') as unknown as { openChart?: (c: string) => void } | null)?.openChart?.('battery')}>
+      <span class="batt-icon"><span style="width:${level}%;background:${colour}"></span></span>
+      ${Math.round(pct)}%${Number.isFinite(volts) ? html` · ${volts.toFixed(2)} V` : nothing}
+    </button>`;
   }
 
   private _renderLocation() {
