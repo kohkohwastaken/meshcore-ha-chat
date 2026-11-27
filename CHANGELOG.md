@@ -2,6 +2,13 @@
 
 All notable changes to **MeshCore Chat for Home Assistant** are documented here. The format follows [Keep a Changelog](https://keepachangelog.com/) loosely; entries are most-recent-first.
 
+## 0.4.13-beta.11
+
+- My radio: **📍 Drop a pin on the map** (was "Place on a larger map") only shows when the location source is Manual.
+- My radio: the "Home Assistant Zone" location source is no longer offered (it's still shown if your radio already uses it, so nothing changes until you pick another).
+- My radio: **Radio transmission settings** (was "Advanced radio settings") is always open, beside Location.
+- My radio: the card header just shows the name and "Companion"; the Show on map button, key and added-node count are gone (the key and contact count are in General and Health). Firmware moved to **General**.
+
 ## 0.4.13-beta.10
 
 - My radio: **General** is a full-width box under the radio card, with hardware, connection and public key side by side.

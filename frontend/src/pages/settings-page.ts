@@ -221,9 +221,7 @@ export class SettingsPage extends LitElement {
       .general-rows { grid-template-columns: 1fr; }
     }
 
-    .settings-grid > details.device-section {
-      align-self: start;
-    }
+
 
     .battery-badge {
       display: inline-flex;
@@ -934,14 +932,14 @@ export class SettingsPage extends LitElement {
               ${this._renderLocation()}
             </div>
 
-            <details class="device-section fold" open>
-              <summary class="card-title">Advanced radio settings</summary>
+            <div class="device-section">
+              <div class="card-title">Radio transmission settings</div>
               <div class="fold-warning">
                 Changing these can take you off the mesh. Everyone you talk to must use the same
                 frequency, bandwidth, spreading factor and coding rate.
               </div>
               ${this._renderRadioSettings()}
-            </details>
+            </div>
           </div>
 
         </div>
@@ -1093,15 +1091,6 @@ export class SettingsPage extends LitElement {
     const hiddenCount = (this._hiddenSensors[deviceKey] || []).length;
 
     // Added-node count shown as a compact header stat (was a hero tile).
-    const nodeCountInfo = entities.find((e) => e.entity_id.includes('node_count'));
-    const addedNodesState = nodeCountInfo
-      ? this.hass?.states[nodeCountInfo.entity_id]?.state
-      : undefined;
-    const addedNodes = addedNodesState
-      && addedNodesState !== 'unavailable'
-      && addedNodesState !== 'unknown'
-      ? addedNodesState
-      : undefined;
 
     return html`
       <div class="device-section" @tile-context-menu=${(e: CustomEvent) => this._onTileContextMenu(e, deviceKey)}>
@@ -1114,11 +1103,6 @@ export class SettingsPage extends LitElement {
               <div class="device-name">${d.name}</div>
               <div class="device-meta">
                 <span>Companion</span>
-                <span>Firmware: ${d.firmware || 'unknown'}</span>
-                <span>Key: ${d.pubkey_prefix}</span>
-                ${addedNodes !== undefined
-                  ? html`<span>Added nodes: ${addedNodes}</span>`
-                  : nothing}
               </div>
             </div>
           </div>
@@ -1126,7 +1110,6 @@ export class SettingsPage extends LitElement {
             <button class="settings-btn" @click=${() => (this._settingsModalOpen = true)} title="Device settings" aria-label="Device settings">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 00.12-.61l-1.92-3.32a.49.49 0 00-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 00-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 00-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 00-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
             </button>
-            ${this._renderShowOnMap(d)}
             ${this._renderBatteryBadge(entities)}
             <div class="status-badge ${isOnline ? 'online' : 'offline'}">
               <span class="status-dot ${isOnline ? 'online' : 'offline'}"></span>
@@ -1219,6 +1202,11 @@ export class SettingsPage extends LitElement {
       <div class="info-row">
         <span class="info-label">Hardware Model</span>
         <span class="info-value">${this._deviceConfig.hardware_model}</span>
+      </div>
+
+      <div class="info-row">
+        <span class="info-label">Firmware</span>
+        <span class="info-value">${(this.selectedDevice as { firmware?: string } | null)?.firmware || 'unknown'}</span>
       </div>
 
       <div class="info-row">
@@ -1410,18 +1398,6 @@ export class SettingsPage extends LitElement {
     `;
   }
 
-  /** Jump to the Nodes map, centred on this radio. */
-  private _renderShowOnMap(d: { name: string; pubkey_prefix: string }) {
-    const lat = Number(this._deviceConfig?.latitude);
-    const lon = Number(this._deviceConfig?.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon) || (lat === 0 && lon === 0)) return nothing;
-    return html`<button class="battery-badge" title="Open the Nodes map, centred on your radio"
-      @click=${() => this.dispatchEvent(new CustomEvent('node-action', {
-        detail: { action: 'show-on-map', node: { public_key: '', pubkey_prefix: d.pubkey_prefix, adv_name: d.name, type: 1, adv_lat: lat, adv_lon: lon } },
-        bubbles: true, composed: true,
-      }))}>🗺 Show on map</button>`;
-  }
-
   /** Battery as a small badge next to Connected; click for its chart. */
   private _renderBatteryBadge(entities: Array<{ entity_id: string }>) {
     const pctId = entities.find((e) => e.entity_id.includes('battery_percentage'))?.entity_id;
@@ -1459,14 +1435,14 @@ export class SettingsPage extends LitElement {
     return html`
       ${Number.isFinite(mapLat) && Number.isFinite(mapLon) && (mapLat !== 0 || mapLon !== 0) ? html`
         <meshcore-location-map class="loc-card-map" fill .getHass=${() => this.hass} .lat=${mapLat} .lon=${mapLon}
-          .label=${this._deviceConfig.name ?? ''} .editable=${!isHaLocation}
+          .label=${this._deviceConfig.name ?? ''} .editable=${this._locationSource === 'manual'}
           @location-picked=${(e: CustomEvent<{ lat: number; lon: number }>) => {
             this._editValues['latitude'] = Number(e.detail.lat.toFixed(6));
             this._editValues['longitude'] = Number(e.detail.lon.toFixed(6));
             this.requestUpdate();
           }}></meshcore-location-map>` : nothing}
-      ${!isHaLocation ? html`<button class="place-btn" @click=${() => (this.renderRoot.querySelector('.loc-card-map') as unknown as { openLarge?: () => void } | null)?.openLarge?.()}>
-        📍 Place on a larger map</button>` : nothing}
+      ${this._locationSource === 'manual' ? html`<button class="place-btn" @click=${() => (this.renderRoot.querySelector('.loc-card-map') as unknown as { openLarge?: () => void } | null)?.openLarge?.()}>
+        📍 Drop a pin on the map</button>` : nothing}
       <div class="section-row">
         <div class="form-group-inline">
           <label class="form-label">Latitude</label>
@@ -1518,7 +1494,9 @@ export class SettingsPage extends LitElement {
             }}>
             <option value="manual">Manual (coordinates above)</option>
             <option value="gps">GPS (device hardware)</option>
-            <option value="ha_location">Home Assistant Zone</option>
+            ${(this._deviceConfig.location_source as string) === 'ha_location'
+              ? html`<option value="ha_location">Home Assistant Zone (no longer offered)</option>`
+              : nothing}
           </select>
           <div style="font-size: 11px; color: var(--secondary-text-color); margin-top: 4px;">
             How the device determines its coordinates
